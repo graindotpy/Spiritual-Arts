@@ -98,12 +98,6 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   // Original dice should always be level-based unless there's an explicit override
   const originalDice = isUsingOverride ? (spiritDiePool?.overrideDice as DieSize[] || levelBasedDice) : levelBasedDice as DieSize[];
 
-  // Calculate the highest spirit die value for fiery border effect
-  const getMaxSpiritDieValue = (dice: DieSize[]): number => {
-    return Math.max(...dice.map(die => parseInt(die.substring(1))));
-  };
-  const maxSpiritDie = getMaxSpiritDieValue(currentDice);
-
   // Auto-select first die if none selected and dice are available
   if (selectedDieIndex === null && currentDice.length > 0) {
     setSelectedDieIndex(0);
@@ -357,7 +351,6 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                     technique={technique}
                     isSelected={selectedTechnique === technique.id}
                     selectedSP={selectedTechnique === technique.id ? selectedSP : undefined}
-                    maxSpiritDie={maxSpiritDie}
                     onSelect={handleTechniqueSelect}
                     onEdit={() => handleEditTechnique(technique)}
                     onDelete={handleDeleteTechnique}
