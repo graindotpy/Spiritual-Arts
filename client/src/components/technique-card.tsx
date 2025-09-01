@@ -162,6 +162,13 @@ export default function TechniqueCard({
     }
   };
 
+  // Update the selected SP when currentSP changes and this technique is selected
+  useEffect(() => {
+    if (isSelected && currentSP > 0) {
+      onSelect(technique.id, currentSP);
+    }
+  }, [currentSP, isSelected, technique.id, onSelect]);
+
   const getTriggerColor = (type: string) => {
     switch (type) {
       case 'action':
