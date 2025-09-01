@@ -79,7 +79,7 @@ export default function SpiritDiePoolComponent({
                     variant="ghost"
                     onClick={() => onDieRestore(index)}
                     className="h-6 px-2 text-xs text-gray-500 hover:text-spiritual-600 dark:text-gray-400 dark:hover:text-spiritual-400"
-                    title={`Restore to ${originalDie}`}
+                    title={!currentDie || currentDie === "depleted" ? "Restore to d4" : "Increase die size by one step"}
                   >
                     <RotateCcw className="w-3 h-3 mr-1" />
                     Restore

@@ -209,17 +209,30 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
     // Create a copy of current dice array
     const newDice = [...currentDice];
     
-    // Restore the specific die to its original value
-    if (index < originalDice.length) {
-      newDice[index] = originalDice[index] as DieSize;
+    // Increase die by one step in progression (e.g., depleted -> d4, d4 -> d6, etc.)
+    if (index < currentDice.length) {
+      const currentDie = currentDice[index];
+      const originalDie = originalDice[index];
       
-      await updateSpiritDiePool.mutateAsync({
-        currentDice: newDice
-      });
+      // Define the progression sequence including depleted
+      const progression: (DieSize | "depleted")[] = ["depleted", "d4", "d6", "d8", "d10", "d12"];
+      
+      // Find current position and move one step up
+      const currentIndex = progression.indexOf(currentDie);
+      const originalIndex = progression.indexOf(originalDie as DieSize);
+      
+      if (currentIndex >= 0 && currentIndex < originalIndex && currentIndex < progression.length - 1) {
+        newDice[index] = progression[currentIndex + 1] as DieSize;
+        
+        await updateSpiritDiePool.mutateAsync({
+          currentDice: newDice
+        });
+      }
     }
   };
 
   const handleRestoreAll = async () => {
+    // Long rest fully resets all dice to their maximum possible values
     await updateSpiritDiePool.mutateAsync({
       currentDice: originalDice
     });
