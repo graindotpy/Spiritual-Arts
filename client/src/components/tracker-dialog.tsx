@@ -18,7 +18,7 @@ export default function TrackerDialog({ isOpen, onClose, characterId }: TrackerD
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; target?: number }) => {
+    mutationFn: async (data: { name: string; target?: string }) => {
       const response = await apiRequest('POST', `/api/character/${characterId}/trackers`, data);
       return response.json();
     },
@@ -36,10 +36,10 @@ export default function TrackerDialog({ isOpen, onClose, characterId }: TrackerD
     e.preventDefault();
     if (!name.trim()) return;
 
-    const targetNum = target.trim() ? parseInt(target.trim()) : undefined;
+    const targetText = target.trim() || undefined;
     createMutation.mutate({
       name: name.trim(),
-      target: targetNum
+      target: targetText
     });
   };
 
@@ -74,10 +74,10 @@ export default function TrackerDialog({ isOpen, onClose, characterId }: TrackerD
               <Label htmlFor="tracker-target">Target (optional)</Label>
               <Input
                 id="tracker-target"
-                type="number"
+                type="text"
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
-                placeholder="Enter target value..."
+                placeholder="Enter target description..."
                 data-testid="input-tracker-target"
               />
             </div>

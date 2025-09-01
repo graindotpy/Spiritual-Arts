@@ -181,7 +181,7 @@ export const trackers = pgTable("trackers", {
   characterId: varchar("character_id").notNull().references(() => characters.id, { onDelete: "cascade" }),
   name: varchar("name").notNull(),
   currentValue: integer("current_value").default(0),
-  target: integer("target"), // optional target value
+  target: varchar("target"), // optional freetext target description
   createdAt: timestamp("created_at").defaultNow(),
 });
 

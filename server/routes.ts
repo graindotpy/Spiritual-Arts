@@ -725,7 +725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         characterId: req.params.id,
         name: name.trim(),
         currentValue: 0,
-        target: target || null
+        target: target?.trim() || null
       });
       
       res.json(tracker);
