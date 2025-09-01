@@ -17,8 +17,10 @@ import { useCharacterState } from "@/hooks/use-character-state";
 import { useWebSocket } from "@/hooks/use-websocket";
 import SpiritRollNotification from "@/components/spirit-roll-notification";
 import RollResultNotification from "@/components/roll-result-notification";
+import TrackerComponent from "@/components/tracker";
+import TrackerDialog from "@/components/tracker-dialog";
 import { SPIRIT_DIE_PROGRESSION } from "@shared/schema";
-import type { Character, Technique, SpiritDiePool, DieSize } from "@shared/schema";
+import type { Character, Technique, SpiritDiePool, DieSize, Tracker } from "@shared/schema";
 
 interface CharacterSheetProps {
   character: Character;
@@ -35,6 +37,7 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   const [isOverrideOpen, setIsOverrideOpen] = useState(false);
   const [isLevelEditorOpen, setIsLevelEditorOpen] = useState(false);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
+  const [isTrackerDialogOpen, setIsTrackerDialogOpen] = useState(false);
   const [isRolling, setIsRolling] = useState(false);
   const [rollResult, setRollResult] = useState<number | null>(null);
   const [rollSuccess, setRollSuccess] = useState<boolean>(true);
@@ -60,12 +63,32 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   });
   const techniques = techniquesQuery.data || [];
 
+  const trackersQuery = useQuery<Tracker[]>({
+    queryKey: ["/api/character", currentCharacter.id, "trackers"],
+  });
+  const trackers = trackersQuery.data || [];
+
   const {
     updateSpiritDiePool,
     rollSpiritedie
   } = useCharacterState(currentCharacter.id);
 
   const { toast } = useToast();
+
+  // Delete tracker mutation
+  const deleteTrackerMutation = useMutation({
+    mutationFn: async (trackerId: string) => {
+      const response = await apiRequest('DELETE', `/api/trackers/${trackerId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      trackersQuery.refetch();
+      toast({ title: "Tracker deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete tracker", variant: "destructive" });
+    }
+  });
 
   // Delete technique mutation
   const deleteTechniqueMutation = useMutation({
@@ -312,6 +335,37 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                   </Button>
                 </div>
               )}
+              
+              {/* Trackers Section */}
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">Trackers</h3>
+                  <Button
+                    size="sm"
+                    onClick={() => setIsTrackerDialogOpen(true)}
+                    className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
+                    data-testid="button-add-tracker"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                
+                <div className="space-y-2">
+                  {trackers.map((tracker) => (
+                    <TrackerComponent
+                      key={tracker.id}
+                      tracker={tracker}
+                      onDelete={(id) => deleteTrackerMutation.mutate(id)}
+                    />
+                  ))}
+                  
+                  {trackers.length === 0 && (
+                    <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                      No trackers yet. Click + to add one.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -398,6 +452,13 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
           open={isGlossaryOpen}
           characterId={currentCharacter.id}
           onClose={() => setIsGlossaryOpen(false)}
+        />
+        
+        {/* Tracker Dialog */}
+        <TrackerDialog
+          isOpen={isTrackerDialogOpen}
+          onClose={() => setIsTrackerDialogOpen(false)}
+          characterId={currentCharacter.id}
         />
 
       </main>

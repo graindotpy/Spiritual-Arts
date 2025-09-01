@@ -162,6 +162,13 @@ export default function TechniqueCard({
     }
   };
 
+  // Update parent when SP level changes for selected technique
+  useEffect(() => {
+    if (isSelected && currentSP > 0) {
+      onSelect(technique.id, currentSP);
+    }
+  }, [currentSP, isSelected, technique.id, onSelect]);
+
   // Update the selected SP when currentSP changes and this technique is selected
   useEffect(() => {
     if (isSelected && currentSP > 0) {

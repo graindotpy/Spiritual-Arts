@@ -6,6 +6,7 @@ import {
   glossaryTerms,
   users,
   techniquePreferences,
+  trackers,
   type Character, 
   type InsertCharacter,
   type SpiritDiePool,
@@ -20,6 +21,8 @@ import {
   type UpsertUser,
   type TechniquePreference,
   type InsertTechniquePreference,
+  type Tracker,
+  type InsertTracker,
   type DieSize,
   SPIRIT_DIE_PROGRESSION
 } from "@shared/schema";
@@ -65,6 +68,12 @@ export interface IStorage {
   // Technique Preferences
   getTechniquePreferences(userId: string): Promise<TechniquePreference[]>;
   upsertTechniquePreference(preference: InsertTechniquePreference): Promise<TechniquePreference>;
+
+  // Trackers
+  getTrackers(characterId: string): Promise<Tracker[]>;
+  createTracker(tracker: InsertTracker): Promise<Tracker>;
+  updateTracker(id: string, tracker: Partial<Tracker>): Promise<Tracker | undefined>;
+  deleteTracker(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -554,6 +563,30 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result;
     }
+  }
+
+  // Trackers
+  async getTrackers(characterId: string): Promise<Tracker[]> {
+    return await db.select().from(trackers).where(eq(trackers.characterId, characterId));
+  }
+
+  async createTracker(tracker: InsertTracker): Promise<Tracker> {
+    const [created] = await db.insert(trackers).values(tracker).returning();
+    return created;
+  }
+
+  async updateTracker(id: string, tracker: Partial<Tracker>): Promise<Tracker | undefined> {
+    const [updated] = await db
+      .update(trackers)
+      .set(tracker)
+      .where(eq(trackers.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteTracker(id: string): Promise<boolean> {
+    const result = await db.delete(trackers).where(eq(trackers.id, id));
+    return (result.rowCount || 0) > 0;
   }
 }
 

@@ -174,3 +174,16 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type TechniquePreference = typeof techniquePreferences.$inferSelect;
 export type InsertTechniquePreference = typeof techniquePreferences.$inferInsert;
+
+// Trackers table
+export const trackers = pgTable("trackers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  characterId: varchar("character_id").notNull().references(() => characters.id, { onDelete: "cascade" }),
+  name: varchar("name").notNull(),
+  currentValue: integer("current_value").default(0),
+  target: integer("target"), // optional target value
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type InsertTracker = typeof trackers.$inferInsert;
+export type Tracker = typeof trackers.$inferSelect;

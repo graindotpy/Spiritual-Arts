@@ -702,5 +702,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Tracker endpoints
+  app.get("/api/character/:id/trackers", async (req, res) => {
+    try {
+      const trackers = await storage.getTrackers(req.params.id);
+      res.json(trackers);
+    } catch (error) {
+      console.error("Get trackers error:", error);
+      res.status(500).json({ message: "Failed to get trackers" });
+    }
+  });
+
+  app.post("/api/character/:id/trackers", async (req, res) => {
+    try {
+      const { name, target } = req.body;
+      
+      if (!name || typeof name !== 'string') {
+        return res.status(400).json({ message: "Name is required" });
+      }
+
+      const tracker = await storage.createTracker({
+        characterId: req.params.id,
+        name: name.trim(),
+        currentValue: 0,
+        target: target || null
+      });
+      
+      res.json(tracker);
+    } catch (error) {
+      console.error("Create tracker error:", error);
+      res.status(500).json({ message: "Failed to create tracker" });
+    }
+  });
+
+  app.put("/api/trackers/:id", async (req, res) => {
+    try {
+      const { currentValue, target, name } = req.body;
+      const updateData: any = {};
+      
+      if (currentValue !== undefined) updateData.currentValue = currentValue;
+      if (target !== undefined) updateData.target = target;
+      if (name !== undefined) updateData.name = name;
+      
+      const updated = await storage.updateTracker(req.params.id, updateData);
+      if (!updated) {
+        return res.status(404).json({ message: "Tracker not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Update tracker error:", error);
+      res.status(500).json({ message: "Failed to update tracker" });
+    }
+  });
+
+  app.delete("/api/trackers/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteTracker(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Tracker not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete tracker error:", error);
+      res.status(500).json({ message: "Failed to delete tracker" });
+    }
+  });
+
   return httpServer;
 }
