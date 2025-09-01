@@ -14,6 +14,7 @@ interface TechniqueCardProps {
   technique: Technique;
   isSelected: boolean;
   selectedSP?: number;
+  maxSpiritDie?: number; // Highest spirit die value (4, 6, 8, 10, 12, 20)
   onSelect: (techniqueId: string, sp: number) => void;
   onEdit: (technique: Technique) => void;
   onDelete?: (techniqueId: string) => void;
@@ -33,6 +34,7 @@ export default function TechniqueCard({
   technique, 
   isSelected, 
   selectedSP,
+  maxSpiritDie = 0,
   onSelect, 
   onEdit, 
   onDelete 
@@ -199,16 +201,20 @@ export default function TechniqueCard({
     }
   };
 
+  // Check if current SP equals the max spirit die value for fiery effect
+  const isMaxPower = currentSP > 0 && currentSP === maxSpiritDie;
+
   return (
     <div
       ref={cardRef}
       className={cn(
-        "p-4 transition-all duration-200 cursor-pointer group border-2 rounded-lg",
+        "relative p-4 transition-all duration-200 cursor-pointer group border-2 rounded-lg",
         isSelected 
           ? "bg-spiritual-50 dark:bg-spiritual-900 border-spiritual-500 shadow-lg scale-[1.02]" 
           : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700",
         "text-gray-900 dark:text-white",
-        "hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-spiritual-300 hover:shadow-md hover:scale-105"
+        "hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-spiritual-300 hover:shadow-md hover:scale-105",
+        isMaxPower && "fire-border"
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
