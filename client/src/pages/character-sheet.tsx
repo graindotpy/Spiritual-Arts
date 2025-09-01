@@ -28,6 +28,8 @@ interface CharacterSheetProps {
 export default function CharacterSheet({ character, onReturnToMenu }: CharacterSheetProps) {
   const { theme, toggleTheme } = useTheme();
   const [selectedDieIndex, setSelectedDieIndex] = useState<number | null>(null);
+  const [selectedTechnique, setSelectedTechnique] = useState<string | null>(null);
+  const [selectedSP, setSelectedSP] = useState<number>(0);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingTechnique, setEditingTechnique] = useState<Technique | null>(null);
   const [isOverrideOpen, setIsOverrideOpen] = useState(false);
@@ -140,13 +142,18 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
     });
   };
 
-  const handleTechniqueSelect = async (techniqueId: string, sp: number) => {
-    // Direct roll when technique is clicked with SP investment
-    if (sp > 0 && selectedDieIndex !== null) {
+  const handleTechniqueSelect = (techniqueId: string, sp: number) => {
+    // Select the technique and SP level for rolling later
+    setSelectedTechnique(techniqueId);
+    setSelectedSP(sp);
+  };
+
+  const handleRollButtonClick = async () => {
+    if (selectedTechnique && selectedSP > 0 && selectedDieIndex !== null) {
       setIsRolling(true);
       try {
         const result = await rollSpiritedie.mutateAsync({ 
-          spInvestment: sp,
+          spInvestment: selectedSP,
           dieIndex: selectedDieIndex 
         });
         setRollResult(result.value);
@@ -162,7 +169,7 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
             setShowResultNotification(false);
             setRollResult(null);
           }, 1000);
-        }, 750);
+        }, 1500); // Updated to match new animation duration
       } catch (error) {
         setIsRolling(false);
         setRollResult(null);
@@ -291,6 +298,20 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                 isRolling={isRolling}
                 rollResult={rollResult}
               />
+              
+              {/* Big ROLL Button */}
+              {selectedTechnique && selectedSP > 0 && selectedDieIndex !== null && (
+                <div className="mt-6 flex justify-center">
+                  <Button
+                    onClick={handleRollButtonClick}
+                    disabled={isRolling}
+                    size="lg"
+                    className="bg-spiritual-600 hover:bg-spiritual-700 text-white font-bold py-4 px-12 text-xl shadow-lg transform transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:scale-100"
+                  >
+                    {isRolling ? "ROLLING..." : "ROLL"}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -328,11 +349,12 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                   <TechniqueCard
                     key={technique.id}
                     technique={technique}
-                    isSelected={false}
-                  onSelect={handleTechniqueSelect}
-                  onEdit={() => handleEditTechnique(technique)}
-                  onDelete={handleDeleteTechnique}
-                />
+                    isSelected={selectedTechnique === technique.id}
+                    selectedSP={selectedTechnique === technique.id ? selectedSP : undefined}
+                    onSelect={handleTechniqueSelect}
+                    onEdit={() => handleEditTechnique(technique)}
+                    onDelete={handleDeleteTechnique}
+                  />
                 ))
               )}
               

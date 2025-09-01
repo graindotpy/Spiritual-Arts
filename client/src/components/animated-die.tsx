@@ -29,7 +29,7 @@ export default function AnimatedDie({
   useEffect(() => {
     if (!isRolling) return;
 
-    setAnimationClass("animate-roll-bounce animate-roll-spin");
+    setAnimationClass("");
     const maxValue = getMaxValue(size);
     
     // Show random values during rolling
@@ -37,7 +37,7 @@ export default function AnimatedDie({
       setCurrentValue(Math.floor(Math.random() * maxValue) + 1);
     }, 150);
 
-    // Stop rolling after 0.75 seconds and show final result
+    // Stop rolling after 1.5 seconds and show final result
     const rollTimeout = setTimeout(() => {
       clearInterval(rollInterval);
       setAnimationClass("");
@@ -46,7 +46,7 @@ export default function AnimatedDie({
         setCurrentValue(finalResult);
         onRollComplete?.(finalResult);
       }
-    }, 750);
+    }, 1500);
 
     return () => {
       clearInterval(rollInterval);
@@ -91,10 +91,12 @@ export default function AnimatedDie({
         {size}
       </div>
       
-      {/* Rolling indicator */}
+      {/* Rolling indicator bar */}
       {isRolling && (
-        <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 text-xs font-medium text-amber-600 dark:text-amber-400 animate-pulse">
-          Rolling...
+        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 w-20 h-6 bg-amber-100 dark:bg-amber-900 rounded-md border border-amber-300 dark:border-amber-700 flex items-center justify-center animate-pulse">
+          <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            Rolling...
+          </span>
         </div>
       )}
     </div>
