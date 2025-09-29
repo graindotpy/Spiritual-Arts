@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { RotateCcw } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { RotateCcw, Settings } from "lucide-react";
 import SpiritDie from "./spirit-die";
 import AnimatedDie from "./animated-die";
 import type { SpiritDiePool, DieSize } from "@shared/schema";
@@ -17,6 +19,13 @@ interface SpiritDiePoolProps {
   onResetToLevel: () => void;
   isRolling?: boolean;
   rollResult?: number | null;
+  // Manual tracking props
+  isManualTracking: boolean;
+  onManualTrackingToggle: () => void;
+  manualSelectedDieIndex: number | null;
+  onManualDieSelect: (index: number | null) => void;
+  onManualDieAdjust: (index: number, newValue: DieSize) => void;
+  maxDiceForLevel: DieSize[];
 }
 
 export default function SpiritDiePoolComponent({ 
@@ -30,12 +39,33 @@ export default function SpiritDiePoolComponent({
   onOverride,
   onResetToLevel,
   isRolling = false,
-  rollResult = null
+  rollResult = null,
+  // Manual tracking props
+  isManualTracking,
+  onManualTrackingToggle,
+  manualSelectedDieIndex,
+  onManualDieSelect,
+  onManualDieAdjust,
+  maxDiceForLevel
 }: SpiritDiePoolProps) {
   return (
     <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
       <div className="text-center mb-4">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Spirit Die Pool</h3>
+      </div>
+      
+      {/* Manual Tracking Switch */}
+      <div className="flex items-center justify-center space-x-3 mb-4" data-testid="manual-tracking-toggle">
+        <Settings className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        <Label htmlFor="manual-tracking" className="text-sm text-gray-700 dark:text-gray-300">
+          Manual Tracking
+        </Label>
+        <Switch 
+          id="manual-tracking"
+          checked={isManualTracking}
+          onCheckedChange={onManualTrackingToggle}
+          data-testid="switch-manual-tracking"
+        />
       </div>
       
       <div className="flex items-start justify-center space-x-4 mt-4">
@@ -59,8 +89,14 @@ export default function SpiritDiePoolComponent({
                     <SpiritDie
                       size={currentDie}
                       isActive={true}
-                      isSelected={selectedDieIndex === index}
-                      onClick={() => onDieSelect(index)}
+                      isSelected={isManualTracking ? manualSelectedDieIndex === index : selectedDieIndex === index}
+                      onClick={isManualTracking ? () => {
+                        // In manual mode, clicking toggles selection
+                        onManualDieSelect(manualSelectedDieIndex === index ? null : index);
+                      } : () => onDieSelect(index)}
+                      isManualMode={isManualTracking}
+                      onWheelAdjust={isManualTracking ? (newValue) => onManualDieAdjust(index, newValue) : undefined}
+                      maxValue={maxDiceForLevel[index]}
                     />
                   )
                 ) : (
@@ -73,17 +109,22 @@ export default function SpiritDiePoolComponent({
               </div>
               {/* Restore button positioned below the die - fixed height container to prevent shifting */}
               <div className="h-10 mt-2 flex items-start justify-center">
-                {canRestore && (
+                {!isManualTracking && canRestore && (
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => onDieRestore(index)}
                     className="h-6 px-2 text-xs text-gray-500 hover:text-spiritual-600 dark:text-gray-400 dark:hover:text-spiritual-400"
-                    title={!currentDie || currentDie === "depleted" ? "Restore to d4" : "Increase die size by one step"}
+                    title={!currentDie ? "Restore to d4" : "Increase die size by one step"}
                   >
                     <RotateCcw className="w-3 h-3 mr-1" />
                     Restore
                   </Button>
+                )}
+                {isManualTracking && manualSelectedDieIndex === index && (
+                  <div className="text-xs text-center text-gray-500 dark:text-gray-400">
+                    Use mouse wheel<br />to adjust
+                  </div>
                 )}
               </div>
             </div>
