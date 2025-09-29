@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { DieSize } from "@shared/schema";
 
 interface SpiritDieProps {
@@ -15,53 +16,34 @@ interface SpiritDieProps {
 }
 
 export default function SpiritDie({ size, isActive, isSelected, onClick, className, isManualMode = false, onWheelAdjust, maxValue }: SpiritDieProps) {
+  const [showDropdown, setShowDropdown] = useState(false);
   
   // Define die progression for manual adjustments
   const dieProgression: DieSize[] = ["d4", "d6", "d8", "d10", "d12"];
   
-  // Get max die index based on maxValue
-  const getMaxDieIndex = (): number => {
-    if (!maxValue) return dieProgression.length - 1;
+  // Get available dice based on maxValue
+  const getAvailableDice = (): DieSize[] => {
+    if (!maxValue) return dieProgression;
     const maxIndex = dieProgression.indexOf(maxValue);
-    return maxIndex !== -1 ? maxIndex : dieProgression.length - 1;
+    return maxIndex !== -1 ? dieProgression.slice(0, maxIndex + 1) : dieProgression;
   };
   
-  // Handle mouse wheel adjustment
-  const handleWheel = (e: WheelEvent) => {
-    if (!isManualMode || !isSelected || !onWheelAdjust) return;
-    
-    e.preventDefault();
-    
-    const currentIndex = dieProgression.indexOf(size);
-    if (currentIndex === -1) return;
-    
-    const maxIndex = getMaxDieIndex();
-    let newIndex;
-    
-    if (e.deltaY < 0) {
-      // Scrolling up - increase die size
-      newIndex = Math.min(currentIndex + 1, maxIndex);
-    } else {
-      // Scrolling down - decrease die size  
-      newIndex = Math.max(currentIndex - 1, 0);
-    }
-    
-    if (newIndex !== currentIndex) {
-      onWheelAdjust(dieProgression[newIndex]);
+  // Handle die click in manual mode
+  const handleClick = () => {
+    if (isManualMode) {
+      setShowDropdown(true);
+    } else if (onClick) {
+      onClick();
     }
   };
   
-  // Add wheel event listener when in manual mode and selected
-  useEffect(() => {
-    if (isManualMode && isSelected && onWheelAdjust) {
-      const handleWheelEvent = (e: WheelEvent) => handleWheel(e);
-      
-      // Add to document instead of specific element to capture wheel events
-      document.addEventListener('wheel', handleWheelEvent, { passive: false });
-      
-      return () => document.removeEventListener('wheel', handleWheelEvent);
+  // Handle dropdown selection
+  const handleDropdownSelect = (newValue: DieSize) => {
+    if (onWheelAdjust) {
+      onWheelAdjust(newValue);
     }
-  }, [isManualMode, isSelected, size, onWheelAdjust, maxValue]);
+    setShowDropdown(false);
+  };
   return (
     <div className={cn("relative group", className)}>
       <div 
@@ -83,7 +65,7 @@ export default function SpiritDie({ size, isActive, isSelected, onClick, classNa
             ? "ring-4 ring-blue-400 ring-opacity-60 scale-105" 
             : "ring-4 ring-spiritual-400 ring-opacity-60 scale-105")
         )}
-        onClick={onClick}
+        onClick={handleClick}
         data-testid={`spirit-die-${size}`}
       >
         {size}
@@ -102,9 +84,20 @@ export default function SpiritDie({ size, isActive, isSelected, onClick, classNa
         </div>
       )}
       
-      {isManualMode && isSelected && (
-        <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-          Scroll to adjust
+      {isManualMode && showDropdown && (
+        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50">
+          <Select value={size} onValueChange={handleDropdownSelect} open={true} onOpenChange={setShowDropdown}>
+            <SelectTrigger className="w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {getAvailableDice().map((dieValue) => (
+                <SelectItem key={dieValue} value={dieValue}>
+                  {dieValue}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
     </div>

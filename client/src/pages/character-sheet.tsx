@@ -45,7 +45,6 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   
   // Manual tracking state
   const [isManualTracking, setIsManualTracking] = useState(false);
-  const [manualSelectedDieIndex, setManualSelectedDieIndex] = useState<number | null>(null);
 
   // WebSocket for real-time roll notifications
   const { isConnected, lastRollBroadcast } = useWebSocket();
@@ -245,11 +244,6 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   // Manual tracking handlers
   const handleManualTrackingToggle = () => {
     setIsManualTracking(!isManualTracking);
-    setManualSelectedDieIndex(null);
-  };
-
-  const handleManualDieSelect = (index: number | null) => {
-    setManualSelectedDieIndex(index);
   };
 
   const handleManualDieAdjust = async (index: number, newValue: DieSize) => {
@@ -257,9 +251,24 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
     const newDice = [...currentDice];
     newDice[index] = newValue;
     
-    await updateSpiritDiePool.mutateAsync({
-      currentDice: newDice
-    });
+    // Update without showing toast notification (silent update for manual mode)
+    try {
+      const response = await apiRequest("PUT", `/api/character/${currentCharacter.id}/spirit-die-pool`, {
+        currentDice: newDice
+      });
+      
+      // Silently refresh the cache without toast
+      // Force refresh of spirit die pool data
+      const queryClient = (await import("@/lib/queryClient")).queryClient;
+      queryClient.invalidateQueries({ queryKey: ["/api/character", currentCharacter.id, "spirit-die-pool"] });
+    } catch (error) {
+      // Only show error toasts
+      toast({
+        title: "Error",
+        description: "Failed to update die value",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleEditTechnique = (technique: Technique) => {
@@ -360,8 +369,6 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                 // Manual tracking props
                 isManualTracking={isManualTracking}
                 onManualTrackingToggle={handleManualTrackingToggle}
-                manualSelectedDieIndex={manualSelectedDieIndex}
-                onManualDieSelect={handleManualDieSelect}
                 onManualDieAdjust={handleManualDieAdjust}
                 maxDiceForLevel={levelBasedDice}
               />

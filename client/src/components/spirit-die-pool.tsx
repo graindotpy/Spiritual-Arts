@@ -22,8 +22,6 @@ interface SpiritDiePoolProps {
   // Manual tracking props
   isManualTracking: boolean;
   onManualTrackingToggle: () => void;
-  manualSelectedDieIndex: number | null;
-  onManualDieSelect: (index: number | null) => void;
   onManualDieAdjust: (index: number, newValue: DieSize) => void;
   maxDiceForLevel: DieSize[];
 }
@@ -43,8 +41,6 @@ export default function SpiritDiePoolComponent({
   // Manual tracking props
   isManualTracking,
   onManualTrackingToggle,
-  manualSelectedDieIndex,
-  onManualDieSelect,
   onManualDieAdjust,
   maxDiceForLevel
 }: SpiritDiePoolProps) {
@@ -89,11 +85,8 @@ export default function SpiritDiePoolComponent({
                     <SpiritDie
                       size={currentDie}
                       isActive={true}
-                      isSelected={isManualTracking ? manualSelectedDieIndex === index : selectedDieIndex === index}
-                      onClick={isManualTracking ? () => {
-                        // In manual mode, clicking toggles selection
-                        onManualDieSelect(manualSelectedDieIndex === index ? null : index);
-                      } : () => onDieSelect(index)}
+                      isSelected={!isManualTracking && selectedDieIndex === index}
+                      onClick={!isManualTracking ? () => onDieSelect(index) : undefined}
                       isManualMode={isManualTracking}
                       onWheelAdjust={isManualTracking ? (newValue) => onManualDieAdjust(index, newValue) : undefined}
                       maxValue={maxDiceForLevel[index]}
@@ -121,9 +114,9 @@ export default function SpiritDiePoolComponent({
                     Restore
                   </Button>
                 )}
-                {isManualTracking && manualSelectedDieIndex === index && (
+                {isManualTracking && (
                   <div className="text-xs text-center text-gray-500 dark:text-gray-400">
-                    Use mouse wheel<br />to adjust
+                    Click to change
                   </div>
                 )}
               </div>
