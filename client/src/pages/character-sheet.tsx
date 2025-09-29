@@ -42,6 +42,10 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   const [rollResult, setRollResult] = useState<number | null>(null);
   const [rollSuccess, setRollSuccess] = useState<boolean>(true);
   const [showResultNotification, setShowResultNotification] = useState(false);
+  
+  // Manual tracking state
+  const [isManualTracking, setIsManualTracking] = useState(false);
+  const [manualSelectedDieIndex, setManualSelectedDieIndex] = useState<number | null>(null);
 
   // WebSocket for real-time roll notifications
   const { isConnected, lastRollBroadcast } = useWebSocket();
@@ -238,6 +242,26 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
     });
   };
 
+  // Manual tracking handlers
+  const handleManualTrackingToggle = () => {
+    setIsManualTracking(!isManualTracking);
+    setManualSelectedDieIndex(null);
+  };
+
+  const handleManualDieSelect = (index: number | null) => {
+    setManualSelectedDieIndex(index);
+  };
+
+  const handleManualDieAdjust = async (index: number, newValue: DieSize) => {
+    // Create a copy of current dice array and update the specific die
+    const newDice = [...currentDice];
+    newDice[index] = newValue;
+    
+    await updateSpiritDiePool.mutateAsync({
+      currentDice: newDice
+    });
+  };
+
   const handleEditTechnique = (technique: Technique) => {
     setEditingTechnique(technique);
     setIsEditorOpen(true);
@@ -333,6 +357,13 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                 onResetToLevel={handleResetToLevel}
                 isRolling={isRolling}
                 rollResult={rollResult}
+                // Manual tracking props
+                isManualTracking={isManualTracking}
+                onManualTrackingToggle={handleManualTrackingToggle}
+                manualSelectedDieIndex={manualSelectedDieIndex}
+                onManualDieSelect={handleManualDieSelect}
+                onManualDieAdjust={handleManualDieAdjust}
+                maxDiceForLevel={levelBasedDice}
               />
               
               {/* Big ROLL Button */}
