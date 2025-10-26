@@ -490,8 +490,9 @@ export default function ExpandedTooltipDialog({
                   onChange={(e) => setEditedDefinition(e.target.value)}
                   placeholder="Enter basic definition..."
                   rows={3}
-                  className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                  className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 relative z-10"
                   data-testid="textarea-basic-definition"
+                  autoFocus
                 />
               ) : (
                 <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
