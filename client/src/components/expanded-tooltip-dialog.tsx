@@ -43,19 +43,22 @@ export default function ExpandedTooltipDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Parse expanded content on load
+  // Parse expanded content only when dialog opens or term changes
+  // Don't reload while editing to prevent losing changes
   useEffect(() => {
-    if (term.expandedContent) {
-      try {
-        const parsed = JSON.parse(term.expandedContent);
-        setContentBlocks(parsed.blocks || []);
-      } catch {
+    if (open && !isEditing) {
+      if (term.expandedContent) {
+        try {
+          const parsed = JSON.parse(term.expandedContent);
+          setContentBlocks(parsed.blocks || []);
+        } catch {
+          setContentBlocks([]);
+        }
+      } else {
         setContentBlocks([]);
       }
-    } else {
-      setContentBlocks([]);
     }
-  }, [term.expandedContent]);
+  }, [open, term.id, isEditing]);
 
   // Handle graceful closing with animation
   const handleClose = useCallback(() => {
