@@ -39,6 +39,7 @@ export default function ExpandedTooltipDialog({
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [editedDefinition, setEditedDefinition] = useState("");
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -57,8 +58,10 @@ export default function ExpandedTooltipDialog({
       } else {
         setContentBlocks([]);
       }
+      // Also set the definition when opening
+      setEditedDefinition(term.definition);
     }
-  }, [open, term.id, isEditing]);
+  }, [open, term.id, isEditing, term.definition]);
 
   // Handle graceful closing with animation
   const handleClose = useCallback(() => {
@@ -95,6 +98,7 @@ export default function ExpandedTooltipDialog({
   const handleSave = async () => {
     const expandedContent = JSON.stringify({ blocks: contentBlocks });
     await updateTerm.mutateAsync({
+      definition: editedDefinition,
       expandedContent,
       hasExpandedContent: contentBlocks.length > 0
     });
@@ -453,6 +457,8 @@ export default function ExpandedTooltipDialog({
                           setContentBlocks([]);
                         }
                       }
+                      // Also reset the definition
+                      setEditedDefinition(term.definition);
                     }}
                   >
                     Cancel
@@ -478,9 +484,20 @@ export default function ExpandedTooltipDialog({
               <h3 className="font-semibold mb-2 text-spiritual-600 dark:text-spiritual-400">
                 Basic Definition
               </h3>
-              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
-                {term.definition}
-              </p>
+              {isEditing ? (
+                <Textarea
+                  value={editedDefinition}
+                  onChange={(e) => setEditedDefinition(e.target.value)}
+                  placeholder="Enter basic definition..."
+                  rows={3}
+                  className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                  data-testid="textarea-basic-definition"
+                />
+              ) : (
+                <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
+                  {term.definition}
+                </p>
+              )}
             </CardContent>
           </Card>
 
