@@ -192,6 +192,7 @@ export type Tracker = typeof trackers.$inferSelect;
 export const dmStacks = pgTable("dm_stacks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name").notNull().default("Unnamed Stack"),
   target: text("target").notNull(),
   effect: text("effect").notNull(),
   createdAt: timestamp("created_at").defaultNow(),

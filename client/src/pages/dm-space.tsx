@@ -31,6 +31,7 @@ export default function DmSpace() {
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingStack, setEditingStack] = useState<DmStack | null>(null);
+  const [formName, setFormName] = useState("");
   const [formTarget, setFormTarget] = useState("");
   const [formEffect, setFormEffect] = useState("");
   
@@ -63,13 +64,14 @@ export default function DmSpace() {
 
   // Create stack mutation
   const createStack = useMutation({
-    mutationFn: async (data: { target: string; effect: string }) => {
+    mutationFn: async (data: { name: string; target: string; effect: string }) => {
       const response = await apiRequest('POST', `/api/dm/${userId}/stacks`, data);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'stacks'] });
       setIsCreateDialogOpen(false);
+      setFormName("");
       setFormTarget("");
       setFormEffect("");
       toast({
@@ -88,8 +90,9 @@ export default function DmSpace() {
 
   // Update stack mutation
   const updateStack = useMutation({
-    mutationFn: async (data: { id: string; target: string; effect: string }) => {
+    mutationFn: async (data: { id: string; name: string; target: string; effect: string }) => {
       const response = await apiRequest('PUT', `/api/dm/stacks/${data.id}`, {
+        name: data.name,
         target: data.target,
         effect: data.effect,
       });
@@ -98,6 +101,7 @@ export default function DmSpace() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'stacks'] });
       setEditingStack(null);
+      setFormName("");
       setFormTarget("");
       setFormEffect("");
       toast({
@@ -210,28 +214,29 @@ export default function DmSpace() {
   });
 
   const handleCreate = () => {
-    if (!formTarget.trim() || !formEffect.trim()) {
+    if (!formName.trim() || !formTarget.trim() || !formEffect.trim()) {
       toast({
         title: "Error",
-        description: "Both Target and Effect are required",
+        description: "Name, Target and Effect are required",
         variant: "destructive",
       });
       return;
     }
-    createStack.mutate({ target: formTarget.trim(), effect: formEffect.trim() });
+    createStack.mutate({ name: formName.trim(), target: formTarget.trim(), effect: formEffect.trim() });
   };
 
   const handleUpdate = () => {
-    if (!editingStack || !formTarget.trim() || !formEffect.trim()) {
+    if (!editingStack || !formName.trim() || !formTarget.trim() || !formEffect.trim()) {
       toast({
         title: "Error",
-        description: "Both Target and Effect are required",
+        description: "Name, Target and Effect are required",
         variant: "destructive",
       });
       return;
     }
     updateStack.mutate({
       id: editingStack.id,
+      name: formName.trim(),
       target: formTarget.trim(),
       effect: formEffect.trim(),
     });
@@ -239,6 +244,7 @@ export default function DmSpace() {
 
   const openEditDialog = (stack: DmStack) => {
     setEditingStack(stack);
+    setFormName(stack.name);
     setFormTarget(stack.target);
     setFormEffect(stack.effect);
   };
@@ -246,6 +252,7 @@ export default function DmSpace() {
   const closeDialogs = () => {
     setIsCreateDialogOpen(false);
     setEditingStack(null);
+    setFormName("");
     setFormTarget("");
     setFormEffect("");
   };
@@ -390,7 +397,7 @@ export default function DmSpace() {
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <CardTitle className="text-lg text-spiritual-700 dark:text-spiritual-400">
-                          Stack #{stack.id.slice(0, 8)}
+                          {stack.name}
                         </CardTitle>
                         <div className="flex gap-1">
                           <Button
@@ -558,6 +565,18 @@ export default function DmSpace() {
           <div className="space-y-4 py-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Name
+              </label>
+              <Input
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="Enter stack name..."
+                className="bg-white dark:bg-gray-700"
+                data-testid="input-stack-name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Target
               </label>
               <Textarea
@@ -609,6 +628,18 @@ export default function DmSpace() {
             <DialogTitle>Edit Stack</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Name
+              </label>
+              <Input
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="Enter stack name..."
+                className="bg-white dark:bg-gray-700"
+                data-testid="input-edit-stack-name"
+              />
+            </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Target
