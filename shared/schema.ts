@@ -210,6 +210,7 @@ export const dmGlossary = pgTable("dm_glossary", {
 export const dmScratchpads = pgTable("dm_scratchpads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title").notNull().default("Scratchpad"),
   content: text("content").notNull().default(""),
   createdAt: timestamp("created_at").defaultNow(),
 });
