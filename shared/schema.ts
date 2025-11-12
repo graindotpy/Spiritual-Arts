@@ -187,3 +187,36 @@ export const trackers = pgTable("trackers", {
 
 export type InsertTracker = typeof trackers.$inferInsert;
 export type Tracker = typeof trackers.$inferSelect;
+
+// DM Space tables
+export const dmStacks = pgTable("dm_stacks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  target: text("target").notNull(),
+  effect: text("effect").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const dmGlossary = pgTable("dm_glossary", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  keyword: text("keyword").notNull(),
+  definition: text("definition").notNull(),
+  expandedContent: text("expanded_content"),
+  hasExpandedContent: boolean("has_expanded_content").default(false).notNull(),
+});
+
+export const insertDmStackSchema = createInsertSchema(dmStacks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertDmGlossarySchema = createInsertSchema(dmGlossary).omit({
+  id: true,
+});
+
+export type DmStack = typeof dmStacks.$inferSelect;
+export type InsertDmStack = z.infer<typeof insertDmStackSchema>;
+
+export type DmGlossaryTerm = typeof dmGlossary.$inferSelect;
+export type InsertDmGlossaryTerm = z.infer<typeof insertDmGlossarySchema>;

@@ -7,6 +7,8 @@ import {
   users,
   techniquePreferences,
   trackers,
+  dmStacks,
+  dmGlossary,
   type Character, 
   type InsertCharacter,
   type SpiritDiePool,
@@ -23,6 +25,10 @@ import {
   type InsertTechniquePreference,
   type Tracker,
   type InsertTracker,
+  type DmStack,
+  type InsertDmStack,
+  type DmGlossaryTerm,
+  type InsertDmGlossaryTerm,
   type DieSize,
   SPIRIT_DIE_PROGRESSION
 } from "@shared/schema";
@@ -74,6 +80,18 @@ export interface IStorage {
   createTracker(tracker: InsertTracker): Promise<Tracker>;
   updateTracker(id: string, tracker: Partial<Tracker>): Promise<Tracker | undefined>;
   deleteTracker(id: string): Promise<boolean>;
+
+  // DM Stacks
+  getDmStacks(userId: string): Promise<DmStack[]>;
+  createDmStack(stack: InsertDmStack & { userId: string }): Promise<DmStack>;
+  updateDmStack(id: string, stack: Partial<DmStack>): Promise<DmStack | undefined>;
+  deleteDmStack(id: string): Promise<boolean>;
+
+  // DM Glossary
+  getDmGlossary(userId: string): Promise<DmGlossaryTerm[]>;
+  createDmGlossaryTerm(term: InsertDmGlossaryTerm & { userId: string }): Promise<DmGlossaryTerm>;
+  updateDmGlossaryTerm(id: string, term: Partial<DmGlossaryTerm>): Promise<DmGlossaryTerm | undefined>;
+  deleteDmGlossaryTerm(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -586,6 +604,54 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTracker(id: string): Promise<boolean> {
     const result = await db.delete(trackers).where(eq(trackers.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // DM Stacks
+  async getDmStacks(userId: string): Promise<DmStack[]> {
+    return await db.select().from(dmStacks).where(eq(dmStacks.userId, userId));
+  }
+
+  async createDmStack(stack: InsertDmStack & { userId: string }): Promise<DmStack> {
+    const [created] = await db.insert(dmStacks).values(stack).returning();
+    return created;
+  }
+
+  async updateDmStack(id: string, stack: Partial<DmStack>): Promise<DmStack | undefined> {
+    const [updated] = await db
+      .update(dmStacks)
+      .set(stack)
+      .where(eq(dmStacks.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteDmStack(id: string): Promise<boolean> {
+    const result = await db.delete(dmStacks).where(eq(dmStacks.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // DM Glossary
+  async getDmGlossary(userId: string): Promise<DmGlossaryTerm[]> {
+    return await db.select().from(dmGlossary).where(eq(dmGlossary.userId, userId));
+  }
+
+  async createDmGlossaryTerm(term: InsertDmGlossaryTerm & { userId: string }): Promise<DmGlossaryTerm> {
+    const [created] = await db.insert(dmGlossary).values(term).returning();
+    return created;
+  }
+
+  async updateDmGlossaryTerm(id: string, term: Partial<DmGlossaryTerm>): Promise<DmGlossaryTerm | undefined> {
+    const [updated] = await db
+      .update(dmGlossary)
+      .set(term)
+      .where(eq(dmGlossary.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteDmGlossaryTerm(id: string): Promise<boolean> {
+    const result = await db.delete(dmGlossary).where(eq(dmGlossary.id, id));
     return (result.rowCount || 0) > 0;
   }
 }
