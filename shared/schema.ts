@@ -207,6 +207,13 @@ export const dmGlossary = pgTable("dm_glossary", {
   hasExpandedContent: boolean("has_expanded_content").default(false).notNull(),
 });
 
+export const dmScratchpads = pgTable("dm_scratchpads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull().default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertDmStackSchema = createInsertSchema(dmStacks).omit({
   id: true,
   createdAt: true,
@@ -218,8 +225,17 @@ export const insertDmGlossarySchema = createInsertSchema(dmGlossary).omit({
   userId: true,
 });
 
+export const insertDmScratchpadSchema = createInsertSchema(dmScratchpads).omit({
+  id: true,
+  createdAt: true,
+  userId: true,
+});
+
 export type DmStack = typeof dmStacks.$inferSelect;
 export type InsertDmStack = z.infer<typeof insertDmStackSchema>;
 
 export type DmGlossaryTerm = typeof dmGlossary.$inferSelect;
 export type InsertDmGlossaryTerm = z.infer<typeof insertDmGlossarySchema>;
+
+export type DmScratchpad = typeof dmScratchpads.$inferSelect;
+export type InsertDmScratchpad = z.infer<typeof insertDmScratchpadSchema>;

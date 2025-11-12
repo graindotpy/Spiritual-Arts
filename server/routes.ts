@@ -7,7 +7,7 @@ import fs from "fs";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { db } from "./db";
-import { characters, insertTechniqueSchema, insertSpiritDiePoolSchema, insertActiveEffectSchema, insertGlossaryTermSchema, insertDmStackSchema, insertDmGlossarySchema, type DieSize } from "@shared/schema";
+import { characters, insertTechniqueSchema, insertSpiritDiePoolSchema, insertActiveEffectSchema, insertGlossaryTermSchema, insertDmStackSchema, insertDmGlossarySchema, insertDmScratchpadSchema, type DieSize } from "@shared/schema";
 import { z } from "zod";
 
 // Configure multer for portrait uploads
@@ -873,6 +873,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Delete DM glossary term error:", error);
       res.status(500).json({ message: "Failed to delete DM glossary term" });
+    }
+  });
+
+  // DM Scratchpad endpoints
+  app.get("/api/dm/:userId/scratchpads", async (req, res) => {
+    try {
+      const scratchpads = await storage.getDmScratchpads(req.params.userId);
+      res.json(scratchpads);
+    } catch (error) {
+      console.error("Get DM scratchpads error:", error);
+      res.status(500).json({ message: "Failed to get DM scratchpads" });
+    }
+  });
+
+  app.post("/api/dm/:userId/scratchpads", async (req, res) => {
+    try {
+      const validatedData = insertDmScratchpadSchema.parse(req.body);
+      const scratchpad = await storage.createDmScratchpad({
+        ...validatedData,
+        userId: req.params.userId
+      });
+      res.json(scratchpad);
+    } catch (error) {
+      console.error("Create DM scratchpad error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid scratchpad data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create DM scratchpad" });
+    }
+  });
+
+  app.put("/api/dm/scratchpads/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateDmScratchpad(req.params.id, req.body);
+      if (!updated) {
+        return res.status(404).json({ message: "Scratchpad not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Update DM scratchpad error:", error);
+      res.status(500).json({ message: "Failed to update DM scratchpad" });
+    }
+  });
+
+  app.delete("/api/dm/scratchpads/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteDmScratchpad(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Scratchpad not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete DM scratchpad error:", error);
+      res.status(500).json({ message: "Failed to delete DM scratchpad" });
     }
   });
 

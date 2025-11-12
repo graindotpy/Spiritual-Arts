@@ -9,6 +9,7 @@ import {
   trackers,
   dmStacks,
   dmGlossary,
+  dmScratchpads,
   type Character, 
   type InsertCharacter,
   type SpiritDiePool,
@@ -29,6 +30,8 @@ import {
   type InsertDmStack,
   type DmGlossaryTerm,
   type InsertDmGlossaryTerm,
+  type DmScratchpad,
+  type InsertDmScratchpad,
   type DieSize,
   SPIRIT_DIE_PROGRESSION
 } from "@shared/schema";
@@ -92,6 +95,12 @@ export interface IStorage {
   createDmGlossaryTerm(term: InsertDmGlossaryTerm & { userId: string }): Promise<DmGlossaryTerm>;
   updateDmGlossaryTerm(id: string, term: Partial<DmGlossaryTerm>): Promise<DmGlossaryTerm | undefined>;
   deleteDmGlossaryTerm(id: string): Promise<boolean>;
+
+  // DM Scratchpads
+  getDmScratchpads(userId: string): Promise<DmScratchpad[]>;
+  createDmScratchpad(scratchpad: InsertDmScratchpad & { userId: string }): Promise<DmScratchpad>;
+  updateDmScratchpad(id: string, scratchpad: Partial<DmScratchpad>): Promise<DmScratchpad | undefined>;
+  deleteDmScratchpad(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -652,6 +661,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDmGlossaryTerm(id: string): Promise<boolean> {
     const result = await db.delete(dmGlossary).where(eq(dmGlossary.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // DM Scratchpads
+  async getDmScratchpads(userId: string): Promise<DmScratchpad[]> {
+    return await db.select().from(dmScratchpads).where(eq(dmScratchpads.userId, userId));
+  }
+
+  async createDmScratchpad(scratchpad: InsertDmScratchpad & { userId: string }): Promise<DmScratchpad> {
+    const [created] = await db.insert(dmScratchpads).values(scratchpad).returning();
+    return created;
+  }
+
+  async updateDmScratchpad(id: string, scratchpad: Partial<DmScratchpad>): Promise<DmScratchpad | undefined> {
+    const [updated] = await db
+      .update(dmScratchpads)
+      .set(scratchpad)
+      .where(eq(dmScratchpads.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteDmScratchpad(id: string): Promise<boolean> {
+    const result = await db.delete(dmScratchpads).where(eq(dmScratchpads.id, id));
     return (result.rowCount || 0) > 0;
   }
 }

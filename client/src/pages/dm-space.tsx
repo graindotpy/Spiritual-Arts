@@ -13,7 +13,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import TooltipText from "@/components/tooltip-text";
 import ExpandedTooltipDialog from "@/components/expanded-tooltip-dialog";
 import { dmGlossaryScope } from "@/hooks/use-glossary";
-import type { DmStack, DmGlossaryTerm } from "@shared/schema";
+import type { DmStack, DmGlossaryTerm, DmScratchpad } from "@shared/schema";
 
 // Simple user ID generator
 const getUserId = () => {
@@ -66,6 +66,15 @@ export default function DmSpace() {
     queryKey: ['/api/dm', userId, 'glossary'],
     queryFn: async () => {
       const response = await apiRequest('GET', `/api/dm/${userId}/glossary`);
+      return response.json();
+    },
+  });
+
+  // Fetch DM scratchpads
+  const { data: scratchpads = [], isLoading: isLoadingScratchpads } = useQuery<DmScratchpad[]>({
+    queryKey: ['/api/dm', userId, 'scratchpads'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', `/api/dm/${userId}/scratchpads`);
       return response.json();
     },
   });
@@ -218,6 +227,40 @@ export default function DmSpace() {
         description: "Failed to delete glossary term",
         variant: "destructive",
       });
+    },
+  });
+
+  // Create scratchpad mutation
+  const createScratchpad = useMutation({
+    mutationFn: async (data: { content: string }) => {
+      const response = await apiRequest('POST', `/api/dm/${userId}/scratchpads`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'scratchpads'] });
+    },
+  });
+
+  // Update scratchpad mutation
+  const updateScratchpad = useMutation({
+    mutationFn: async (data: { id: string; content: string }) => {
+      const response = await apiRequest('PUT', `/api/dm/scratchpads/${data.id}`, {
+        content: data.content,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'scratchpads'] });
+    },
+  });
+
+  // Delete scratchpad mutation
+  const deleteScratchpad = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/dm/scratchpads/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'scratchpads'] });
     },
   });
 
@@ -432,7 +475,16 @@ export default function DmSpace() {
           </TabsList>
 
           <TabsContent value="stacks">
-            <div className="flex justify-end mb-6">
+            <div className="flex justify-end gap-2 mb-6">
+              <Button
+                onClick={() => createScratchpad.mutate({ content: "" })}
+                variant="outline"
+                className="border-spiritual-600 text-spiritual-600 hover:bg-spiritual-50 dark:border-spiritual-400 dark:text-spiritual-400 dark:hover:bg-spiritual-900"
+                data-testid="button-create-scratchpad"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Scratchpad
+              </Button>
               <Button
                 onClick={() => setIsCreateDialogOpen(true)}
                 className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
@@ -469,6 +521,39 @@ export default function DmSpace() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {scratchpads.map((scratchpad) => (
+                  <Card
+                    key={scratchpad.id}
+                    className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                    data-testid={`card-scratchpad-${scratchpad.id}`}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <CardTitle className="text-lg text-spiritual-700 dark:text-spiritual-400">
+                          Scratchpad
+                        </CardTitle>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteScratchpad.mutate(scratchpad.id)}
+                          data-testid={`button-delete-scratchpad-${scratchpad.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Textarea
+                        value={scratchpad.content}
+                        onChange={(e) => updateScratchpad.mutate({ id: scratchpad.id, content: e.target.value })}
+                        placeholder="Enter your notes here..."
+                        rows={8}
+                        className="bg-white dark:bg-gray-700 resize-none"
+                        data-testid={`textarea-scratchpad-${scratchpad.id}`}
+                      />
+                    </CardContent>
+                  </Card>
+                ))}
                 {stacks.map((stack) => (
                   <Card
                     key={stack.id}
