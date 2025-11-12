@@ -6,11 +6,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Edit2, ArrowLeft, BookOpen, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Edit2, ArrowLeft, BookOpen, ChevronUp, ChevronDown, Sparkles } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import TooltipText from "@/components/tooltip-text";
+import ExpandedTooltipDialog from "@/components/expanded-tooltip-dialog";
 import { dmGlossaryScope } from "@/hooks/use-glossary";
 import type { DmStack, DmGlossaryTerm } from "@shared/schema";
 
@@ -41,6 +42,7 @@ export default function DmSpace() {
   // Glossary state
   const [isGlossaryDialogOpen, setIsGlossaryDialogOpen] = useState(false);
   const [editingGlossaryTerm, setEditingGlossaryTerm] = useState<DmGlossaryTerm | null>(null);
+  const [expandedGlossaryTerm, setExpandedGlossaryTerm] = useState<DmGlossaryTerm | null>(null);
   const [formKeyword, setFormKeyword] = useState("");
   const [formDefinition, setFormDefinition] = useState("");
 
@@ -527,6 +529,15 @@ export default function DmSpace() {
                           <Button
                             size="sm"
                             variant="ghost"
+                            onClick={() => setExpandedGlossaryTerm(term)}
+                            data-testid={`button-enhanced-glossary-${term.id}`}
+                            title="Edit Enhanced Content"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => openGlossaryEditDialog(term)}
                             data-testid={`button-edit-glossary-${term.id}`}
                           >
@@ -789,6 +800,17 @@ export default function DmSpace() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Enhanced Content Dialog */}
+      {expandedGlossaryTerm && (
+        <ExpandedTooltipDialog
+          open={!!expandedGlossaryTerm}
+          onClose={() => setExpandedGlossaryTerm(null)}
+          term={expandedGlossaryTerm}
+          entityId={userId}
+          scope={dmGlossaryScope}
+        />
+      )}
     </div>
   );
 }
