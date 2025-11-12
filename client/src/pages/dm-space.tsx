@@ -25,6 +25,105 @@ const getUserId = () => {
   return userId;
 };
 
+// Scratchpad card component with debounced save
+function ScratchpadCard({ 
+  scratchpad, 
+  onUpdate, 
+  onDelete 
+}: { 
+  scratchpad: DmScratchpad; 
+  onUpdate: (data: { id: string; title?: string; content?: string }) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [localTitle, setLocalTitle] = useState(scratchpad.title || "Scratchpad");
+  const [localContent, setLocalContent] = useState(scratchpad.content);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  
+  // Sync local state with prop changes (when server data refreshes)
+  useEffect(() => {
+    setLocalTitle(scratchpad.title || "Scratchpad");
+  }, [scratchpad.title]);
+  
+  useEffect(() => {
+    setLocalContent(scratchpad.content);
+  }, [scratchpad.content]);
+  
+  // Debounced save for content
+  useEffect(() => {
+    if (localContent === scratchpad.content) return;
+    
+    const timer = setTimeout(() => {
+      onUpdate({ id: scratchpad.id, content: localContent });
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [localContent, scratchpad.content, scratchpad.id, onUpdate]);
+  
+  // Debounced save for title
+  useEffect(() => {
+    if (localTitle === scratchpad.title) return;
+    
+    const timer = setTimeout(() => {
+      onUpdate({ id: scratchpad.id, title: localTitle });
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [localTitle, scratchpad.title, scratchpad.id, onUpdate]);
+  
+  return (
+    <Card
+      className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+      data-testid={`card-scratchpad-${scratchpad.id}`}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          {isEditingTitle ? (
+            <Input
+              value={localTitle}
+              onChange={(e) => setLocalTitle(e.target.value)}
+              onBlur={() => setIsEditingTitle(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setIsEditingTitle(false);
+                }
+              }}
+              autoFocus
+              className="text-lg font-semibold"
+              data-testid={`input-scratchpad-title-${scratchpad.id}`}
+            />
+          ) : (
+            <CardTitle 
+              className="text-lg text-spiritual-700 dark:text-spiritual-400 cursor-pointer hover:opacity-70"
+              onClick={() => setIsEditingTitle(true)}
+              data-testid={`title-scratchpad-${scratchpad.id}`}
+            >
+              {localTitle}
+            </CardTitle>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onDelete(scratchpad.id)}
+            data-testid={`button-delete-scratchpad-${scratchpad.id}`}
+          >
+            <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Textarea
+          value={localContent}
+          onChange={(e) => setLocalContent(e.target.value)}
+          placeholder="Enter your notes here..."
+          rows={8}
+          className="bg-white dark:bg-gray-700 resize-none"
+          data-testid={`textarea-scratchpad-${scratchpad.id}`}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function DmSpace() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -232,7 +331,7 @@ export default function DmSpace() {
 
   // Create scratchpad mutation
   const createScratchpad = useMutation({
-    mutationFn: async (data: { content: string }) => {
+    mutationFn: async (data: { title?: string; content: string }) => {
       const response = await apiRequest('POST', `/api/dm/${userId}/scratchpads`, data);
       return response.json();
     },
@@ -243,10 +342,8 @@ export default function DmSpace() {
 
   // Update scratchpad mutation
   const updateScratchpad = useMutation({
-    mutationFn: async (data: { id: string; content: string }) => {
-      const response = await apiRequest('PUT', `/api/dm/scratchpads/${data.id}`, {
-        content: data.content,
-      });
+    mutationFn: async (data: { id: string; title?: string; content?: string }) => {
+      const response = await apiRequest('PUT', `/api/dm/scratchpads/${data.id}`, data);
       return response.json();
     },
     onSuccess: () => {
@@ -522,37 +619,12 @@ export default function DmSpace() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {scratchpads.map((scratchpad) => (
-                  <Card
+                  <ScratchpadCard
                     key={scratchpad.id}
-                    className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-                    data-testid={`card-scratchpad-${scratchpad.id}`}
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-lg text-spiritual-700 dark:text-spiritual-400">
-                          Scratchpad
-                        </CardTitle>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteScratchpad.mutate(scratchpad.id)}
-                          data-testid={`button-delete-scratchpad-${scratchpad.id}`}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <Textarea
-                        value={scratchpad.content}
-                        onChange={(e) => updateScratchpad.mutate({ id: scratchpad.id, content: e.target.value })}
-                        placeholder="Enter your notes here..."
-                        rows={8}
-                        className="bg-white dark:bg-gray-700 resize-none"
-                        data-testid={`textarea-scratchpad-${scratchpad.id}`}
-                      />
-                    </CardContent>
-                  </Card>
+                    scratchpad={scratchpad}
+                    onUpdate={(data) => updateScratchpad.mutate(data)}
+                    onDelete={(id) => deleteScratchpad.mutate(id)}
+                  />
                 ))}
                 {stacks.map((stack) => (
                   <Card
