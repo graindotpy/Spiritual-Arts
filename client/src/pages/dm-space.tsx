@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +38,12 @@ export default function DmSpace() {
   
   // Counter state for each stack (visual only)
   const [stackCounters, setStackCounters] = useState<Record<string, number>>({});
+  
+  // Autocomplete state
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [filteredGlossary, setFilteredGlossary] = useState<DmGlossaryTerm[]>([]);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const effectTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Glossary state
   const [isGlossaryDialogOpen, setIsGlossaryDialogOpen] = useState(false);
@@ -257,6 +263,7 @@ export default function DmSpace() {
     setFormName("");
     setFormTarget("");
     setFormEffect("");
+    setShowAutocomplete(false);
   };
 
   const handleCreateGlossary = () => {
@@ -313,6 +320,78 @@ export default function DmSpace() {
       [stackId]: Math.max((prev[stackId] || 0) - 1, 0)
     }));
   };
+
+  // Autocomplete handlers
+  const handleEffectChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setFormEffect(value);
+    
+    const cursorPos = e.target.selectionStart || 0;
+    setCursorPosition(cursorPos);
+    
+    // Get the word being typed at cursor position
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const words = textBeforeCursor.split(/\s+/);
+    const currentWord = words[words.length - 1];
+    
+    // Show autocomplete if typing a word (at least 1 character)
+    if (currentWord && currentWord.length > 0) {
+      const matches = glossaryTerms.filter(term =>
+        term.keyword.toLowerCase().startsWith(currentWord.toLowerCase())
+      );
+      
+      if (matches.length > 0) {
+        setFilteredGlossary(matches);
+        setShowAutocomplete(true);
+      } else {
+        setShowAutocomplete(false);
+      }
+    } else {
+      setShowAutocomplete(false);
+    }
+  };
+
+  const insertGlossaryTerm = (term: DmGlossaryTerm) => {
+    if (!effectTextareaRef.current) return;
+    
+    const textarea = effectTextareaRef.current;
+    const value = formEffect;
+    const cursorPos = cursorPosition;
+    
+    // Find the start of the current word
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const words = textBeforeCursor.split(/\s+/);
+    const currentWord = words[words.length - 1];
+    const wordStart = cursorPos - currentWord.length;
+    
+    // Replace the current word with the glossary term
+    const newValue = value.slice(0, wordStart) + term.keyword + value.slice(cursorPos);
+    setFormEffect(newValue);
+    setShowAutocomplete(false);
+    
+    // Set cursor position after inserted term
+    setTimeout(() => {
+      const newCursorPos = wordStart + term.keyword.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      textarea.focus();
+    }, 0);
+  };
+
+  // Close autocomplete when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (effectTextareaRef.current && !effectTextareaRef.current.contains(e.target as Node)) {
+        const target = e.target as HTMLElement;
+        // Don't close if clicking on autocomplete dropdown
+        if (!target.closest('[data-autocomplete-dropdown]')) {
+          setShowAutocomplete(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -599,18 +678,42 @@ export default function DmSpace() {
                 data-testid="textarea-stack-target"
               />
             </div>
-            <div>
+            <div className="relative">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Effect
               </label>
               <Textarea
+                ref={effectTextareaRef}
                 value={formEffect}
-                onChange={(e) => setFormEffect(e.target.value)}
+                onChange={handleEffectChange}
                 placeholder="Enter effect description..."
                 rows={3}
                 className="bg-white dark:bg-gray-700"
                 data-testid="textarea-stack-effect"
               />
+              {showAutocomplete && filteredGlossary.length > 0 && (
+                <div
+                  data-autocomplete-dropdown
+                  className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                >
+                  {filteredGlossary.map((term) => (
+                    <button
+                      key={term.id}
+                      type="button"
+                      onClick={() => insertGlossaryTerm(term)}
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                      data-testid={`autocomplete-item-${term.id}`}
+                    >
+                      <div className="font-semibold text-spiritual-700 dark:text-spiritual-400">
+                        {term.keyword}
+                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                        {term.definition}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex justify-end gap-2">
@@ -664,18 +767,42 @@ export default function DmSpace() {
                 data-testid="textarea-edit-stack-target"
               />
             </div>
-            <div>
+            <div className="relative">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Effect
               </label>
               <Textarea
+                ref={effectTextareaRef}
                 value={formEffect}
-                onChange={(e) => setFormEffect(e.target.value)}
+                onChange={handleEffectChange}
                 placeholder="Enter effect description..."
                 rows={3}
                 className="bg-white dark:bg-gray-700"
                 data-testid="textarea-edit-stack-effect"
               />
+              {showAutocomplete && filteredGlossary.length > 0 && (
+                <div
+                  data-autocomplete-dropdown
+                  className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                >
+                  {filteredGlossary.map((term) => (
+                    <button
+                      key={term.id}
+                      type="button"
+                      onClick={() => insertGlossaryTerm(term)}
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                      data-testid={`autocomplete-item-edit-${term.id}`}
+                    >
+                      <div className="font-semibold text-spiritual-700 dark:text-spiritual-400">
+                        {term.keyword}
+                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                        {term.definition}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex justify-end gap-2">
