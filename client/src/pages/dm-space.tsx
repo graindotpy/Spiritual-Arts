@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Edit2, ArrowLeft, BookOpen } from "lucide-react";
+import { Plus, Trash2, Edit2, ArrowLeft, BookOpen, ChevronUp, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -33,6 +33,9 @@ export default function DmSpace() {
   const [editingStack, setEditingStack] = useState<DmStack | null>(null);
   const [formTarget, setFormTarget] = useState("");
   const [formEffect, setFormEffect] = useState("");
+  
+  // Counter state for each stack (visual only)
+  const [stackCounters, setStackCounters] = useState<Record<string, number>>({});
   
   // Glossary state
   const [isGlossaryDialogOpen, setIsGlossaryDialogOpen] = useState(false);
@@ -288,6 +291,20 @@ export default function DmSpace() {
     setFormDefinition("");
   };
 
+  const incrementCounter = (stackId: string) => {
+    setStackCounters(prev => ({
+      ...prev,
+      [stackId]: (prev[stackId] || 0) + 1
+    }));
+  };
+
+  const decrementCounter = (stackId: string) => {
+    setStackCounters(prev => ({
+      ...prev,
+      [stackId]: Math.max((prev[stackId] || 0) - 1, 0)
+    }));
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -404,6 +421,34 @@ export default function DmSpace() {
                           {stack.target}
                         </p>
                       </div>
+                      
+                      {/* Counter */}
+                      <div className="flex items-center justify-center py-2">
+                        <div className="flex flex-col items-center">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => incrementCounter(stack.id)}
+                            className="h-6 w-6 p-0"
+                            data-testid={`button-increment-${stack.id}`}
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </Button>
+                          <span className="text-2xl font-bold text-spiritual-700 dark:text-spiritual-400 my-1">
+                            {stackCounters[stack.id] || 0}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => decrementCounter(stack.id)}
+                            className="h-6 w-6 p-0"
+                            data-testid={`button-decrement-${stack.id}`}
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+
                       <div>
                         <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
                           Effect
