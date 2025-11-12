@@ -209,10 +209,12 @@ export const dmGlossary = pgTable("dm_glossary", {
 export const insertDmStackSchema = createInsertSchema(dmStacks).omit({
   id: true,
   createdAt: true,
+  userId: true,
 });
 
 export const insertDmGlossarySchema = createInsertSchema(dmGlossary).omit({
   id: true,
+  userId: true,
 });
 
 export type DmStack = typeof dmStacks.$inferSelect;
