@@ -191,7 +191,7 @@ export type Tracker = typeof trackers.$inferSelect;
 // DM Space tables
 export const dmStacks = pgTable("dm_stacks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
   name: varchar("name").notNull().default("Unnamed Stack"),
   target: text("target").notNull(),
   effect: text("effect").notNull(),
@@ -200,7 +200,7 @@ export const dmStacks = pgTable("dm_stacks", {
 
 export const dmGlossary = pgTable("dm_glossary", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
   keyword: text("keyword").notNull(),
   definition: text("definition").notNull(),
   expandedContent: text("expanded_content"),
@@ -209,7 +209,7 @@ export const dmGlossary = pgTable("dm_glossary", {
 
 export const dmScratchpads = pgTable("dm_scratchpads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
   title: varchar("title").notNull().default("Scratchpad"),
   content: text("content").notNull().default(""),
   createdAt: timestamp("created_at").defaultNow(),
