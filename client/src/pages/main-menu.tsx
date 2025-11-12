@@ -2,9 +2,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Moon, Sun, User, Camera } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Plus, Moon, Sun, User, Camera, Shield } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useWebSocket } from "@/hooks/use-websocket";
+import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import CharacterCreator from "@/components/character-creator";
 import PortraitUpload from "@/components/portrait-upload";
 import SpiritRollNotification from "@/components/spirit-roll-notification";
@@ -18,6 +22,10 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
   const { theme, toggleTheme } = useTheme();
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [portraitUploadId, setPortraitUploadId] = useState<string | null>(null);
+  const [isDmDialogOpen, setIsDmDialogOpen] = useState(false);
+  const [dmCode, setDmCode] = useState("");
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   // WebSocket for real-time roll notifications
   const { isConnected, lastRollBroadcast } = useWebSocket();
@@ -34,6 +42,21 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
     onCharacterSelect(newCharacter);
   };
 
+  const handleDmCodeSubmit = () => {
+    if (dmCode === "3142") {
+      setLocation("/dm-space");
+      setDmCode("");
+      setIsDmDialogOpen(false);
+    } else {
+      toast({
+        title: "Invalid Code",
+        description: "The code you entered is incorrect",
+        variant: "destructive",
+      });
+      setDmCode("");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -45,14 +68,26 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
               <p className="text-lg text-gray-600 dark:text-gray-300 mt-1">Spiritual Arts Mechanics</p>
             </div>
             
-            <Button
-              onClick={toggleTheme}
-              variant="outline"
-              size="sm"
-              className="p-2"
-            >
-              {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setIsDmDialogOpen(true)}
+                variant="outline"
+                size="sm"
+                data-testid="button-dm-space"
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                DM Space
+              </Button>
+              <Button
+                onClick={toggleTheme}
+                variant="outline"
+                size="sm"
+                className="p-2"
+                data-testid="button-theme-toggle"
+              >
+                {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -194,6 +229,51 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
         rollData={lastRollBroadcast}
         currentCharacterId={undefined} // Show all rolls on main menu
       />
+
+      {/* DM Code Protection Dialog */}
+      <Dialog open={isDmDialogOpen} onOpenChange={setIsDmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>DM Space Access</DialogTitle>
+            <DialogDescription>
+              Enter the access code to continue to the DM Space
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              type="password"
+              placeholder="Enter code"
+              value={dmCode}
+              onChange={(e) => setDmCode(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleDmCodeSubmit();
+                }
+              }}
+              data-testid="input-dm-code"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDmDialogOpen(false);
+                setDmCode("");
+              }}
+              data-testid="button-cancel-dm-code"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDmCodeSubmit}
+              data-testid="button-submit-dm-code"
+            >
+              Enter
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
