@@ -7,16 +7,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, Save, Image, Table, Type, X, Upload, Camera } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { GlossaryTerm } from "@shared/schema";
+import { useGlossaryMutations, type GlossaryScope } from "@/hooks/use-glossary";
+import type { GlossaryTerm, DmGlossaryTerm } from "@shared/schema";
 
 interface ExpandedTooltipDialogProps {
   open: boolean;
   onClose: () => void;
-  term: GlossaryTerm;
-  characterId: string;
+  term: GlossaryTerm | DmGlossaryTerm;
+  entityId: string;
+  scope: GlossaryScope;
 }
 
 interface ContentBlock {
@@ -34,7 +34,8 @@ export default function ExpandedTooltipDialog({
   open, 
   onClose, 
   term, 
-  characterId 
+  entityId,
+  scope
 }: ExpandedTooltipDialogProps) {
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -42,7 +43,6 @@ export default function ExpandedTooltipDialog({
   const [editedDefinition, setEditedDefinition] = useState("");
   
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Parse expanded content only when dialog opens or term changes
   // Don't reload while editing to prevent losing changes
@@ -73,34 +73,34 @@ export default function ExpandedTooltipDialog({
     }, 350); // Slightly longer than animation duration
   }, [onClose]);
 
-  const updateTerm = useMutation({
-    mutationFn: async (data: Partial<GlossaryTerm>) => {
-      const response = await apiRequest("PUT", `/api/glossary/${term.id}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "glossary"] });
+  const { updateTerm } = useGlossaryMutations(
+    scope,
+    entityId,
+    () => {
       setIsEditing(false);
       toast({
         title: "Success",
         description: "Enhanced tooltip content saved successfully",
       });
     },
-    onError: () => {
+    () => {
       toast({
         title: "Error",
         description: "Failed to save enhanced content",
         variant: "destructive",
       });
-    },
-  });
+    }
+  );
 
   const handleSave = async () => {
     const expandedContent = JSON.stringify({ blocks: contentBlocks });
     await updateTerm.mutateAsync({
-      definition: editedDefinition,
-      expandedContent,
-      hasExpandedContent: contentBlocks.length > 0
+      termId: term.id,
+      update: {
+        definition: editedDefinition,
+        expandedContent,
+        hasExpandedContent: contentBlocks.length > 0
+      }
     });
   };
 

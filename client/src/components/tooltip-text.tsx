@@ -1,26 +1,24 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Maximize2 } from "lucide-react";
 import ExpandedTooltipDialog from "./expanded-tooltip-dialog";
 import { useTooltipContext } from "@/contexts/tooltip-context";
-import type { GlossaryTerm } from "@shared/schema";
+import { useGlossaryTerms, type GlossaryScope } from "@/hooks/use-glossary";
+import type { GlossaryTerm, DmGlossaryTerm } from "@shared/schema";
 
 interface TooltipTextProps {
   text: string;
-  characterId: string;
+  entityId: string;
+  scope: GlossaryScope;
   className?: string;
 }
 
-export default function TooltipText({ text, characterId, className }: TooltipTextProps) {
-  const [expandedTerm, setExpandedTerm] = useState<GlossaryTerm | null>(null);
+export default function TooltipText({ text, entityId, scope, className }: TooltipTextProps) {
+  const [expandedTerm, setExpandedTerm] = useState<GlossaryTerm | DmGlossaryTerm | null>(null);
   const { setIsEnhancedTooltipOpen } = useTooltipContext();
   
-  const { data: glossaryTerms = [] } = useQuery<GlossaryTerm[]>({
-    queryKey: ["/api/character", characterId, "glossary"],
-    enabled: !!characterId,
-  });
+  const { data: glossaryTerms = [] } = useGlossaryTerms<GlossaryTerm | DmGlossaryTerm>(scope, entityId);
 
   if (!glossaryTerms || glossaryTerms.length === 0) {
     return <div className={`${className} whitespace-pre-line`}>{text}</div>;
@@ -124,7 +122,8 @@ export default function TooltipText({ text, characterId, className }: TooltipTex
             setIsEnhancedTooltipOpen(false);
           }}
           term={expandedTerm}
-          characterId={characterId}
+          entityId={entityId}
+          scope={scope}
         />
       )}
     </>

@@ -5,11 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, Edit2, ArrowLeft } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Trash2, Edit2, ArrowLeft, BookOpen } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { DmStack } from "@shared/schema";
+import TooltipText from "@/components/tooltip-text";
+import { dmGlossaryScope } from "@/hooks/use-glossary";
+import type { DmStack, DmGlossaryTerm } from "@shared/schema";
 
 // Simple user ID generator
 const getUserId = () => {
@@ -30,12 +33,27 @@ export default function DmSpace() {
   const [editingStack, setEditingStack] = useState<DmStack | null>(null);
   const [formTarget, setFormTarget] = useState("");
   const [formEffect, setFormEffect] = useState("");
+  
+  // Glossary state
+  const [isGlossaryDialogOpen, setIsGlossaryDialogOpen] = useState(false);
+  const [editingGlossaryTerm, setEditingGlossaryTerm] = useState<DmGlossaryTerm | null>(null);
+  const [formKeyword, setFormKeyword] = useState("");
+  const [formDefinition, setFormDefinition] = useState("");
 
   // Fetch DM stacks
   const { data: stacks = [], isLoading } = useQuery<DmStack[]>({
     queryKey: ['/api/dm', userId, 'stacks'],
     queryFn: async () => {
       const response = await apiRequest('GET', `/api/dm/${userId}/stacks`);
+      return response.json();
+    },
+  });
+
+  // Fetch DM glossary
+  const { data: glossaryTerms = [], isLoading: isLoadingGlossary } = useQuery<DmGlossaryTerm[]>({
+    queryKey: ['/api/dm', userId, 'glossary'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', `/api/dm/${userId}/glossary`);
       return response.json();
     },
   });
@@ -114,6 +132,80 @@ export default function DmSpace() {
     },
   });
 
+  // Create glossary term mutation
+  const createGlossaryTerm = useMutation({
+    mutationFn: async (data: { keyword: string; definition: string }) => {
+      const response = await apiRequest('POST', `/api/dm/${userId}/glossary`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'glossary'] });
+      setIsGlossaryDialogOpen(false);
+      setFormKeyword("");
+      setFormDefinition("");
+      toast({
+        title: "Success",
+        description: "Glossary term created successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create glossary term",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update glossary term mutation
+  const updateGlossaryTerm = useMutation({
+    mutationFn: async (data: { id: string; keyword: string; definition: string }) => {
+      const response = await apiRequest('PUT', `/api/dm/glossary/${data.id}`, {
+        keyword: data.keyword,
+        definition: data.definition,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'glossary'] });
+      setEditingGlossaryTerm(null);
+      setFormKeyword("");
+      setFormDefinition("");
+      toast({
+        title: "Success",
+        description: "Glossary term updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update glossary term",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete glossary term mutation
+  const deleteGlossaryTerm = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/dm/glossary/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'glossary'] });
+      toast({
+        title: "Success",
+        description: "Glossary term deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete glossary term",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleCreate = () => {
     if (!formTarget.trim() || !formEffect.trim()) {
       toast({
@@ -155,6 +247,47 @@ export default function DmSpace() {
     setFormEffect("");
   };
 
+  const handleCreateGlossary = () => {
+    if (!formKeyword.trim() || !formDefinition.trim()) {
+      toast({
+        title: "Error",
+        description: "Both Keyword and Definition are required",
+        variant: "destructive",
+      });
+      return;
+    }
+    createGlossaryTerm.mutate({ keyword: formKeyword.trim(), definition: formDefinition.trim() });
+  };
+
+  const handleUpdateGlossary = () => {
+    if (!editingGlossaryTerm || !formKeyword.trim() || !formDefinition.trim()) {
+      toast({
+        title: "Error",
+        description: "Both Keyword and Definition are required",
+        variant: "destructive",
+      });
+      return;
+    }
+    updateGlossaryTerm.mutate({
+      id: editingGlossaryTerm.id,
+      keyword: formKeyword.trim(),
+      definition: formDefinition.trim(),
+    });
+  };
+
+  const openGlossaryEditDialog = (term: DmGlossaryTerm) => {
+    setEditingGlossaryTerm(term);
+    setFormKeyword(term.keyword);
+    setFormDefinition(term.definition);
+  };
+
+  const closeGlossaryDialogs = () => {
+    setIsGlossaryDialogOpen(false);
+    setEditingGlossaryTerm(null);
+    setFormKeyword("");
+    setFormDefinition("");
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -173,102 +306,202 @@ export default function DmSpace() {
               </Button>
               <div>
                 <h1 className="text-3xl font-bold text-spiritual-700 dark:text-spiritual-400">DM Space</h1>
-                <p className="text-lg text-gray-600 dark:text-gray-300 mt-1">Stack Tracker</p>
+                <p className="text-lg text-gray-600 dark:text-gray-300 mt-1">Manage Stacks & Glossary</p>
               </div>
             </div>
-            
-            <Button
-              onClick={() => setIsCreateDialogOpen(true)}
-              className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
-              data-testid="button-create-stack"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              New Stack
-            </Button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {isLoading ? (
-          <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">Loading stacks...</p>
-          </div>
-        ) : stacks.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-24 h-24 bg-spiritual-100 dark:bg-spiritual-900 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Plus className="w-12 h-12 text-spiritual-600 dark:text-spiritual-400" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              No Stacks Yet
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Create your first stack to begin tracking
-            </p>
-            <Button
-              onClick={() => setIsCreateDialogOpen(true)}
-              className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
-              data-testid="button-create-first-stack"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Your First Stack
-            </Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {stacks.map((stack) => (
-              <Card
-                key={stack.id}
-                className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+        <Tabs defaultValue="stacks" className="w-full">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8">
+            <TabsTrigger value="stacks" data-testid="tab-stacks">
+              Stack Tracker
+            </TabsTrigger>
+            <TabsTrigger value="glossary" data-testid="tab-glossary">
+              <BookOpen className="w-4 h-4 mr-2" />
+              Glossary
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="stacks">
+            <div className="flex justify-end mb-6">
+              <Button
+                onClick={() => setIsCreateDialogOpen(true)}
+                className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
+                data-testid="button-create-stack"
               >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg text-spiritual-700 dark:text-spiritual-400">
-                      Stack #{stack.id.slice(0, 8)}
-                    </CardTitle>
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openEditDialog(stack)}
-                        data-testid={`button-edit-stack-${stack.id}`}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => deleteStack.mutate(stack.id)}
-                        data-testid={`button-delete-stack-${stack.id}`}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Target
-                    </h4>
-                    <p className="text-gray-900 dark:text-white whitespace-pre-line">
-                      {stack.target}
-                    </p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      Effect
-                    </h4>
-                    <p className="text-gray-900 dark:text-white whitespace-pre-line">
-                      {stack.effect}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                <Plus className="w-4 h-4 mr-2" />
+                New Stack
+              </Button>
+            </div>
+
+            {isLoading ? (
+              <div className="text-center py-12">
+                <p className="text-gray-600 dark:text-gray-400">Loading stacks...</p>
+              </div>
+            ) : stacks.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-24 h-24 bg-spiritual-100 dark:bg-spiritual-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Plus className="w-12 h-12 text-spiritual-600 dark:text-spiritual-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  No Stacks Yet
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Create your first stack to begin tracking
+                </p>
+                <Button
+                  onClick={() => setIsCreateDialogOpen(true)}
+                  className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
+                  data-testid="button-create-first-stack"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First Stack
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {stacks.map((stack) => (
+                  <Card
+                    key={stack.id}
+                    className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                    data-testid={`card-stack-${stack.id}`}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <CardTitle className="text-lg text-spiritual-700 dark:text-spiritual-400">
+                          Stack #{stack.id.slice(0, 8)}
+                        </CardTitle>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openEditDialog(stack)}
+                            data-testid={`button-edit-stack-${stack.id}`}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => deleteStack.mutate(stack.id)}
+                            data-testid={`button-delete-stack-${stack.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Target
+                        </h4>
+                        <p className="text-gray-900 dark:text-white whitespace-pre-line">
+                          {stack.target}
+                        </p>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Effect
+                        </h4>
+                        <TooltipText
+                          text={stack.effect}
+                          entityId={userId}
+                          scope={dmGlossaryScope}
+                          className="text-gray-900 dark:text-white"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="glossary">
+            <div className="flex justify-end mb-6">
+              <Button
+                onClick={() => setIsGlossaryDialogOpen(true)}
+                className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
+                data-testid="button-create-glossary"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Glossary Term
+              </Button>
+            </div>
+
+            {isLoadingGlossary ? (
+              <div className="text-center py-12">
+                <p className="text-gray-600 dark:text-gray-400">Loading glossary terms...</p>
+              </div>
+            ) : glossaryTerms.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-24 h-24 bg-spiritual-100 dark:bg-spiritual-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <BookOpen className="w-12 h-12 text-spiritual-600 dark:text-spiritual-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  No Glossary Terms Yet
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Create your first glossary term
+                </p>
+                <Button
+                  onClick={() => setIsGlossaryDialogOpen(true)}
+                  className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
+                  data-testid="button-create-first-glossary"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First Glossary Term
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {glossaryTerms.map((term) => (
+                  <Card
+                    key={term.id}
+                    className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                    data-testid={`card-glossary-${term.id}`}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <CardTitle className="text-lg text-spiritual-700 dark:text-spiritual-400">
+                          {term.keyword}
+                        </CardTitle>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openGlossaryEditDialog(term)}
+                            data-testid={`button-edit-glossary-${term.id}`}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => deleteGlossaryTerm.mutate(term.id)}
+                            data-testid={`button-delete-glossary-${term.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-900 dark:text-white whitespace-pre-line">
+                        {term.definition}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* Create Stack Dialog */}
@@ -372,6 +605,110 @@ export default function DmSpace() {
               data-testid="button-save-edit"
             >
               {updateStack.isPending ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Glossary Term Dialog */}
+      <Dialog open={isGlossaryDialogOpen} onOpenChange={setIsGlossaryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Glossary Term</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Keyword
+              </label>
+              <Input
+                value={formKeyword}
+                onChange={(e) => setFormKeyword(e.target.value)}
+                placeholder="Enter keyword..."
+                className="bg-white dark:bg-gray-700"
+                data-testid="input-glossary-keyword"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Definition
+              </label>
+              <Textarea
+                value={formDefinition}
+                onChange={(e) => setFormDefinition(e.target.value)}
+                placeholder="Enter definition..."
+                rows={4}
+                className="bg-white dark:bg-gray-700"
+                data-testid="textarea-glossary-definition"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={closeGlossaryDialogs}
+              data-testid="button-cancel-create-glossary"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateGlossary}
+              disabled={createGlossaryTerm.isPending}
+              data-testid="button-save-create-glossary"
+            >
+              {createGlossaryTerm.isPending ? "Creating..." : "Create"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Glossary Term Dialog */}
+      <Dialog open={!!editingGlossaryTerm} onOpenChange={(open) => !open && closeGlossaryDialogs()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Glossary Term</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Keyword
+              </label>
+              <Input
+                value={formKeyword}
+                onChange={(e) => setFormKeyword(e.target.value)}
+                placeholder="Enter keyword..."
+                className="bg-white dark:bg-gray-700"
+                data-testid="input-edit-glossary-keyword"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Definition
+              </label>
+              <Textarea
+                value={formDefinition}
+                onChange={(e) => setFormDefinition(e.target.value)}
+                placeholder="Enter definition..."
+                rows={4}
+                className="bg-white dark:bg-gray-700"
+                data-testid="textarea-edit-glossary-definition"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={closeGlossaryDialogs}
+              data-testid="button-cancel-edit-glossary"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateGlossary}
+              disabled={updateGlossaryTerm.isPending}
+              data-testid="button-save-edit-glossary"
+            >
+              {updateGlossaryTerm.isPending ? "Saving..." : "Save"}
             </Button>
           </div>
         </DialogContent>

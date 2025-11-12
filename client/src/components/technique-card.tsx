@@ -6,6 +6,7 @@ import { Edit, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipText from "./tooltip-text";
 import { useTooltipContext } from "@/contexts/tooltip-context";
+import { characterGlossaryScope } from "@/hooks/use-glossary";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Technique, SPEffect, TechniquePreference } from "@shared/schema";
@@ -293,7 +294,8 @@ export default function TechniqueCard({
             <>
               <TooltipText 
                 text={technique.triggerDescription}
-                characterId={technique.characterId}
+                entityId={technique.characterId}
+                scope={characterGlossaryScope}
                 className="text-sm text-gray-600 dark:text-gray-300 mb-3"
               />
               
@@ -305,7 +307,8 @@ export default function TechniqueCard({
                   </h5>
                   <TooltipText 
                     text={spEffects[currentSP].effect}
-                    characterId={technique.characterId}
+                    entityId={technique.characterId}
+                    scope={characterGlossaryScope}
                     className="text-sm text-gray-700 dark:text-gray-300"
                   />
                 </div>
