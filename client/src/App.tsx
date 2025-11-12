@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { EnhancedTooltipProvider } from "@/contexts/tooltip-context";
 import CharacterSheet from "@/pages/character-sheet";
 import MainMenu from "@/pages/main-menu";
+import DmSpace from "@/pages/dm-space";
 import NotFound from "@/pages/not-found";
 import type { Character } from "@shared/schema";
 
@@ -38,6 +39,9 @@ function Router() {
             onReturnToMenu={handleReturnToMenu}
           />
         )}
+      </Route>
+      <Route path="/dm-space">
+        <DmSpace />
       </Route>
       <Route component={NotFound} />
     </Switch>
