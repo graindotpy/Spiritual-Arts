@@ -53,24 +53,30 @@ export function useCharacterState(characterId: string | undefined) {
   });
 
   const rollSpiritedie = useMutation({
-    mutationFn: async (data: { spInvestment: number; dieIndex?: number }) => {
+    mutationFn: async (data: { spInvestment: number; dieIndex?: number; techniqueId?: string | null }) => {
       if (!characterId) throw new Error("No character ID");
       const response = await apiRequest("POST", `/api/character/${characterId}/roll`, data);
       return response.json();
     },
     onSuccess: (result) => {
+      const rollAnimationMs = 1100;
+      const rollPostDelayMs = 1400;
+
       // Delay the pool refresh to allow animation and notification to complete
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "spirit-die-pool"] });
-      }, 2000);
+      }, rollPostDelayMs);
       
-      toast({
-        title: result.success ? "Success!" : "Failed",
-        description: result.success 
-          ? `Rolled ${result.value} - Success!` 
-          : `Rolled ${result.value} - Die reduced`,
-        variant: result.success ? "default" : "destructive",
-      });
+      // Delay toast to match roll animation completion
+      setTimeout(() => {
+        toast({
+          title: result.success ? "Success!" : "Failed",
+          description: result.success 
+            ? `Rolled ${result.value} - Success!` 
+            : `Rolled ${result.value} - Die reduced`,
+          variant: result.success ? "default" : "destructive",
+        });
+      }, rollAnimationMs);
     },
     onError: () => {
       toast({

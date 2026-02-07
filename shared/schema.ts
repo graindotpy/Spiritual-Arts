@@ -99,7 +99,7 @@ export interface SPEffect {
 export interface RollResult {
   value: number;
   success: boolean;
-  newDicePool: DieSize[];
+  newDicePool: Array<DieSize | null>;
 }
 
 // Spirit die progression by level

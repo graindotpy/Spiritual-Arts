@@ -91,6 +91,59 @@ function broadcastSpiriteRoll(rollData: any) {
   });
 }
 
+async function sendDiscordWebhook(payload: {
+  characterName: string;
+  techniqueName: string | null;
+  spInvestment: number;
+  dieSize: string;
+  value: number;
+  success: boolean;
+  portraitUrl: string | null;
+}) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  const techniqueLabel = payload.techniqueName ?? "Unknown Technique";
+  const resultLabel = payload.success ? "Success" : "Failed";
+  const description = `**${techniqueLabel}** — ${payload.spInvestment} SP\nResult: **${payload.value}** (${payload.dieSize}) — ${resultLabel}`;
+  const color = payload.success ? 0x2ecc71 : 0xe74c3c;
+  const imageUrl = resolvePublicImageUrl(payload.portraitUrl);
+
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [
+          {
+            title: payload.characterName,
+            description,
+            color,
+            timestamp: new Date().toISOString(),
+            ...(imageUrl ? { image: { url: imageUrl } } : {}),
+          },
+        ],
+      }),
+    });
+  } catch (error) {
+    console.error("Discord webhook error:", error);
+  }
+}
+
+function resolvePublicImageUrl(portraitUrl: string | null) {
+  if (!portraitUrl) return null;
+  if (portraitUrl.startsWith("http://") || portraitUrl.startsWith("https://")) {
+    return portraitUrl;
+  }
+
+  const base = process.env.R2_PUBLIC_BASE_URL;
+  if (!base) return null;
+
+  const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+  const normalizedPath = portraitUrl.startsWith("/") ? portraitUrl.slice(1) : portraitUrl;
+  return `${normalizedBase}/${normalizedPath}`;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Create HTTP server
   const httpServer = createServer(app);
@@ -535,7 +588,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Roll spirit die
   app.post("/api/character/:id/roll", async (req, res) => {
     try {
-      const { spInvestment, dieIndex = 0 } = req.body;
+      const { spInvestment, dieIndex = 0, techniqueId } = req.body;
       if (!spInvestment || spInvestment < 1) {
         return res.status(400).json({ message: "Invalid SP investment" });
       }
@@ -545,7 +598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Spirit die pool not found" });
       }
 
-      const currentDice = pool.currentDice as DieSize[];
+      const currentDice = pool.currentDice as Array<DieSize | null>;
       if (currentDice.length === 0) {
         return res.status(400).json({ message: "No dice available to roll" });
       }
@@ -556,6 +609,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const dieSize = currentDice[dieIndex];
+      if (!dieSize) {
+        return res.status(400).json({ message: "Selected die is depleted" });
+      }
       const dieMax = parseInt(dieSize.substring(1));
       const rollValue = Math.floor(Math.random() * dieMax) + 1;
       
@@ -576,7 +632,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (newDieSize) {
           newDicePool[dieIndex] = newDieSize;
         } else {
-          newDicePool.splice(dieIndex, 1);
+          newDicePool[dieIndex] = null;
         }
       }
 
@@ -585,6 +641,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get character info for broadcast
       const character = await storage.getCharacter(req.params.id);
+      let techniqueName: string | null = null;
+      if (techniqueId) {
+        const technique = await storage.getTechnique(techniqueId);
+        if (technique && technique.characterId === req.params.id) {
+          const spEffects = technique.spEffects as Record<string, { alternateName?: string }>;
+          const altName = spEffects?.[String(spInvestment)]?.alternateName;
+          techniqueName = altName || technique.name;
+        }
+      }
       
       const rollResult = {
         value: rollValue,
@@ -609,11 +674,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             dieIndex,
             value: rollValue,
             success,
+            techniqueId: techniqueId ?? null,
+            techniqueName,
             timestamp: new Date().toISOString()
           }
         };
         
         broadcastSpiriteRoll(rollBroadcast);
+        void sendDiscordWebhook({
+          characterName: character.name,
+          techniqueName,
+          spInvestment,
+          dieSize,
+          value: rollValue,
+          success,
+          portraitUrl: character.portraitUrl,
+        });
       }
 
       console.log(`Roll result for ${spInvestment} SP using die ${dieIndex} (${dieSize}):`, {

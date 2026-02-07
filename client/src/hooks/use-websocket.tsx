@@ -14,6 +14,8 @@ export interface SpiritDieRollBroadcast {
     dieIndex: number;
     value: number;
     success: boolean;
+    techniqueId?: string | null;
+    techniqueName?: string | null;
     timestamp: string;
   };
 }

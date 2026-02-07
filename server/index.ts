@@ -1,6 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
+import dotenv from "dotenv";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+
+dotenv.config();
+dotenv.config({ path: ".env.local", override: true });
 
 const app = express();
 app.use(express.json());

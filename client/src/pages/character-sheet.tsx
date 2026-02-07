@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,9 +39,12 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
   const [isTrackerDialogOpen, setIsTrackerDialogOpen] = useState(false);
   const [isRolling, setIsRolling] = useState(false);
+  const [rollingDieIndex, setRollingDieIndex] = useState<number | null>(null);
   const [rollResult, setRollResult] = useState<number | null>(null);
   const [rollSuccess, setRollSuccess] = useState<boolean>(true);
   const [showResultNotification, setShowResultNotification] = useState(false);
+  const rollInFlightRef = useRef(false);
+  const rollTokenRef = useRef(0);
   
   // Manual tracking state
   const [isManualTracking, setIsManualTracking] = useState(false);
@@ -120,19 +123,29 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   // Get level-based dice or use override
   const levelBasedDice = SPIRIT_DIE_PROGRESSION[currentCharacter.level] || ['d4'];
   const isUsingOverride = spiritDiePool?.overrideDice !== null;
-  const currentDice = spiritDiePool?.currentDice as DieSize[] || levelBasedDice;
+  const rawCurrentDice = (spiritDiePool?.currentDice as Array<DieSize | null>) ?? (levelBasedDice as Array<DieSize | null>);
   // Original dice should always be level-based unless there's an explicit override
   const originalDice = isUsingOverride ? (spiritDiePool?.overrideDice as DieSize[] || levelBasedDice) : levelBasedDice as DieSize[];
+  const currentDice = originalDice.map((_, index) => rawCurrentDice[index] ?? null);
 
-  // Auto-select first die if none selected and dice are available
-  if (selectedDieIndex === null && currentDice.length > 0) {
-    setSelectedDieIndex(0);
-  }
+  // Auto-select first available die when not rolling
+  useEffect(() => {
+    if (isRolling) return;
 
-  // Reset selection if die no longer exists
-  if (selectedDieIndex !== null && selectedDieIndex >= currentDice.length) {
-    setSelectedDieIndex(currentDice.length > 0 ? 0 : null);
-  }
+    const firstAvailableDieIndex = currentDice.findIndex((die) => die !== null && die !== undefined);
+
+    if (selectedDieIndex === null && firstAvailableDieIndex !== -1) {
+      setSelectedDieIndex(firstAvailableDieIndex);
+      return;
+    }
+
+    if (
+      selectedDieIndex !== null && 
+      (selectedDieIndex >= currentDice.length || !currentDice[selectedDieIndex])
+    ) {
+      setSelectedDieIndex(firstAvailableDieIndex !== -1 ? firstAvailableDieIndex : null);
+    }
+  }, [currentDice, selectedDieIndex, isRolling]);
 
   // Global cleanup to ensure page scrolling is always restored
   useEffect(() => {
@@ -175,28 +188,45 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   };
 
   const handleRollButtonClick = async () => {
+    if (isRolling || rollInFlightRef.current) return;
     if (selectedTechnique && selectedSP > 0 && selectedDieIndex !== null) {
+      const selectedDie = currentDice[selectedDieIndex];
+      if (!selectedDie) {
+        toast({
+          title: "Select a valid die",
+          description: "That die is depleted. Choose a different die to roll.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const dieMax = parseInt(selectedDie.substring(1));
+      if (selectedSP > dieMax) {
+        toast({
+          title: "Die too small",
+          description: `Select a bigger die (at least d${selectedSP}) for ${selectedSP} SP.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      rollInFlightRef.current = true;
+      rollTokenRef.current += 1;
+      const rollToken = rollTokenRef.current;
       setIsRolling(true);
+      setRollingDieIndex(selectedDieIndex);
       try {
         const result = await rollSpiritedie.mutateAsync({ 
           spInvestment: selectedSP,
-          dieIndex: selectedDieIndex 
+          dieIndex: selectedDieIndex,
+          techniqueId: selectedTechnique
         });
+        if (rollToken !== rollTokenRef.current) return;
         setRollResult(result.value);
         setRollSuccess(result.success);
-        
-        // Stop rolling after animation completes and show result notification
-        setTimeout(() => {
-          setIsRolling(false);
-          setShowResultNotification(true);
-          
-          // Hide result notification after 1 second
-          setTimeout(() => {
-            setShowResultNotification(false);
-            setRollResult(null);
-          }, 1000);
-        }, 1500); // Updated to match new animation duration
       } catch (error) {
+        if (rollToken !== rollTokenRef.current) return;
+        rollInFlightRef.current = false;
         setIsRolling(false);
         setRollResult(null);
         setShowResultNotification(false);
@@ -204,24 +234,38 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
     }
   };
 
+  const handleRollComplete = (token: number) => {
+    if (token !== rollTokenRef.current) return;
+    rollInFlightRef.current = false;
+    setIsRolling(false);
+    setRollingDieIndex(null);
+    setShowResultNotification(true);
+
+    // Hide result notification after 1 second
+    setTimeout(() => {
+      setShowResultNotification(false);
+      setRollResult(null);
+    }, 1000);
+  };
+
   const handleDieSelect = (index: number) => {
     setSelectedDieIndex(index);
   };
 
   const handleDieRestore = async (index: number) => {
-    // Create a copy of current dice array
+    // Create a copy of current dice array, ensuring it matches original length
     const newDice = [...currentDice];
     
     // Increase die by one step in progression (e.g., depleted -> d4, d4 -> d6, etc.)
-    if (index < currentDice.length) {
-      const currentDie = currentDice[index];
+    if (index < originalDice.length) {
+      const currentDie = newDice[index];
       const originalDie = originalDice[index];
       
       // Define the progression sequence including depleted
-      const progression: (DieSize | "depleted")[] = ["depleted", "d4", "d6", "d8", "d10", "d12"];
+      const progression: (DieSize | null)[] = [null, "d4", "d6", "d8", "d10", "d12"];
       
       // Find current position and move one step up
-      const currentIndex = progression.indexOf(currentDie);
+      const currentIndex = progression.indexOf(currentDie ?? null);
       const originalIndex = progression.indexOf(originalDie as DieSize);
       
       if (currentIndex >= 0 && currentIndex < originalIndex && currentIndex < progression.length - 1) {
@@ -366,6 +410,10 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                 onResetToLevel={handleResetToLevel}
                 isRolling={isRolling}
                 rollResult={rollResult}
+                rollSuccess={rollSuccess}
+                rollingDieIndex={rollingDieIndex}
+                rollToken={rollTokenRef.current}
+                onRollComplete={handleRollComplete}
                 // Manual tracking props
                 isManualTracking={isManualTracking}
                 onManualTrackingToggle={handleManualTrackingToggle}

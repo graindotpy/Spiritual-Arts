@@ -8,7 +8,7 @@ import AnimatedDie from "./animated-die";
 import type { SpiritDiePool, DieSize } from "@shared/schema";
 
 interface SpiritDiePoolProps {
-  currentDice: DieSize[];
+  currentDice: Array<DieSize | null>;
   originalDice: DieSize[];
   selectedDieIndex: number | null;
   onDieSelect: (index: number) => void;
@@ -19,6 +19,10 @@ interface SpiritDiePoolProps {
   onResetToLevel: () => void;
   isRolling?: boolean;
   rollResult?: number | null;
+  rollSuccess?: boolean;
+  rollingDieIndex?: number | null;
+  rollToken?: number;
+  onRollComplete?: (token: number) => void;
   // Manual tracking props
   isManualTracking: boolean;
   onManualTrackingToggle: () => void;
@@ -38,12 +42,18 @@ export default function SpiritDiePoolComponent({
   onResetToLevel,
   isRolling = false,
   rollResult = null,
+  rollSuccess,
+  rollingDieIndex = null,
+  rollToken = 0,
+  onRollComplete,
   // Manual tracking props
   isManualTracking,
   onManualTrackingToggle,
   onManualDieAdjust,
   maxDiceForLevel
 }: SpiritDiePoolProps) {
+  const hasActiveDice = currentDice.some((die) => Boolean(die));
+
   return (
     <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
       <div className="text-center mb-4">
@@ -69,17 +79,19 @@ export default function SpiritDiePoolComponent({
         {originalDice.map((originalDie, index) => {
           const currentDie = currentDice[index];
           const canRestore = currentDie !== originalDie;
+          const isRollingDie = isRolling && rollingDieIndex === index;
           
           return (
             <div key={index} className="flex flex-col items-center w-20">
               <div className="h-16 w-16 flex items-center justify-center">
                 {currentDie ? (
-                  selectedDieIndex === index && isRolling ? (
+                  isRollingDie ? (
                     <AnimatedDie
                       size={currentDie}
                       isRolling={isRolling}
                       finalResult={rollResult ?? undefined}
-                      onRollComplete={() => {}} // Animation handled by parent
+                      success={rollSuccess ?? undefined}
+                      onRollComplete={() => onRollComplete?.(rollToken)}
                     />
                   ) : (
                     <SpiritDie
@@ -124,7 +136,7 @@ export default function SpiritDiePoolComponent({
           );
         })}
         
-        {currentDice.length === 0 && (
+        {!hasActiveDice && (
           <div className="text-center py-8 flex flex-col items-center">
             <p className="text-gray-500 dark:text-gray-400 mb-4">No active dice remaining</p>
             {originalDice.length > 0 && (
