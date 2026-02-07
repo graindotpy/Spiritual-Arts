@@ -1,3 +1,12 @@
+import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Load .env.local for drizzle-kit
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: `${__dirname}/.env.local` });
+
 import { defineConfig } from "drizzle-kit";
 
 if (!process.env.DATABASE_URL) {

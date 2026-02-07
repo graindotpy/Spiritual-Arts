@@ -1,14 +1,15 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Plus, Moon, Sun, User, Camera, Shield } from "lucide-react";
+import { Plus, Moon, Sun, User, Camera, Shield, Key, Trash2 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import CharacterCreator from "@/components/character-creator";
 import PortraitUpload from "@/components/portrait-upload";
 import SpiritRollNotification from "@/components/spirit-roll-notification";
@@ -24,6 +25,9 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
   const [portraitUploadId, setPortraitUploadId] = useState<string | null>(null);
   const [isDmDialogOpen, setIsDmDialogOpen] = useState(false);
   const [dmCode, setDmCode] = useState("");
+  const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
+  const [adminCode, setAdminCode] = useState("");
+  const [isAdminMode, setIsAdminMode] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -32,6 +36,34 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
 
   const { data: characters = [] } = useQuery<Character[]>({
     queryKey: ["/api/characters"],
+  });
+
+  useEffect(() => {
+    const stored = localStorage.getItem("adminMode");
+    if (stored === "true") {
+      setIsAdminMode(true);
+    }
+  }, []);
+
+  const deleteCharacterMutation = useMutation({
+    mutationFn: async (characterId: string) => {
+      await apiRequest("DELETE", `/api/character/${characterId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/characters"] });
+      toast({
+        title: "Character deleted",
+        description: "The character and its glossary terms were removed.",
+      });
+    },
+    onError: (error) => {
+      console.error("Delete character error:", error);
+      toast({
+        title: "Failed to delete character",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleCharacterSelect = (character: Character) => {
@@ -57,6 +89,38 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
     }
   };
 
+  const handleAdminCodeSubmit = () => {
+    if (adminCode === "3142") {
+      setIsAdminMode(true);
+      localStorage.setItem("adminMode", "true");
+      setAdminCode("");
+      setIsAdminDialogOpen(false);
+      toast({
+        title: "Admin mode enabled",
+        description: "Character delete controls are now available.",
+      });
+    } else {
+      toast({
+        title: "Invalid Code",
+        description: "The code you entered is incorrect",
+        variant: "destructive",
+      });
+      setAdminCode("");
+    }
+  };
+
+  const handleAdminToggle = () => {
+    if (isAdminMode) {
+      setIsAdminMode(false);
+      localStorage.removeItem("adminMode");
+      toast({
+        title: "Admin mode disabled",
+      });
+      return;
+    }
+    setIsAdminDialogOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -68,7 +132,12 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
               <p className="text-lg text-gray-600 dark:text-gray-300 mt-1">Spiritual Arts Mechanics</p>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {isAdminMode && (
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                  Admin Mode
+                </span>
+              )}
               <Button
                 onClick={() => setIsDmDialogOpen(true)}
                 variant="outline"
@@ -77,6 +146,15 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
               >
                 <Shield className="w-4 h-4 mr-2" />
                 DM Space
+              </Button>
+              <Button
+                onClick={handleAdminToggle}
+                variant={isAdminMode ? "destructive" : "outline"}
+                size="sm"
+                data-testid="button-admin-mode"
+              >
+                <Key className="w-4 h-4 mr-2" />
+                {isAdminMode ? "Admin On" : "Admin Mode"}
               </Button>
               <Button
                 onClick={toggleTheme}
@@ -110,7 +188,23 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
               className="cursor-pointer transition-all hover:shadow-lg hover:scale-105 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
               onClick={() => handleCharacterSelect(character)}
             >
-              <CardContent className="p-6">
+              <CardContent className="p-6 relative">
+                {isAdminMode && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="absolute top-3 right-3 h-8 px-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete ${character.name}? This cannot be undone.`)) {
+                        deleteCharacterMutation.mutate(character.id);
+                      }
+                    }}
+                    data-testid={`button-delete-character-${character.id}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
                 <div className="flex items-center mb-4">
                   <div className="relative mr-4">
                     <div className="w-12 h-12 bg-spiritual-100 dark:bg-spiritual-900 rounded-full flex items-center justify-center overflow-hidden">
@@ -268,6 +362,51 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
             <Button
               onClick={handleDmCodeSubmit}
               data-testid="button-submit-dm-code"
+            >
+              Enter
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin Code Protection Dialog */}
+      <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Admin Mode Access</DialogTitle>
+            <DialogDescription>
+              Enter the access code to enable admin mode
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              type="password"
+              placeholder="Enter code"
+              value={adminCode}
+              onChange={(e) => setAdminCode(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter") {
+                  handleAdminCodeSubmit();
+                }
+              }}
+              data-testid="input-admin-code"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsAdminDialogOpen(false);
+                setAdminCode("");
+              }}
+              data-testid="button-cancel-admin-code"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAdminCodeSubmit}
+              data-testid="button-submit-admin-code"
             >
               Enter
             </Button>

@@ -13,9 +13,10 @@ interface CharacterCreatorProps {
   isOpen: boolean;
   onClose: () => void;
   onCharacterCreated: (character: Character) => void;
+  createUrl?: string;
 }
 
-export default function CharacterCreator({ isOpen, onClose, onCharacterCreated }: CharacterCreatorProps) {
+export default function CharacterCreator({ isOpen, onClose, onCharacterCreated, createUrl = "/api/character" }: CharacterCreatorProps) {
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [level, setLevel] = useState(1);
@@ -24,11 +25,12 @@ export default function CharacterCreator({ isOpen, onClose, onCharacterCreated }
 
   const createCharacter = useMutation({
     mutationFn: async (data: { name: string; path: string; level: number }) => {
-      const response = await apiRequest("POST", "/api/character", data);
+      const response = await apiRequest("POST", createUrl, data);
       return response.json();
     },
     onSuccess: (character) => {
       queryClient.invalidateQueries({ queryKey: ["/api/character"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/characters"] });
       toast({
         title: "Success",
         description: "Character created successfully",

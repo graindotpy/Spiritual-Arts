@@ -9,6 +9,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { characters, insertTechniqueSchema, insertSpiritDiePoolSchema, insertActiveEffectSchema, insertGlossaryTermSchema, insertDmStackSchema, insertDmGlossarySchema, insertDmScratchpadSchema, type DieSize } from "@shared/schema";
 import { z } from "zod";
+import { eq, and } from "drizzle-orm";
 
 // Configure multer for portrait uploads
 const portraitsDir = path.join(process.cwd(), 'uploads', 'portraits');
@@ -144,12 +145,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  // Get all characters
+  // Get all non-DM characters
   app.get("/api/characters", async (req, res) => {
     try {
       // Clean up any missing portrait files before returning characters
       await cleanupMissingPortraits();
-      const characterList = await db.select().from(characters);
+      const characterList = await db
+        .select()
+        .from(characters)
+        .where(eq(characters.isDmOnly, false));
       res.json(characterList);
     } catch (error) {
       console.error("Characters fetch error:", error);
@@ -157,11 +161,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get current/default character (first one for now)
+  // Get current/default character (first non-DM one for now)
   app.get("/api/character", async (req, res) => {
     try {
       // For now, we'll get the first character from the database
-      const characterList = await db.select().from(characters).limit(1);
+      const characterList = await db
+        .select()
+        .from(characters)
+        .where(eq(characters.isDmOnly, false))
+        .limit(1);
       if (characterList.length === 0) {
         return res.status(404).json({ message: "No character found" });
       }
@@ -186,6 +194,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete character and related data
+  app.delete("/api/character/:id", async (req, res) => {
+    try {
+      const character = await storage.getCharacter(req.params.id);
+      if (!character) {
+        return res.status(404).json({ message: "Character not found" });
+      }
+
+      if (character.portraitUrl) {
+        const oldFilePath = path.join(process.cwd(), character.portraitUrl);
+        try {
+          if (fs.existsSync(oldFilePath)) {
+            fs.unlinkSync(oldFilePath);
+          }
+        } catch (fileError) {
+          console.error("Failed to delete portrait file:", fileError);
+        }
+      }
+
+      const deleted = await storage.deleteCharacter(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Character not found" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Character delete error:", error);
+      res.status(500).json({ message: "Failed to delete character" });
+    }
+  });
+
   // Create a new character
   app.post("/api/character", async (req, res) => {
     try {
@@ -206,12 +245,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const character = await storage.createCharacter({
         name: name.trim(),
         path: path.trim(),
-        level
+        level,
+        isDmOnly: false,
+        dmOwnerId: null,
       });
       
       res.json(character);
     } catch (error) {
       res.status(500).json({ message: "Failed to create character" });
+    }
+  });
+
+  // Get DM-only characters for a user
+  app.get("/api/dm/:userId/characters", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const characterList = await db
+        .select()
+        .from(characters)
+        .where(and(eq(characters.isDmOnly, true), eq(characters.dmOwnerId, userId)));
+      res.json(characterList);
+    } catch (error) {
+      console.error("DM characters fetch error:", error);
+      res.status(500).json({ message: "Failed to get DM characters" });
+    }
+  });
+
+  // Create a new DM-only character for a user
+  app.post("/api/dm/:userId/characters", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { name, path, level = 1 } = req.body;
+
+      if (!name || typeof name !== 'string' || name.trim().length === 0) {
+        return res.status(400).json({ message: "Name is required" });
+      }
+
+      if (!path || typeof path !== 'string' || path.trim().length === 0) {
+        return res.status(400).json({ message: "Path is required" });
+      }
+
+      if (typeof level !== 'number' || level < 1 || level > 20) {
+        return res.status(400).json({ message: "Level must be between 1 and 20" });
+      }
+
+      const character = await storage.createCharacter({
+        name: name.trim(),
+        path: path.trim(),
+        level,
+        isDmOnly: true,
+        dmOwnerId: userId,
+      });
+
+      res.json(character);
+    } catch (error) {
+      console.error("DM character create error:", error);
+      res.status(500).json({ message: "Failed to create DM character" });
     }
   });
 

@@ -18,6 +18,7 @@ function Router() {
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
 
   const handleCharacterSelect = (character: Character) => {
+    sessionStorage.setItem("returnTo", "/");
     setSelectedCharacter(character);
     setLocation(`/character/${character.id}`);
   };
@@ -36,7 +37,6 @@ function Router() {
         {(params) => (
           <CharacterSheetWrapper 
             characterId={params.id}
-            onReturnToMenu={handleReturnToMenu}
           />
         )}
       </Route>
@@ -49,7 +49,17 @@ function Router() {
 }
 
 // Wrapper component to fetch character data from URL parameter
-function CharacterSheetWrapper({ characterId, onReturnToMenu }: { characterId: string; onReturnToMenu: () => void }) {
+function CharacterSheetWrapper({ characterId }: { characterId: string }) {
+  const [, setLocation] = useLocation();
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const params = typeof window !== "undefined" ? new URLSearchParams(search) : new URLSearchParams();
+  const returnFrom = params.get("from");
+  const storedReturn = typeof window !== "undefined" ? sessionStorage.getItem("returnTo") : null;
+  const returnPath = returnFrom === "dm" ? "/dm-space" : storedReturn || "/";
+  const handleReturnToMenu = () => {
+    sessionStorage.removeItem("returnTo");
+    setLocation(returnPath);
+  };
   const { data: character, isLoading, error } = useQuery<Character>({
     queryKey: ["/api/character", characterId],
     retry: false,
@@ -71,7 +81,7 @@ function CharacterSheetWrapper({ characterId, onReturnToMenu }: { characterId: s
         <div className="text-center">
           <p className="text-gray-600 dark:text-gray-400 mb-4">Character not found</p>
           <button 
-            onClick={onReturnToMenu}
+            onClick={handleReturnToMenu}
             className="text-spiritual-600 hover:text-spiritual-700 dark:text-spiritual-400 dark:hover:text-spiritual-300"
           >
             Return to Main Menu
@@ -84,7 +94,7 @@ function CharacterSheetWrapper({ characterId, onReturnToMenu }: { characterId: s
   return (
     <CharacterSheet 
       character={character}
-      onReturnToMenu={onReturnToMenu}
+      onReturnToMenu={handleReturnToMenu}
     />
   );
 }

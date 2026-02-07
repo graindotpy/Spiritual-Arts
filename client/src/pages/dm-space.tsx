@@ -6,14 +6,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Edit2, ArrowLeft, BookOpen, ChevronUp, ChevronDown, Sparkles } from "lucide-react";
+import { Plus, Trash2, Edit2, ArrowLeft, BookOpen, ChevronUp, ChevronDown, Sparkles, User } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import CharacterCreator from "@/components/character-creator";
 import TooltipText from "@/components/tooltip-text";
 import ExpandedTooltipDialog from "@/components/expanded-tooltip-dialog";
 import { dmGlossaryScope } from "@/hooks/use-glossary";
-import type { DmStack, DmGlossaryTerm, DmScratchpad } from "@shared/schema";
+import type { DmStack, DmGlossaryTerm, DmScratchpad, Character } from "@shared/schema";
 
 // Simple user ID generator
 const getUserId = () => {
@@ -150,6 +151,7 @@ export default function DmSpace() {
   const [expandedGlossaryTerm, setExpandedGlossaryTerm] = useState<DmGlossaryTerm | null>(null);
   const [formKeyword, setFormKeyword] = useState("");
   const [formDefinition, setFormDefinition] = useState("");
+  const [isCharacterCreatorOpen, setIsCharacterCreatorOpen] = useState(false);
 
   // Fetch DM stacks
   const { data: stacks = [], isLoading } = useQuery<DmStack[]>({
@@ -175,6 +177,36 @@ export default function DmSpace() {
     queryFn: async () => {
       const response = await apiRequest('GET', `/api/dm/${userId}/scratchpads`);
       return response.json();
+    },
+  });
+
+  // Fetch DM-only characters
+  const { data: dmCharacters = [], isLoading: isLoadingCharacters } = useQuery<Character[]>({
+    queryKey: ['/api/dm', userId, 'characters'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', `/api/dm/${userId}/characters`);
+      return response.json();
+    },
+  });
+
+  // Delete DM character mutation
+  const deleteCharacter = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/character/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'characters'] });
+      toast({
+        title: "Success",
+        description: "Character deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete character",
+        variant: "destructive",
+      });
     },
   });
 
@@ -561,9 +593,13 @@ export default function DmSpace() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="stacks" className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
             <TabsTrigger value="stacks" data-testid="tab-stacks">
               Stack Tracker
+            </TabsTrigger>
+            <TabsTrigger value="characters" data-testid="tab-characters">
+              <User className="w-4 h-4 mr-2" />
+              Characters
             </TabsTrigger>
             <TabsTrigger value="glossary" data-testid="tab-glossary">
               <BookOpen className="w-4 h-4 mr-2" />
@@ -704,6 +740,95 @@ export default function DmSpace() {
                           scope={dmGlossaryScope}
                           className="text-gray-900 dark:text-white"
                         />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="characters">
+            <div className="flex justify-end mb-6">
+              <Button
+                onClick={() => setIsCharacterCreatorOpen(true)}
+                className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
+                data-testid="button-dm-create-character"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Character
+              </Button>
+            </div>
+
+            {isLoadingCharacters ? (
+              <div className="text-center py-12">
+                <p className="text-gray-600 dark:text-gray-400">Loading characters...</p>
+              </div>
+            ) : dmCharacters.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-24 h-24 bg-spiritual-100 dark:bg-spiritual-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <User className="w-12 h-12 text-spiritual-600 dark:text-spiritual-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  No DM Characters Yet
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Create a DM-only character for private reference
+                </p>
+                <Button
+                  onClick={() => setIsCharacterCreatorOpen(true)}
+                  className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
+                  data-testid="button-dm-create-first-character"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First DM Character
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {dmCharacters.map((character) => (
+                  <Card
+                    key={character.id}
+                    className="cursor-pointer bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
+                    onClick={() => {
+                      sessionStorage.setItem("returnTo", "/dm-space");
+                      setLocation(`/character/${character.id}?from=dm`);
+                    }}
+                    data-testid={`card-dm-character-${character.id}`}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center">
+                          <div className="w-10 h-10 bg-spiritual-100 dark:bg-spiritual-900 rounded-full flex items-center justify-center mr-3">
+                            <User className="w-5 h-5 text-spiritual-600 dark:text-spiritual-400" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                              {character.name}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Level {character.level}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`Delete ${character.name}? This cannot be undone.`)) {
+                              deleteCharacter.mutate(character.id);
+                            }
+                          }}
+                          data-testid={`button-delete-dm-character-${character.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                        </Button>
+                      </div>
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                        <p className="text-spiritual-600 dark:text-spiritual-400 font-medium">
+                          {character.path}
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
@@ -1095,6 +1220,19 @@ export default function DmSpace() {
           scope={dmGlossaryScope}
         />
       )}
+
+      <CharacterCreator
+        isOpen={isCharacterCreatorOpen}
+        onClose={() => setIsCharacterCreatorOpen(false)}
+        createUrl={`/api/dm/${userId}/characters`}
+        onCharacterCreated={() => {
+          queryClient.invalidateQueries({ queryKey: ['/api/dm', userId, 'characters'] });
+          toast({
+            title: "Success",
+            description: "Character created successfully",
+          });
+        }}
+      />
     </div>
   );
 }

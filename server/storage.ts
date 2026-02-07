@@ -44,6 +44,7 @@ export interface IStorage {
   getCharacter(id: string): Promise<Character | undefined>;
   createCharacter(character: InsertCharacter): Promise<Character>;
   updateCharacter(id: string, character: Partial<Character>): Promise<Character | undefined>;
+  deleteCharacter(id: string): Promise<boolean>;
 
   // Spirit Die Pools
   getSpiritDiePool(characterId: string): Promise<SpiritDiePool | undefined>;
@@ -226,7 +227,9 @@ export class MemStorage implements IStorage {
       ...character, 
       id,
       level: character.level ?? 3,
-      portraitUrl: character.portraitUrl ?? null
+      portraitUrl: character.portraitUrl ?? null,
+      isDmOnly: character.isDmOnly ?? false,
+      dmOwnerId: character.dmOwnerId ?? null,
     };
     this.characters.set(id, newCharacter);
     return newCharacter;
@@ -238,7 +241,9 @@ export class MemStorage implements IStorage {
       ...character, 
       id,
       level: character.level ?? 3,
-      portraitUrl: character.portraitUrl ?? null
+      portraitUrl: character.portraitUrl ?? null,
+      isDmOnly: character.isDmOnly ?? false,
+      dmOwnerId: character.dmOwnerId ?? null,
     };
     this.characters.set(id, newCharacter);
     return newCharacter;
@@ -251,6 +256,37 @@ export class MemStorage implements IStorage {
     const updated = { ...existing, ...character };
     this.characters.set(id, updated);
     return updated;
+  }
+
+  async deleteCharacter(id: string): Promise<boolean> {
+    const existed = this.characters.delete(id);
+    if (!existed) return false;
+
+    for (const [poolId, pool] of this.spiritDiePools.entries()) {
+      if (pool.characterId === id) {
+        this.spiritDiePools.delete(poolId);
+      }
+    }
+
+    for (const [techniqueId, technique] of this.techniques.entries()) {
+      if (technique.characterId === id) {
+        this.techniques.delete(techniqueId);
+      }
+    }
+
+    for (const [effectId, effect] of this.activeEffects.entries()) {
+      if (effect.characterId === id) {
+        this.activeEffects.delete(effectId);
+      }
+    }
+
+    for (const [termId, term] of this.glossaryTerms.entries()) {
+      if (term.characterId === id) {
+        this.glossaryTerms.delete(termId);
+      }
+    }
+
+    return true;
   }
 
   // Spirit Die Pools
@@ -407,6 +443,19 @@ export class DatabaseStorage implements IStorage {
       .where(eq(characters.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  async deleteCharacter(id: string): Promise<boolean> {
+    return await db.transaction(async (tx) => {
+      await tx.delete(glossaryTerms).where(eq(glossaryTerms.characterId, id));
+      await tx.delete(activeEffects).where(eq(activeEffects.characterId, id));
+      await tx.delete(techniques).where(eq(techniques.characterId, id));
+      await tx.delete(spiritDiePools).where(eq(spiritDiePools.characterId, id));
+      await tx.delete(trackers).where(eq(trackers.characterId, id));
+
+      const result = await tx.delete(characters).where(eq(characters.id, id));
+      return (result.rowCount || 0) > 0;
+    });
   }
 
   // Spirit Die Pools

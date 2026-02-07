@@ -6,6 +6,14 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Disable caching for API responses so UI reflects latest data.
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -26,7 +34,7 @@ app.use((req, res, next) => {
       }
 
       if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
+        logLine = logLine.slice(0, 79) + "...";
       }
 
       log(logLine);
@@ -44,7 +52,10 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    if (app.get("env") !== "production") {
+      log(`${status} ${message}`, "error");
+      console.error(err);
+    }
   });
 
   // importantly only setup vite in development and after
@@ -61,10 +72,11 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+  const isWindows = process.platform === "win32";
   server.listen({
     port,
-    host: "0.0.0.0",
-    reusePort: true,
+    host: isWindows ? "127.0.0.1" : "0.0.0.0",
+    ...(isWindows ? {} : { reusePort: true }),
   }, () => {
     log(`serving on port ${port}`);
   });
