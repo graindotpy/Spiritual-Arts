@@ -10,59 +10,68 @@ import { db } from "./db";
 import { characters, insertTechniqueSchema, insertSpiritDiePoolSchema, insertActiveEffectSchema, insertGlossaryTermSchema, insertDmStackSchema, insertDmGlossarySchema, insertDmScratchpadSchema, type DieSize } from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
+import { isR2Enabled, uploadToR2, deleteFromR2 } from "./r2";
 
 // Configure multer for portrait uploads
-const portraitsDir = path.join(process.cwd(), 'uploads', 'portraits');
-const imagesDir = path.join(process.cwd(), 'uploads', 'images');
-if (!fs.existsSync(portraitsDir)) {
-  fs.mkdirSync(portraitsDir, { recursive: true });
-}
-if (!fs.existsSync(imagesDir)) {
-  fs.mkdirSync(imagesDir, { recursive: true });
+const useR2 = isR2Enabled();
+const portraitsDir = path.join(process.cwd(), "uploads", "portraits");
+const imagesDir = path.join(process.cwd(), "uploads", "images");
+
+if (!useR2) {
+  if (!fs.existsSync(portraitsDir)) {
+    fs.mkdirSync(portraitsDir, { recursive: true });
+  }
+  if (!fs.existsSync(imagesDir)) {
+    fs.mkdirSync(imagesDir, { recursive: true });
+  }
 }
 
 const portraitUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, portraitsDir);
-    },
-    filename: (req, file, cb) => {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      cb(null, 'portrait-' + uniqueSuffix + path.extname(file.originalname));
-    }
-  }),
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+  storage: useR2
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (_req, _file, cb) => {
+          cb(null, portraitsDir);
+        },
+        filename: (_req, file, cb) => {
+          const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+          cb(null, "portrait-" + uniqueSuffix + path.extname(file.originalname));
+        },
+      }),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed!'));
+      cb(new Error("Only image files are allowed!"));
     }
   },
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  }
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
 });
 
 const imageUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, imagesDir);
-    },
-    filename: (req, file, cb) => {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      cb(null, 'image-' + uniqueSuffix + path.extname(file.originalname));
-    }
-  }),
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+  storage: useR2
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (_req, _file, cb) => {
+          cb(null, imagesDir);
+        },
+        filename: (_req, file, cb) => {
+          const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+          cb(null, "image-" + uniqueSuffix + path.extname(file.originalname));
+        },
+      }),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed!'));
+      cb(new Error("Only image files are allowed!"));
     }
   },
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  }
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
 });
 
 // WebSocket clients store
@@ -104,14 +113,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
   
-  // Serve uploaded files
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  // Serve uploaded files (local disk only)
+  if (!useR2) {
+    app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+  }
 
   // Image upload endpoint for enhanced tooltips
-  app.post("/api/upload/image", imageUpload.single('image'), (req, res) => {
+  app.post("/api/upload/image", imageUpload.single("image"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No image file provided" });
+      }
+
+      if (useR2) {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const key = `images/image-${uniqueSuffix}${path.extname(req.file.originalname)}`;
+        const imageUrl = await uploadToR2({
+          key,
+          body: req.file.buffer,
+          contentType: req.file.mimetype,
+        });
+        return res.json({ url: imageUrl });
       }
 
       const imageUrl = `/uploads/images/${req.file.filename}`;
@@ -127,7 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updates = [];
       
       for (const character of allCharacters) {
-        if (character.portraitUrl) {
+        if (character.portraitUrl && character.portraitUrl.startsWith("/uploads/")) {
           const filePath = path.join(process.cwd(), character.portraitUrl);
           if (!fs.existsSync(filePath)) {
             console.log(`Cleaning up missing portrait for ${character.name}: ${character.portraitUrl}`);
@@ -203,13 +225,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (character.portraitUrl) {
-        const oldFilePath = path.join(process.cwd(), character.portraitUrl);
-        try {
-          if (fs.existsSync(oldFilePath)) {
-            fs.unlinkSync(oldFilePath);
+        if (useR2) {
+          await deleteFromR2(character.portraitUrl);
+        } else {
+          const oldFilePath = path.join(process.cwd(), character.portraitUrl);
+          try {
+            if (fs.existsSync(oldFilePath)) {
+              fs.unlinkSync(oldFilePath);
+            }
+          } catch (fileError) {
+            console.error("Failed to delete portrait file:", fileError);
           }
-        } catch (fileError) {
-          console.error("Failed to delete portrait file:", fileError);
         }
       }
 
@@ -406,7 +432,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload character portrait
-  app.post("/api/character/:id/portrait", portraitUpload.single('portrait'), async (req, res) => {
+  app.post("/api/character/:id/portrait", portraitUpload.single("portrait"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No portrait file provided" });
@@ -416,36 +442,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const character = await storage.getCharacter(req.params.id);
       if (!character) {
         // Clean up uploaded file if character doesn't exist
-        fs.unlinkSync(req.file.path);
+        if (!useR2 && req.file.path) {
+          fs.unlinkSync(req.file.path);
+        }
         return res.status(404).json({ message: "Character not found" });
       }
 
-      const portraitUrl = `/uploads/portraits/${req.file.filename}`;
+      let portraitUrl = `/uploads/portraits/${req.file.filename}`;
+      if (useR2) {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const key = `portraits/portrait-${uniqueSuffix}${path.extname(req.file.originalname)}`;
+        portraitUrl = await uploadToR2({
+          key,
+          body: req.file.buffer,
+          contentType: req.file.mimetype,
+        });
+      }
       const updated = await storage.updateCharacter(req.params.id, { portraitUrl });
       
       if (!updated) {
         // Clean up uploaded file if character update fails
-        fs.unlinkSync(req.file.path);
+        if (!useR2 && req.file.path) {
+          fs.unlinkSync(req.file.path);
+        }
         return res.status(404).json({ message: "Character not found" });
       }
 
       // Clean up old portrait file if it exists
       if (character.portraitUrl && character.portraitUrl !== portraitUrl) {
-        const oldFilePath = path.join(process.cwd(), character.portraitUrl);
-        try {
-          if (fs.existsSync(oldFilePath)) {
-            fs.unlinkSync(oldFilePath);
-            console.log(`Cleaned up old portrait file: ${oldFilePath}`);
+        if (useR2) {
+          await deleteFromR2(character.portraitUrl);
+        } else {
+          const oldFilePath = path.join(process.cwd(), character.portraitUrl);
+          try {
+            if (fs.existsSync(oldFilePath)) {
+              fs.unlinkSync(oldFilePath);
+              console.log(`Cleaned up old portrait file: ${oldFilePath}`);
+            }
+          } catch (fileError) {
+            console.error("Failed to delete old portrait file:", fileError);
           }
-        } catch (fileError) {
-          console.error("Failed to delete old portrait file:", fileError);
         }
       }
 
       res.json({ portraitUrl });
     } catch (error) {
-      // Clean up uploaded file on error
-      if (req.file) {
+      // Clean up uploaded file on error (disk storage only)
+      if (!useR2 && req.file?.path) {
         try {
           fs.unlinkSync(req.file.path);
         } catch (cleanupError) {
@@ -467,13 +510,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Delete the old portrait file if it exists
       if (character.portraitUrl) {
-        const oldFilePath = path.join(process.cwd(), character.portraitUrl);
-        try {
-          if (fs.existsSync(oldFilePath)) {
-            fs.unlinkSync(oldFilePath);
+        if (useR2) {
+          await deleteFromR2(character.portraitUrl);
+        } else {
+          const oldFilePath = path.join(process.cwd(), character.portraitUrl);
+          try {
+            if (fs.existsSync(oldFilePath)) {
+              fs.unlinkSync(oldFilePath);
+            }
+          } catch (fileError) {
+            console.error("Failed to delete old portrait file:", fileError);
           }
-        } catch (fileError) {
-          console.error("Failed to delete old portrait file:", fileError);
         }
       }
 
