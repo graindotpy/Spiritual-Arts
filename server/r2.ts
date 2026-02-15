@@ -55,7 +55,7 @@ export async function deleteFromR2(objectUrl: string) {
   const client = getR2Client();
   await client.send(
     new DeleteObjectCommand({
-      Bucket: R2_BUCKET as string,
+      Bucket: process.env.R2_BUCKET as string,
       Key: key,
     }),
   );

@@ -10,6 +10,8 @@ import { EnhancedTooltipProvider } from "@/contexts/tooltip-context";
 import CharacterSheet from "@/pages/character-sheet";
 import MainMenu from "@/pages/main-menu";
 import DmSpace from "@/pages/dm-space";
+import CardGame from "@/pages/card-game";
+import Factions from "@/pages/factions";
 import NotFound from "@/pages/not-found";
 import type { Character } from "@shared/schema";
 
@@ -42,6 +44,12 @@ function Router() {
       </Route>
       <Route path="/dm-space">
         <DmSpace />
+      </Route>
+      <Route path="/card-game">
+        <CardGame />
+      </Route>
+      <Route path="/factions">
+        <Factions />
       </Route>
       <Route component={NotFound} />
     </Switch>

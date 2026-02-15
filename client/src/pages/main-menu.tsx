@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Plus, Moon, Sun, User, Camera, Shield, Key, Trash2 } from "lucide-react";
+import { Plus, Moon, Sun, User, Camera, Shield, Key, Trash2, Flag, Swords } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useLocation } from "wouter";
@@ -28,6 +28,10 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
   const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
   const [adminCode, setAdminCode] = useState("");
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isFactionDialogOpen, setIsFactionDialogOpen] = useState(false);
+  const [factionCode, setFactionCode] = useState("");
+  const [isCardGameDialogOpen, setIsCardGameDialogOpen] = useState(false);
+  const [cardGameCode, setCardGameCode] = useState("");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -121,6 +125,36 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
     setIsAdminDialogOpen(true);
   };
 
+  const handleFactionCodeSubmit = () => {
+    if (factionCode === "3142") {
+      setLocation("/factions");
+      setFactionCode("");
+      setIsFactionDialogOpen(false);
+    } else {
+      toast({
+        title: "Invalid Code",
+        description: "The code you entered is incorrect",
+        variant: "destructive",
+      });
+      setFactionCode("");
+    }
+  };
+
+  const handleCardGameCodeSubmit = () => {
+    if (cardGameCode === "4321") {
+      setLocation("/card-game");
+      setCardGameCode("");
+      setIsCardGameDialogOpen(false);
+    } else {
+      toast({
+        title: "Invalid Code",
+        description: "The code you entered is incorrect",
+        variant: "destructive",
+      });
+      setCardGameCode("");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -146,6 +180,24 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
               >
                 <Shield className="w-4 h-4 mr-2" />
                 DM Space
+              </Button>
+              <Button
+                onClick={() => setIsFactionDialogOpen(true)}
+                variant="outline"
+                size="sm"
+                data-testid="button-factions"
+              >
+                <Flag className="w-4 h-4 mr-2" />
+                Factions
+              </Button>
+              <Button
+                onClick={() => setIsCardGameDialogOpen(true)}
+                variant="outline"
+                size="sm"
+                data-testid="button-card-game"
+              >
+                <Swords className="w-4 h-4 mr-2" />
+                Card Game
               </Button>
               <Button
                 onClick={handleAdminToggle}
@@ -362,6 +414,96 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
             <Button
               onClick={handleDmCodeSubmit}
               data-testid="button-submit-dm-code"
+            >
+              Enter
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Faction Code Protection Dialog */}
+      <Dialog open={isFactionDialogOpen} onOpenChange={setIsFactionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Faction Setup Access</DialogTitle>
+            <DialogDescription>
+              Enter the access code to manage factions
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              type="password"
+              placeholder="Enter code"
+              value={factionCode}
+              onChange={(e) => setFactionCode(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter") {
+                  handleFactionCodeSubmit();
+                }
+              }}
+              data-testid="input-faction-code"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsFactionDialogOpen(false);
+                setFactionCode("");
+              }}
+              data-testid="button-cancel-faction-code"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFactionCodeSubmit}
+              data-testid="button-submit-faction-code"
+            >
+              Enter
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Card Game Code Protection Dialog */}
+      <Dialog open={isCardGameDialogOpen} onOpenChange={setIsCardGameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Card Game Access</DialogTitle>
+            <DialogDescription>
+              Enter the access code to open Card Game
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              type="password"
+              placeholder="Enter code"
+              value={cardGameCode}
+              onChange={(e) => setCardGameCode(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter") {
+                  handleCardGameCodeSubmit();
+                }
+              }}
+              data-testid="input-card-game-code"
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCardGameDialogOpen(false);
+                setCardGameCode("");
+              }}
+              data-testid="button-cancel-card-game-code"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCardGameCodeSubmit}
+              data-testid="button-submit-card-game-code"
             >
               Enter
             </Button>

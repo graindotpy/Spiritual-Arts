@@ -217,6 +217,13 @@ export const dmScratchpads = pgTable("dm_scratchpads", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const cardGameStates = pgTable("card_game_states", {
+  id: varchar("id").primaryKey(),
+  state: jsonb("state").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertDmStackSchema = createInsertSchema(dmStacks).omit({
   id: true,
   createdAt: true,
@@ -234,6 +241,11 @@ export const insertDmScratchpadSchema = createInsertSchema(dmScratchpads).omit({
   userId: true,
 });
 
+export const insertCardGameStateSchema = createInsertSchema(cardGameStates).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+
 export type DmStack = typeof dmStacks.$inferSelect;
 export type InsertDmStack = z.infer<typeof insertDmStackSchema>;
 
@@ -242,3 +254,6 @@ export type InsertDmGlossaryTerm = z.infer<typeof insertDmGlossarySchema>;
 
 export type DmScratchpad = typeof dmScratchpads.$inferSelect;
 export type InsertDmScratchpad = z.infer<typeof insertDmScratchpadSchema>;
+
+export type CardGameState = typeof cardGameStates.$inferSelect;
+export type InsertCardGameState = z.infer<typeof insertCardGameStateSchema>;

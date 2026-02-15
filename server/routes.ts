@@ -7,7 +7,18 @@ import fs from "fs";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { db } from "./db";
-import { characters, insertTechniqueSchema, insertSpiritDiePoolSchema, insertActiveEffectSchema, insertGlossaryTermSchema, insertDmStackSchema, insertDmGlossarySchema, insertDmScratchpadSchema, type DieSize } from "@shared/schema";
+import {
+  characters,
+  insertTechniqueSchema,
+  insertSpiritDiePoolSchema,
+  insertActiveEffectSchema,
+  insertGlossaryTermSchema,
+  insertDmStackSchema,
+  insertDmGlossarySchema,
+  insertDmScratchpadSchema,
+  cardGameStates,
+  type DieSize,
+} from "@shared/schema";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { isR2Enabled, uploadToR2, deleteFromR2 } from "./r2";
@@ -977,6 +988,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Delete tracker error:", error);
       res.status(500).json({ message: "Failed to delete tracker" });
+    }
+  });
+
+  // Card game state (DM-only for now)
+  app.get("/api/card-game/state", async (_req, res) => {
+    try {
+      const [row] = await db.select().from(cardGameStates).limit(1);
+      if (!row) {
+        return res.json({ state: null, updatedAt: 0 });
+      }
+      const updatedAt =
+        row.updatedAt instanceof Date
+          ? row.updatedAt.getTime()
+          : typeof row.updatedAt === "string"
+          ? Date.parse(row.updatedAt)
+          : 0;
+      res.json({ state: row.state, updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0 });
+    } catch (error) {
+      console.error("Get card game state error:", error);
+      res.status(500).json({ message: "Failed to get card game state" });
+    }
+  });
+
+  app.put("/api/card-game/state", async (req, res) => {
+    try {
+      const { state } = req.body ?? {};
+      if (!state) {
+        return res.status(400).json({ message: "State is required" });
+      }
+
+      const id = "default";
+      const [existing] = await db.select().from(cardGameStates).limit(1);
+      const incomingUpdatedAt =
+        typeof (state as { updatedAt?: unknown })?.updatedAt === "number"
+          ? Number((state as { updatedAt: number }).updatedAt)
+          : 0;
+      const existingUpdatedAt =
+        existing?.updatedAt instanceof Date
+          ? existing.updatedAt.getTime()
+          : typeof existing?.updatedAt === "string"
+          ? Date.parse(existing.updatedAt)
+          : 0;
+
+      if (existing && Number.isFinite(existingUpdatedAt) && incomingUpdatedAt < existingUpdatedAt) {
+        return res.status(409).json({
+          success: false,
+          conflict: true,
+          state: existing.state,
+          updatedAt: existingUpdatedAt,
+        });
+      }
+      const now = new Date();
+      await db
+        .insert(cardGameStates)
+        .values({ id, state, updatedAt: now })
+        .onConflictDoUpdate({
+          target: cardGameStates.id,
+          set: { state, updatedAt: now },
+        });
+
+      const toImageSet = (value: any) => {
+        const urls = new Set<string>();
+        const cards = Array.isArray(value?.cards) ? value.cards : [];
+        for (const card of cards) {
+          if (typeof card?.imageUrl === "string" && card.imageUrl.trim()) {
+            urls.add(card.imageUrl.trim());
+          }
+        }
+        return urls;
+      };
+
+      const previousImages = toImageSet(existing?.state);
+      const nextImages = toImageSet(state);
+      const removedImages = Array.from(previousImages).filter((url) => !nextImages.has(url));
+
+      if (removedImages.length) {
+        await Promise.all(
+          removedImages.map(async (url) => {
+            try {
+              if (useR2) {
+                await deleteFromR2(url);
+                return;
+              }
+              if (url.startsWith("/uploads/images/")) {
+                const filePath = path.join(process.cwd(), url);
+                if (fs.existsSync(filePath)) {
+                  fs.unlinkSync(filePath);
+                }
+              }
+            } catch (error) {
+              console.error("Failed to delete unused card image:", url, error);
+            }
+          })
+        );
+      }
+
+      const updatedAt = now.getTime();
+      const nextState =
+        state && typeof state === "object"
+          ? { ...state, updatedAt }
+          : { updatedAt };
+      res.json({ success: true, state: nextState, updatedAt });
+    } catch (error) {
+      console.error("Update card game state error:", error);
+      res.status(500).json({ message: "Failed to update card game state" });
     }
   });
 

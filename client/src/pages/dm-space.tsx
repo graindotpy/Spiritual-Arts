@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Edit2, ArrowLeft, BookOpen, ChevronUp, ChevronDown, Sparkles, User } from "lucide-react";
+import { Plus, Trash2, Edit2, ArrowLeft, BookOpen, ChevronUp, ChevronDown, Sparkles, User, LayoutGrid } from "lucide-react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -586,6 +586,15 @@ export default function DmSpace() {
                 <p className="text-lg text-gray-600 dark:text-gray-300 mt-1">Manage Stacks & Glossary</p>
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/card-game")}
+              data-testid="button-card-game"
+            >
+              <LayoutGrid className="w-4 h-4 mr-2" />
+              Card Game
+            </Button>
           </div>
         </div>
       </header>

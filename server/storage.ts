@@ -104,7 +104,7 @@ export interface IStorage {
   deleteDmScratchpad(id: string): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
+export class MemStorage {
   private characters: Map<string, Character>;
   private spiritDiePools: Map<string, SpiritDiePool>;
   private techniques: Map<string, Technique>;
@@ -262,25 +262,25 @@ export class MemStorage implements IStorage {
     const existed = this.characters.delete(id);
     if (!existed) return false;
 
-    for (const [poolId, pool] of this.spiritDiePools.entries()) {
+    for (const [poolId, pool] of Array.from(this.spiritDiePools.entries())) {
       if (pool.characterId === id) {
         this.spiritDiePools.delete(poolId);
       }
     }
 
-    for (const [techniqueId, technique] of this.techniques.entries()) {
+    for (const [techniqueId, technique] of Array.from(this.techniques.entries())) {
       if (technique.characterId === id) {
         this.techniques.delete(techniqueId);
       }
     }
 
-    for (const [effectId, effect] of this.activeEffects.entries()) {
+    for (const [effectId, effect] of Array.from(this.activeEffects.entries())) {
       if (effect.characterId === id) {
         this.activeEffects.delete(effectId);
       }
     }
 
-    for (const [termId, term] of this.glossaryTerms.entries()) {
+    for (const [termId, term] of Array.from(this.glossaryTerms.entries())) {
       if (term.characterId === id) {
         this.glossaryTerms.delete(termId);
       }

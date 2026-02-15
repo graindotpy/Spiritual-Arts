@@ -26,7 +26,7 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: glossaryTerms = [], isLoading } = useQuery({
+  const { data: glossaryTerms = [], isLoading } = useQuery<GlossaryTerm[]>({
     queryKey: ["/api/character", characterId, "glossary"],
     enabled: open && !!characterId,
   });
