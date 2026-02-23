@@ -22,6 +22,7 @@ import {
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { isR2Enabled, uploadToR2, deleteFromR2 } from "./r2";
+import { sendFoundryWebhook } from "./integrations/foundry";
 
 // Configure multer for portrait uploads
 const useR2 = isR2Enabled();
@@ -688,7 +689,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             techniqueId: techniqueId ?? null,
             techniqueName,
             timestamp: new Date().toISOString()
-          }
+          },
+          source: "spiritual-arts" as const,
+          version: 1 as const,
         };
         
         broadcastSpiriteRoll(rollBroadcast);
@@ -701,6 +704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success,
           portraitUrl: character.portraitUrl,
         });
+        void sendFoundryWebhook(rollBroadcast);
       }
 
       console.log(`Roll result for ${spInvestment} SP using die ${dieIndex} (${dieSize}):`, {
