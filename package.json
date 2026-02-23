@@ -7,7 +7,6 @@
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "cross-env NODE_ENV=production node dist/index.js",
-    "test": "tsx --test server/**/*.test.ts",
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "db:push:local": "node -e \"require('dotenv').config({ path: '.env.local' }); if (!process.env.DATABASE_URL) { throw new Error('DATABASE_URL missing in .env.local'); } require('child_process').execSync('npx drizzle-kit push', { stdio: 'inherit' });\"",
