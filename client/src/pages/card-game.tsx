@@ -379,6 +379,14 @@ const normalizeHexColor = (value: unknown, fallback: string) => {
   return fallback;
 };
 
+const parsePersistedUpdatedAt = (value: unknown) => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 const BOARD_BASE_WIDTH = 1760;
 const BOARD_BASE_HEIGHT = 900;
 const TEMPLATE_NUDGE_STEP = 0.5;
@@ -744,6 +752,10 @@ export default function CardGame() {
   const pendingSaveRef = useRef(false);
   const saveQueuedRef = useRef(false);
   const skipNextSaveRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
+  const queuedSaveStateRef = useRef<PersistedCardGameState | null>(null);
+  const latestPersistedStateRef = useRef<PersistedCardGameState | null>(null);
+  const flushQueuedSaveRef = useRef<(() => void) | null>(null);
   const latestPhaseRef = useRef<Phase>("deploy_spies");
   const latestCardsRef = useRef<GameCard[]>([]);
   const lastSeenSpyReportIdsRef = useRef<Map<string, string>>(new Map());
@@ -1330,6 +1342,83 @@ export default function CardGame() {
     hasAppliedRemoteStateRef.current = true;
   }, [deriveSpyOutcomeFromTransition, viewFactionId]);
 
+  const scheduleQueuedSave = useCallback((delay = 300) => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    if (!queuedSaveStateRef.current) {
+      saveQueuedRef.current = false;
+      return;
+    }
+    saveQueuedRef.current = true;
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      flushQueuedSaveRef.current?.();
+    }, delay);
+  }, []);
+
+  const flushQueuedSave = useCallback(() => {
+    if (pendingSaveRef.current) return;
+    const queuedState = queuedSaveStateRef.current;
+    if (!queuedState) {
+      saveQueuedRef.current = false;
+      return;
+    }
+
+    queuedSaveStateRef.current = null;
+    saveQueuedRef.current = false;
+    pendingSaveRef.current = true;
+    const state = { ...queuedState, updatedAt: lastUpdatedAtRef.current };
+
+    fetch("/api/card-game/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state }),
+    })
+      .then(async (response) => {
+        if (response.status === 409) {
+          const data = await response.json();
+          const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
+          if (typeof remoteUpdatedAt === "number") {
+            lastUpdatedAtRef.current = Math.max(lastUpdatedAtRef.current, remoteUpdatedAt);
+          }
+          queuedSaveStateRef.current = latestPersistedStateRef.current ?? queuedState;
+          saveQueuedRef.current = true;
+          return;
+        }
+        if (!response.ok) {
+          return;
+        }
+        const data = await response.json();
+        const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
+        if (typeof remoteUpdatedAt === "number") {
+          lastUpdatedAtRef.current = Math.max(lastUpdatedAtRef.current, remoteUpdatedAt);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to save card game state", error);
+      })
+      .finally(() => {
+        pendingSaveRef.current = false;
+        if (queuedSaveStateRef.current) {
+          scheduleQueuedSave(0);
+        }
+      });
+  }, [scheduleQueuedSave]);
+
+  useEffect(() => {
+    flushQueuedSaveRef.current = flushQueuedSave;
+  }, [flushQueuedSave]);
+
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (!selectedFactionId) {
       setActiveFactionId(null);
@@ -1431,12 +1520,7 @@ export default function CardGame() {
         }
         const data = await response.json();
         if (!isActive) return;
-        const remoteUpdatedAt =
-          typeof data?.updatedAt === "number"
-            ? data.updatedAt
-            : Number.isFinite(Date.parse(String(data?.updatedAt)))
-            ? Date.parse(String(data?.updatedAt))
-            : undefined;
+        const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
         const normalized = normalizeState(data?.state, remoteUpdatedAt);
         hasLoadedStateRef.current = true;
         applyPersistedState(normalized);
@@ -1461,12 +1545,7 @@ export default function CardGame() {
         if (!response.ok) return;
         const data = await response.json();
         if (pendingSaveRef.current || saveQueuedRef.current) return;
-        const remoteUpdatedAt =
-          typeof data?.updatedAt === "number"
-            ? data.updatedAt
-            : Number.isFinite(Date.parse(String(data?.updatedAt)))
-            ? Date.parse(String(data?.updatedAt))
-            : undefined;
+        const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
         const normalized = normalizeState(data?.state, remoteUpdatedAt);
         if (normalized.updatedAt > lastUpdatedAtRef.current) {
           applyPersistedState(normalized);
@@ -1484,12 +1563,6 @@ export default function CardGame() {
   }, [applyPersistedState, normalizeState]);
 
   useEffect(() => {
-    if (!hasLoadedStateRef.current) return;
-    if (skipNextSaveRef.current) {
-      skipNextSaveRef.current = false;
-      return;
-    }
-    const baseUpdatedAt = lastUpdatedAtRef.current;
     const state: PersistedCardGameState = {
       phase,
       redeployStage,
@@ -1507,62 +1580,16 @@ export default function CardGame() {
       factions,
       spyReportEvent,
       matchLog,
-      // Send the last server-acknowledged timestamp for optimistic concurrency.
-      // The server will stamp and return the authoritative updatedAt on success.
-      updatedAt: baseUpdatedAt,
+      updatedAt: lastUpdatedAtRef.current,
     };
-    saveQueuedRef.current = true;
-    let requestStarted = false;
-    const handle = window.setTimeout(() => {
-      saveQueuedRef.current = false;
-      pendingSaveRef.current = true;
-      requestStarted = true;
-      fetch("/api/card-game/state", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state }),
-      })
-        .then(async (response) => {
-          if (response.status === 409) {
-            const data = await response.json();
-            const remoteUpdatedAt =
-              typeof data?.updatedAt === "number"
-                ? data.updatedAt
-                : Number.isFinite(Date.parse(String(data?.updatedAt)))
-                ? Date.parse(String(data?.updatedAt))
-                : undefined;
-            const normalized = normalizeState(data?.state, remoteUpdatedAt);
-            applyPersistedState(normalized);
-            return;
-          }
-          if (!response.ok) {
-            return;
-          }
-          const data = await response.json();
-          const remoteUpdatedAt =
-            typeof data?.updatedAt === "number"
-              ? data.updatedAt
-              : Number.isFinite(Date.parse(String(data?.updatedAt)))
-              ? Date.parse(String(data?.updatedAt))
-              : undefined;
-          if (typeof remoteUpdatedAt === "number") {
-            lastUpdatedAtRef.current = Math.max(lastUpdatedAtRef.current, remoteUpdatedAt);
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to save card game state", error);
-        })
-        .finally(() => {
-          pendingSaveRef.current = false;
-        });
-    }, 300);
-
-    return () => {
-      window.clearTimeout(handle);
-      if (!requestStarted) {
-        saveQueuedRef.current = false;
-      }
-    };
+    latestPersistedStateRef.current = state;
+    if (!hasLoadedStateRef.current) return;
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    queuedSaveStateRef.current = state;
+    scheduleQueuedSave(300);
   }, [
     phase,
     redeployStage,
@@ -1579,8 +1606,7 @@ export default function CardGame() {
     factions,
     spyReportEvent,
     matchLog,
-    normalizeState,
-    applyPersistedState,
+    scheduleQueuedSave,
   ]);
 
   const attachedSupport = useMemo(() => {
