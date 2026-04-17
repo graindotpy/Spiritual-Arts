@@ -3184,22 +3184,22 @@ export default function CardGame() {
     const handles: Array<{ handle: CardArtHandle; className: string; cursor: string }> = [
       {
         handle: "nw",
-        className: "-left-2.5 -top-2.5",
+        className: "left-1.5 top-1.5",
         cursor: "cursor-nwse-resize",
       },
       {
         handle: "ne",
-        className: "-right-2.5 -top-2.5",
+        className: "right-1.5 top-1.5",
         cursor: "cursor-nesw-resize",
       },
       {
         handle: "sw",
-        className: "-bottom-2.5 -left-2.5",
+        className: "bottom-1.5 left-1.5",
         cursor: "cursor-nesw-resize",
       },
       {
         handle: "se",
-        className: "-bottom-2.5 -right-2.5",
+        className: "bottom-1.5 right-1.5",
         cursor: "cursor-nwse-resize",
       },
     ];
@@ -3306,7 +3306,7 @@ export default function CardGame() {
                             <button
                               key={handle.handle}
                               type="button"
-                              className={`pointer-events-auto absolute h-5 w-5 rounded-full border-2 border-slate-950 bg-cyan-300 shadow-lg ${handle.className} ${handle.cursor}`}
+                              className={`pointer-events-auto absolute h-6 w-6 rounded-full border-2 border-slate-950 bg-cyan-300 ring-2 ring-white/70 shadow-lg ${handle.className} ${handle.cursor}`}
                               onPointerDown={(event) => startEditorArtHandleDrag(handle.handle, event)}
                               aria-label={`Resize ${handle.handle}`}
                             />
@@ -3329,6 +3329,11 @@ export default function CardGame() {
                       </span>
                     ) : null}
                   </div>
+                  {hasEditableArt ? (
+                    <div className="mt-2 text-center text-[11px] text-cyan-100/75">
+                      Use the cyan corner dots to resize. Turn on Crop Mode if you want those handles to crop instead.
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
