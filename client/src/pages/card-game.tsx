@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import {
   ArrowLeft,
   Repeat2,
+  RotateCcw,
   Shield,
   Swords,
   Upload,
@@ -11,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 
 type CardType = "fighter" | "spy" | "support";
@@ -43,6 +46,8 @@ type GameCard = {
   abilityDescription: string;
   ownerFactionId: string;
   imageUrl?: string;
+  artUrl?: string;
+  artPlacement?: CardArtPlacement;
   location: CardLocation;
 };
 
@@ -65,9 +70,28 @@ type TemplateTextField = {
   align: "left" | "center" | "right";
 };
 
+type CardArtPlacement = {
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+};
+
 type CardTemplateLayout = {
   templateUrl?: string;
   fields: Record<TemplateFieldKey, TemplateTextField>;
+};
+
+type EditorCardData = {
+  name: string;
+  type: CardType;
+  score: number;
+  descriptor: string;
+  abilityName: string;
+  abilityDescription: string;
+  ownerFactionId: string;
+  imageUrl: string;
+  artUrl: string;
+  artPlacement: CardArtPlacement;
 };
 
 type Faction = {
@@ -331,6 +355,46 @@ const clampTemplateFont = (value: unknown, fallback: number) => {
   return Math.max(8, Math.min(96, numeric));
 };
 
+const DEFAULT_CARD_ART_PLACEMENT: CardArtPlacement = {
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+};
+
+const clampCardArtOffset = (value: unknown, fallback: number) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(-100, Math.min(100, numeric));
+};
+
+const clampCardArtScale = (value: unknown, fallback: number) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(1, Math.min(4, numeric));
+};
+
+const normalizeCardArtPlacement = (
+  raw: Partial<CardArtPlacement> | undefined,
+  fallback: CardArtPlacement = DEFAULT_CARD_ART_PLACEMENT
+): CardArtPlacement => ({
+  offsetX: clampCardArtOffset(raw?.offsetX, fallback.offsetX),
+  offsetY: clampCardArtOffset(raw?.offsetY, fallback.offsetY),
+  scale: clampCardArtScale(raw?.scale, fallback.scale),
+});
+
+const createDefaultEditorData = (ownerFactionId: string): EditorCardData => ({
+  name: "",
+  type: "fighter",
+  score: 0,
+  descriptor: "",
+  abilityName: "",
+  abilityDescription: "",
+  ownerFactionId,
+  imageUrl: "",
+  artUrl: "",
+  artPlacement: { ...DEFAULT_CARD_ART_PLACEMENT },
+});
+
 const normalizeTemplateField = (
   raw: Partial<TemplateTextField> | undefined,
   fallback: TemplateTextField
@@ -442,7 +506,6 @@ function AutoFitText({
     </div>
   );
 }
-
 const orderBattlefieldFactionIds = (factionIds: string[], factions: Faction[]) => {
   if (factionIds.length !== 2) {
     return { ordered: factionIds, remap: null as Map<number, number> | null };
@@ -481,16 +544,9 @@ export default function CardGame() {
     createStarterDeck(initialFactions[0]?.id ?? "faction-a")
   );
   const [editorCardId, setEditorCardId] = useState<string | null>(null);
-  const [editorData, setEditorData] = useState({
-    name: "",
-    type: "fighter" as CardType,
-    score: 0,
-    descriptor: "",
-    abilityName: "",
-    abilityDescription: "",
-    ownerFactionId: initialFactions[0]?.id ?? "faction-a",
-    imageUrl: "",
-  });
+  const [editorData, setEditorData] = useState<EditorCardData>(() =>
+    createDefaultEditorData(initialFactions[0]?.id ?? "faction-a")
+  );
   const [cardTemplates, setCardTemplates] = useState<Record<CardType, CardTemplateLayout>>(
     createDefaultCardTemplates()
   );
@@ -506,7 +562,7 @@ export default function CardGame() {
   const [redeployStages, setRedeployStages] = useState<Record<string, RedeployStage>>({});
   const [nextPhaseVotes, setNextPhaseVotes] = useState<Record<string, boolean>>({});
   const [phaseVoteDirection, setPhaseVoteDirection] = useState<"next" | "prev" | null>(null);
-  const [focusedCardId, setFocusedCardId] = useState<string | null>(null);
+  const [focusedCardIds, setFocusedCardIds] = useState<string[]>([]);
   const [newBattlefieldName, setNewBattlefieldName] = useState("");
   const [newBattlefieldDescription, setNewBattlefieldDescription] = useState("");
   const [newBattlefieldFactionIds, setNewBattlefieldFactionIds] = useState<string[]>([]);
@@ -533,6 +589,15 @@ export default function CardGame() {
   const latestCardsRef = useRef<GameCard[]>([]);
   const lastSeenSpyReportIdsRef = useRef<Map<string, string>>(new Map());
   const lastShownResultsRoundRef = useRef<number | null>(null);
+  const cardArtDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const dragIntentRef = useRef<{
     cardId: string;
     startX: number;
@@ -540,6 +605,14 @@ export default function CardGame() {
     dragging: boolean;
     pointerId: number;
   } | null>(null);
+  const boardDragIntentRef = useRef<{
+    cardId: string;
+    startX: number;
+    startY: number;
+    dragging: boolean;
+    pointerId: number;
+  } | null>(null);
+  const recentBoardDragCardIdRef = useRef<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [hoverSlotId, setHoverSlotId] = useState<string | null>(null);
   const [hoverCardId, setHoverCardId] = useState<string | null>(null);
@@ -738,6 +811,8 @@ export default function CardGame() {
         : createStarterDeck(fallbackFactionId);
       const safeCards = safeCardsSource.map((card, index) => {
         const legacyCard = card as any;
+        const artUrl =
+          typeof card?.artUrl === "string" && card.artUrl.trim() ? card.artUrl : undefined;
         const ownerFactionId =
           typeof card?.ownerFactionId === "string" && factionIds.has(card.ownerFactionId)
             ? card.ownerFactionId
@@ -757,6 +832,13 @@ export default function CardGame() {
               : "",
           ownerFactionId,
           imageUrl: typeof card?.imageUrl === "string" ? card.imageUrl : undefined,
+          artUrl,
+          artPlacement: artUrl
+            ? normalizeCardArtPlacement(
+                card?.artPlacement as Partial<CardArtPlacement> | undefined,
+                DEFAULT_CARD_ART_PLACEMENT
+              )
+            : undefined,
           location: { type: "hand", ownerFactionId },
         };
 
@@ -1229,7 +1311,7 @@ export default function CardGame() {
       skipNextSaveRef.current = false;
       return;
     }
-    const nextUpdatedAt = Date.now();
+    const baseUpdatedAt = lastUpdatedAtRef.current;
     const state: PersistedCardGameState = {
       phase,
       redeployStage,
@@ -1247,7 +1329,9 @@ export default function CardGame() {
       factions,
       spyReportEvent,
       matchLog,
-      updatedAt: nextUpdatedAt,
+      // Send the last server-acknowledged timestamp for optimistic concurrency.
+      // The server will stamp and return the authoritative updatedAt on success.
+      updatedAt: baseUpdatedAt,
     };
     saveQueuedRef.current = true;
     let requestStarted = false;
@@ -1332,6 +1416,14 @@ export default function CardGame() {
     }
     return map;
   }, [cards]);
+
+  const focusCardPreview = useCallback(
+    (card: GameCard, includeAttached: boolean) => {
+      const attached = includeAttached ? attachedSupport.get(card.id) ?? [] : [];
+      setFocusedCardIds([card.id, ...attached.map((support) => support.id)]);
+    },
+    [attachedSupport]
+  );
 
   const rowScores = useMemo(() => {
     const scores = new Map<string, number>();
@@ -1519,20 +1611,17 @@ export default function CardGame() {
       abilityDescription: card.abilityDescription,
       ownerFactionId: card.ownerFactionId,
       imageUrl: card.imageUrl ?? "",
+      artUrl: card.artUrl ?? "",
+      artPlacement: normalizeCardArtPlacement(card.artPlacement, DEFAULT_CARD_ART_PLACEMENT),
     });
   };
 
   const addNewCard = () => {
     setEditorCardId("new");
     setEditorData({
+      ...createDefaultEditorData(selectedFactionId ?? factions[0]?.id ?? "faction-a"),
       name: "New Card",
-      type: "fighter",
       score: 1,
-      descriptor: "",
-      abilityName: "",
-      abilityDescription: "",
-      ownerFactionId: selectedFactionId ?? factions[0]?.id ?? "faction-a",
-      imageUrl: "",
     });
   };
 
@@ -1549,6 +1638,10 @@ export default function CardGame() {
         abilityDescription: editorData.abilityDescription,
         ownerFactionId: editorData.ownerFactionId,
         imageUrl: editorData.imageUrl || undefined,
+        artUrl: editorData.artUrl || undefined,
+        artPlacement: editorData.artUrl
+          ? normalizeCardArtPlacement(editorData.artPlacement, DEFAULT_CARD_ART_PLACEMENT)
+          : undefined,
         location: { type: "hand", ownerFactionId: editorData.ownerFactionId },
       };
       setCards((prev) => [newCard, ...prev]);
@@ -1566,6 +1659,10 @@ export default function CardGame() {
                 abilityDescription: editorData.abilityDescription,
                 ownerFactionId: editorData.ownerFactionId,
                 imageUrl: editorData.imageUrl || undefined,
+                artUrl: editorData.artUrl || undefined,
+                artPlacement: editorData.artUrl
+                  ? normalizeCardArtPlacement(editorData.artPlacement, DEFAULT_CARD_ART_PLACEMENT)
+                  : undefined,
                 location:
                   card.ownerFactionId !== editorData.ownerFactionId
                     ? { type: "hand", ownerFactionId: editorData.ownerFactionId }
@@ -1606,6 +1703,90 @@ export default function CardGame() {
     if (!url) return;
     setEditorData((prev) => ({ ...prev, imageUrl: url }));
   };
+
+  const handleCharacterArtUpload = async (file: File) => {
+    const url = await uploadImageAsset(file);
+    if (!url) return;
+    setEditorData((prev) => ({
+      ...prev,
+      artUrl: url,
+      artPlacement: { ...DEFAULT_CARD_ART_PLACEMENT },
+    }));
+  };
+
+  const clearCharacterArt = useCallback(() => {
+    setEditorData((prev) => ({
+      ...prev,
+      artUrl: "",
+      artPlacement: { ...DEFAULT_CARD_ART_PLACEMENT },
+    }));
+  }, []);
+
+  const clearCardImageOverride = useCallback(() => {
+    setEditorData((prev) => ({ ...prev, imageUrl: "" }));
+  }, []);
+
+  const updateEditorArtPlacement = useCallback((patch: Partial<CardArtPlacement>) => {
+    setEditorData((prev) => ({
+      ...prev,
+      artPlacement: normalizeCardArtPlacement(
+        {
+          ...prev.artPlacement,
+          ...patch,
+        },
+        prev.artPlacement
+      ),
+    }));
+  }, []);
+
+  const resetEditorArtPlacement = useCallback(() => {
+    setEditorData((prev) => ({
+      ...prev,
+      artPlacement: { ...DEFAULT_CARD_ART_PLACEMENT },
+    }));
+  }, []);
+
+  const startEditorArtDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!editorData.artUrl || editorData.imageUrl) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      cardArtDragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: editorData.artPlacement.offsetX,
+        originY: editorData.artPlacement.offsetY,
+        width: rect.width,
+        height: rect.height,
+      };
+    },
+    [editorData.artPlacement.offsetX, editorData.artPlacement.offsetY, editorData.artUrl, editorData.imageUrl]
+  );
+
+  const moveEditorArtDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = cardArtDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const deltaX = ((event.clientX - drag.startX) / drag.width) * 100;
+      const deltaY = ((event.clientY - drag.startY) / drag.height) * 100;
+      updateEditorArtPlacement({
+        offsetX: drag.originX + deltaX,
+        offsetY: drag.originY + deltaY,
+      });
+    },
+    [updateEditorArtPlacement]
+  );
+
+  const endEditorArtDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = cardArtDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    cardArtDragRef.current = null;
+  }, []);
 
   const uploadImageAsset = async (file: File): Promise<string | null> => {
     try {
@@ -1908,6 +2089,44 @@ export default function CardGame() {
     const intent = dragIntentRef.current;
     if (intent?.pointerId === event.pointerId) {
       dragIntentRef.current = null;
+    }
+  };
+
+  const beginBoardDragIntent = (
+    event: React.PointerEvent<HTMLDivElement>,
+    card: GameCard
+  ) => {
+    if (event.button !== 0) return;
+    if (!canDragCard(card)) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    boardDragIntentRef.current = {
+      cardId: card.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      dragging: false,
+      pointerId: event.pointerId,
+    };
+  };
+
+  const updateBoardDragIntent = (
+    event: React.PointerEvent<HTMLDivElement>,
+    card: GameCard
+  ) => {
+    const intent = boardDragIntentRef.current;
+    if (!intent || intent.cardId !== card.id) return;
+    if (intent.dragging) return;
+    const distance = Math.hypot(event.clientX - intent.startX, event.clientY - intent.startY);
+    if (distance > 8) {
+      intent.dragging = true;
+      recentBoardDragCardIdRef.current = card.id;
+      startDrag(event, card, { ignoreButton: true });
+    }
+  };
+
+  const endBoardDragIntent = (event: React.PointerEvent<HTMLDivElement>) => {
+    const intent = boardDragIntentRef.current;
+    if (intent?.pointerId === event.pointerId) {
+      boardDragIntentRef.current = null;
     }
   };
 
@@ -2519,13 +2738,14 @@ export default function CardGame() {
 
   const renderCard = (
     card: GameCard,
-    options?: { isDragging?: boolean; hidden?: boolean; size?: "default" | "sidebar" }
+    options?: { isDragging?: boolean; hidden?: boolean; size?: "default" | "sidebar" | "library" }
   ) => {
     const isDragging = options?.isDragging;
     const hidden = options?.hidden;
     const isSidebar = options?.size === "sidebar";
+    const isLibrary = options?.size === "library";
     const sizeClass =
-      isSidebar ? "w-full aspect-[2/3]" : "h-24 w-16";
+      isSidebar || isLibrary ? "w-full aspect-[2/3]" : "h-24 w-16";
     const fallbackColor = DEFAULT_FACTION_COLORS[0] ?? "#10b981";
     const ownerColor = normalizeHexColor(getFactionById(card.ownerFactionId)?.color, fallbackColor);
     const ownerLabel = getFactionById(card.ownerFactionId)?.name ?? "Faction";
@@ -2537,8 +2757,14 @@ export default function CardGame() {
       .slice(0, 2)
       .toUpperCase();
     const cardTemplate = cardTemplates[card.type];
-    const cardFaceUrl = card.imageUrl || cardTemplate?.templateUrl;
-    const shouldRenderOverlayText = Boolean(isSidebar && cardTemplate?.templateUrl && !hidden);
+    const hasFullCardOverride = Boolean(card.imageUrl);
+    const hasTemplateFrame = Boolean(cardTemplate?.templateUrl);
+    const hasLayeredArt = Boolean(!hasFullCardOverride && card.artUrl && hasTemplateFrame);
+    const cardFaceUrl = hasFullCardOverride ? card.imageUrl : cardTemplate?.templateUrl;
+    const artPlacement = normalizeCardArtPlacement(card.artPlacement, DEFAULT_CARD_ART_PLACEMENT);
+    const shouldRenderOverlayText = Boolean(
+      (isSidebar || isLibrary) && cardTemplate?.templateUrl && !hidden
+    );
     const textByField: Record<TemplateFieldKey, string> = {
       name: card.name,
       descriptor: card.descriptor,
@@ -2548,11 +2774,11 @@ export default function CardGame() {
     };
     return (
       <div
-        className={`relative ${sizeClass} rounded-xl ${cardFaceUrl && !hidden ? "border border-transparent bg-transparent" : "border border-white/30"} shadow-[0_14px_28px_rgba(15,23,42,0.35)] transition-transform duration-200 ease-out ${
+        className={`relative ${sizeClass} rounded-xl ${cardFaceUrl || hasLayeredArt ? "border border-transparent bg-transparent" : "border border-white/30"} shadow-[0_14px_28px_rgba(15,23,42,0.35)] transition-transform duration-200 ease-out ${
           isDragging ? "scale-105" : "hover:-translate-y-1"
         } ${hidden ? "opacity-60" : ""}`}
         style={
-          cardFaceUrl && !hidden
+          (cardFaceUrl || hasLayeredArt) && !hidden
             ? undefined
             : {
                 background: `linear-gradient(135deg, ${rgbaFromHex(ownerColor, 0.95)} 0%, ${rgbaFromHex(
@@ -2562,14 +2788,37 @@ export default function CardGame() {
               }
         }
       >
-        {cardFaceUrl && !hidden ? (
+        {(cardFaceUrl || hasLayeredArt) && !hidden ? (
           <>
-            <img
-              src={cardFaceUrl}
-              alt={card.name}
-              className="absolute inset-0 h-full w-full rounded-xl object-cover"
-            />
-            <div className="absolute inset-0 rounded-xl bg-black/20" />
+            {hasLayeredArt ? (
+              <>
+                <div className="absolute inset-0 overflow-hidden rounded-xl bg-slate-950/70">
+                  <img
+                    src={card.artUrl}
+                    alt={card.name}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{
+                      transform: `translate(${artPlacement.offsetX}%, ${artPlacement.offsetY}%) scale(${artPlacement.scale})`,
+                      transformOrigin: "center center",
+                    }}
+                  />
+                </div>
+                <img
+                  src={cardTemplate?.templateUrl}
+                  alt={`${card.type} template`}
+                  className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                />
+              </>
+            ) : cardFaceUrl ? (
+              <>
+                <img
+                  src={cardFaceUrl}
+                  alt={card.name}
+                  className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                />
+                <div className="absolute inset-0 rounded-xl bg-black/20" />
+              </>
+            ) : null}
             {shouldRenderOverlayText ? (
               <div className="pointer-events-none absolute inset-0 z-10 rounded-xl text-black">
                 {(Object.keys(textByField) as TemplateFieldKey[]).map((fieldKey) => {
@@ -2632,9 +2881,15 @@ export default function CardGame() {
           document.body
         )
       : null;
-  const focusedCard = focusedCardId
-    ? cards.find((card) => card.id === focusedCardId) ?? null
-    : null;
+  const focusedCards = useMemo(
+    () =>
+      focusedCardIds
+        .map((focusedCardId) => cards.find((card) => card.id === focusedCardId) ?? null)
+        .filter((card): card is GameCard => Boolean(card)),
+    [cards, focusedCardIds]
+  );
+  const primaryFocusedCard = focusedCards[0] ?? null;
+  const focusedCard = primaryFocusedCard;
   const activeBattlefield = getBattlefieldById(activeBattlefieldId);
   const viewerLaneIndex =
     activeBattlefield && viewFactionId
@@ -2685,9 +2940,291 @@ export default function CardGame() {
       !(phase === "redeploy" && currentRedeployStage === "place" && !currentRedeployIds.includes(card.id))
   );
   const templateEditorConfig = cardTemplates[templateEditorType];
+  const editorTemplateConfig = cardTemplates[editorData.type];
   const copyToTemplateTargets = (["fighter", "spy", "support"] as CardType[]).filter(
     (type) => type !== templateEditorType
   );
+  const editorPreviewTextByField: Record<TemplateFieldKey, string> = {
+    name: editorData.name || "Card Name",
+    descriptor: editorData.descriptor || "Descriptor",
+    abilityName: editorData.abilityName || "Ability Name",
+    abilityDescription: editorData.abilityDescription || "Ability text preview",
+    score: `Score: ${Number.isNaN(editorData.score) ? 0 : editorData.score}`,
+  };
+
+  const renderEditorArtComposer = (options: {
+    artUploadInputId: string;
+    imageUploadInputId: string;
+  }) => {
+    const hasTemplate = Boolean(editorTemplateConfig?.templateUrl);
+    const hasFullImageOverride = Boolean(editorData.imageUrl);
+    const hasLayeredArtPreview = Boolean(!hasFullImageOverride && editorData.artUrl && hasTemplate);
+    const previewPlacement = normalizeCardArtPlacement(
+      editorData.artPlacement,
+      DEFAULT_CARD_ART_PLACEMENT
+    );
+    const artControlsDisabled = !editorData.artUrl || hasFullImageOverride;
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+            Character Art
+          </label>
+          <div className="mt-2 grid gap-4 lg:grid-cols-[220px_1fr]">
+            <div className="space-y-2">
+              <div
+                className={`relative aspect-[2/3] overflow-hidden rounded-xl border border-white/20 bg-slate-900/70 ${
+                  editorData.artUrl && !hasFullImageOverride
+                    ? "cursor-grab touch-none active:cursor-grabbing"
+                    : ""
+                }`}
+                onPointerDown={startEditorArtDrag}
+                onPointerMove={moveEditorArtDrag}
+                onPointerUp={endEditorArtDrag}
+                onPointerCancel={endEditorArtDrag}
+              >
+                {hasFullImageOverride ? (
+                  <img
+                    src={editorData.imageUrl}
+                    alt={`${editorData.name || "Card"} full override`}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : hasLayeredArtPreview ? (
+                  <>
+                    <img
+                      src={editorData.artUrl}
+                      alt={`${editorData.name || "Card"} character art`}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      style={{
+                        transform: `translate(${previewPlacement.offsetX}%, ${previewPlacement.offsetY}%) scale(${previewPlacement.scale})`,
+                        transformOrigin: "center center",
+                      }}
+                    />
+                    <img
+                      src={editorTemplateConfig.templateUrl}
+                      alt={`${editorData.type} template`}
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  </>
+                ) : hasTemplate ? (
+                  <img
+                    src={editorTemplateConfig.templateUrl}
+                    alt={`${editorData.type} template`}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : editorData.artUrl ? (
+                  <img
+                    src={editorData.artUrl}
+                    alt={`${editorData.name || "Card"} character art`}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{
+                      transform: `translate(${previewPlacement.offsetX}%, ${previewPlacement.offsetY}%) scale(${previewPlacement.scale})`,
+                      transformOrigin: "center center",
+                    }}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-xs text-white/50">
+                    Upload character art to preview it inside the card.
+                  </div>
+                )}
+                {hasTemplate ? (
+                  <div className="pointer-events-none absolute inset-0 z-10 text-black">
+                    {(Object.keys(editorTemplateConfig.fields) as TemplateFieldKey[]).map((fieldKey) => {
+                      const field = editorTemplateConfig.fields[fieldKey];
+                      return (
+                        <div
+                          key={fieldKey}
+                          className="absolute overflow-hidden"
+                          style={{
+                            left: `${field.x}%`,
+                            top: `${field.y}%`,
+                            width: `${field.width}%`,
+                            height: `${field.height}%`,
+                          }}
+                        >
+                          <AutoFitText text={editorPreviewTextByField[fieldKey]} field={field} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {editorData.artUrl && !hasFullImageOverride ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-slate-950/70 px-2 py-1 text-center text-[10px] uppercase tracking-[0.2em] text-white/70">
+                    Drag to reposition art
+                  </div>
+                ) : null}
+              </div>
+              <div className="text-[11px] text-white/55">
+                {hasFullImageOverride
+                  ? "Full-card override is active. Clear it to preview the layered template + character art version."
+                  : hasTemplate
+                  ? "Your character art sits below the template, so any transparent cutouts will reveal it."
+                  : "Upload a template for this card type to see the final layered card preview."}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  onClick={() => {
+                    const input = document.getElementById(options.artUploadInputId);
+                    if (input) input.click();
+                  }}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Character Art
+                </Button>
+                <input
+                  id={options.artUploadInputId}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      handleCharacterArtUpload(file);
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={clearCharacterArt}
+                  className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  disabled={!editorData.artUrl}
+                >
+                  Clear
+                </Button>
+                {editorData.artUrl ? (
+                  <span className="text-xs text-white/60">Character art ready</span>
+                ) : null}
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                  <span>Zoom</span>
+                  <span>{previewPlacement.scale.toFixed(2)}x</span>
+                </div>
+                <div className="mt-3">
+                  <Slider
+                    value={[previewPlacement.scale]}
+                    onValueChange={(values) =>
+                      updateEditorArtPlacement({
+                        scale: values[0] ?? previewPlacement.scale,
+                      })
+                    }
+                    min={1}
+                    max={4}
+                    step={0.05}
+                    disabled={artControlsDisabled}
+                    className="[&_[role=slider]]:border-cyan-300 [&_[role=slider]]:bg-slate-950 [&_[data-disabled]]:opacity-50"
+                  />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[10px] uppercase tracking-[0.2em] text-white/60">
+                      X Offset %
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      value={previewPlacement.offsetX}
+                      onChange={(event) =>
+                        updateEditorArtPlacement({
+                          offsetX: Number(event.target.value),
+                        })
+                      }
+                      disabled={artControlsDisabled}
+                      className="border-white/20 bg-slate-900/80 text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] uppercase tracking-[0.2em] text-white/60">
+                      Y Offset %
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      value={previewPlacement.offsetY}
+                      onChange={(event) =>
+                        updateEditorArtPlacement({
+                          offsetY: Number(event.target.value),
+                        })
+                      }
+                      disabled={artControlsDisabled}
+                      className="border-white/20 bg-slate-900/80 text-xs text-white"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetEditorArtPlacement}
+                    disabled={artControlsDisabled}
+                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Reset Position
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                  Full Card Image Override (Optional)
+                </label>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                    onClick={() => {
+                      const input = document.getElementById(options.imageUploadInputId);
+                      if (input) input.click();
+                    }}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Override
+                  </Button>
+                  <input
+                    id={options.imageUploadInputId}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) handleImageUpload(file);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={clearCardImageOverride}
+                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                    disabled={!editorData.imageUrl}
+                  >
+                    Clear
+                  </Button>
+                  {editorData.imageUrl ? (
+                    <span className="text-xs text-white/60">Override active</span>
+                  ) : null}
+                </div>
+                <div className="mt-2 text-[11px] text-white/50">
+                  This replaces the layered template preview for the final saved card. Leave it empty
+                  if you want the uploaded character art to show through the template.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   if (!selectedFactionId) {
     return (
@@ -3054,8 +3591,15 @@ export default function CardGame() {
                                           cardRefs.current[card.id] = el;
                                         }}
                                         className="touch-none select-none"
-                                        onPointerDown={(event) => startDrag(event, card)}
+                                        onPointerDown={(event) => beginBoardDragIntent(event, card)}
+                                        onPointerMove={(event) => updateBoardDragIntent(event, card)}
+                                        onPointerUp={endBoardDragIntent}
+                                        onPointerCancel={endBoardDragIntent}
                                         onClick={() => {
+                                          if (recentBoardDragCardIdRef.current === card.id) {
+                                            recentBoardDragCardIdRef.current = null;
+                                            return;
+                                          }
                                           if (
                                             phase === "redeploy" &&
                                             currentRedeployStage === "select" &&
@@ -3064,6 +3608,7 @@ export default function CardGame() {
                                           ) {
                                             toggleRedeploySelection(card.id);
                                           }
+                                          focusCardPreview(card, true);
                                         }}
                                       >
                                         <div
@@ -3365,7 +3910,7 @@ export default function CardGame() {
                         onPointerUp={endSidebarDragIntent}
                         onClick={() => {
                           if (dragIntentRef.current?.dragging) return;
-                          setFocusedCardId(card.id);
+                          setFocusedCardIds([card.id]);
                         }}
                       >
                         {renderCard(card, { size: "sidebar" })}
@@ -3469,26 +4014,36 @@ export default function CardGame() {
       {focusedCard && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-6"
-          onClick={() => setFocusedCardId(null)}
+          onClick={() => setFocusedCardIds([])}
         >
           <div className="relative" onClick={(event) => event.stopPropagation()}>
             <Button
               size="sm"
               onClick={() => {
-                openEditor(focusedCard);
-                setFocusedCardId(null);
+                if (!primaryFocusedCard) return;
+                openEditor(primaryFocusedCard);
+                setFocusedCardIds([]);
               }}
               className="absolute -top-10 right-0 border border-white/20 bg-white/10 text-xs uppercase tracking-[0.2em] text-white hover:bg-white/20"
             >
               Edit
             </Button>
-            <div className="max-h-[972px] w-[28rem] max-w-[1728px] space-y-4 rounded-3xl border border-white/20 bg-slate-950/90 p-5 text-white shadow-[0_30px_70px_rgba(2,6,23,0.6)]">
+            <div className="max-h-[972px] w-[40rem] max-w-[1728px] space-y-4 rounded-3xl border border-white/20 bg-slate-950/90 p-5 text-white shadow-[0_30px_70px_rgba(2,6,23,0.6)]">
               <div className="mx-auto w-full max-w-[22rem]">
                 {renderCard(focusedCard, { size: "sidebar" })}
               </div>
+              {focusedCards.length > 1 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {focusedCards.slice(1).map((card) => (
+                    <div key={`focused-extra-${card.id}`} className="mx-auto w-full max-w-[14rem]">
+                      {renderCard(card, { size: "sidebar" })}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <div className="space-y-2 text-center">
                 <div className="text-xs uppercase tracking-[0.3em] text-white/60">
-                  {focusedCard.type} · {getFactionName(focusedCard.ownerFactionId)}
+                  {focusedCard.type} - {getFactionName(focusedCard.ownerFactionId)}
                 </div>
                 <div className="text-xl font-semibold">{focusedCard.name}</div>
                 {focusedCard.descriptor ? (
@@ -3563,7 +4118,6 @@ export default function CardGame() {
             <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {factionLibraryCards.map((card) => {
-                  const previewUrl = card.imageUrl || cardTemplates[card.type]?.templateUrl;
                   return (
                     <button
                       key={card.id}
@@ -3571,17 +4125,9 @@ export default function CardGame() {
                       onClick={() => openEditor(card)}
                       className="rounded-xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-white/30"
                     >
-                      {previewUrl ? (
-                        <img
-                          src={previewUrl}
-                          alt={card.name}
-                          className="h-28 w-full rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-white/20 text-xs text-white/50">
-                          No Art
-                        </div>
-                      )}
+                      <div className="mx-auto w-full max-w-[9rem]">
+                        {renderCard(card, { size: "library" })}
+                      </div>
                       <div className="mt-3 flex items-center justify-between text-xs uppercase tracking-[0.2em] text-white/60">
                         <span>{card.type}</span>
                         <span>{card.score} score</span>
@@ -3687,38 +4233,10 @@ export default function CardGame() {
                         className="mt-2 border-white/20 bg-slate-900/80 text-white placeholder:text-white/40"
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
-                        Card Image Override (Optional)
-                      </label>
-                      <div className="mt-2 flex items-center gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                          onClick={() => {
-                            const input = document.getElementById("card-art-upload-library");
-                            if (input) input.click();
-                          }}
-                        >
-                          <Upload className="mr-2 h-4 w-4" />
-                          Upload
-                        </Button>
-                        <input
-                          id="card-art-upload-library"
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) handleImageUpload(file);
-                          }}
-                        />
-                        {editorData.imageUrl && (
-                          <span className="text-xs text-white/60">Image selected</span>
-                        )}
-                      </div>
-                    </div>
+                    {renderEditorArtComposer({
+                      artUploadInputId: "card-character-art-upload-library",
+                      imageUploadInputId: "card-art-upload-library",
+                    })}
                     <div className="flex flex-wrap justify-end gap-2">
                       {editorCardId !== "new" && (
                         <Button
@@ -4188,38 +4706,10 @@ export default function CardGame() {
                 {getFactionName(editorData.ownerFactionId)}
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
-                Card Image Override (Optional)
-              </label>
-              <div className="mt-2 flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                  onClick={() => {
-                    const input = document.getElementById("card-art-upload");
-                    if (input) input.click();
-                  }}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload
-                </Button>
-                <input
-                  id="card-art-upload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) handleImageUpload(file);
-                  }}
-                />
-                {editorData.imageUrl && (
-                  <span className="text-xs text-white/60">Image selected</span>
-                )}
-              </div>
-            </div>
+            {renderEditorArtComposer({
+              artUploadInputId: "card-character-art-upload",
+              imageUploadInputId: "card-art-upload",
+            })}
           </div>
           <div className="flex justify-end gap-2">
             {editorCardId && editorCardId !== "new" && (
@@ -4423,4 +4913,5 @@ export default function CardGame() {
     </div>
   );
 }
+
 
