@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 
 type CardType = "fighter" | "spy" | "support";
@@ -74,6 +73,10 @@ type CardArtPlacement = {
   offsetX: number;
   offsetY: number;
   scale: number;
+  cropLeft: number;
+  cropTop: number;
+  cropRight: number;
+  cropBottom: number;
 };
 
 type CardTemplateLayout = {
@@ -93,6 +96,40 @@ type EditorCardData = {
   artUrl: string;
   artPlacement: CardArtPlacement;
 };
+
+type CardArtHandle = "nw" | "ne" | "sw" | "se";
+
+type CardArtInteraction =
+  | {
+      kind: "move";
+      pointerId: number;
+      startX: number;
+      startY: number;
+      originX: number;
+      originY: number;
+      width: number;
+      height: number;
+    }
+  | {
+      kind: "scale";
+      pointerId: number;
+      startX: number;
+      startY: number;
+      originScale: number;
+      handle: CardArtHandle;
+      width: number;
+      height: number;
+    }
+  | {
+      kind: "crop";
+      pointerId: number;
+      startX: number;
+      startY: number;
+      originPlacement: CardArtPlacement;
+      handle: CardArtHandle;
+      width: number;
+      height: number;
+    };
 
 type Faction = {
   id: string;
@@ -359,7 +396,13 @@ const DEFAULT_CARD_ART_PLACEMENT: CardArtPlacement = {
   offsetX: 0,
   offsetY: 0,
   scale: 1,
+  cropLeft: 0,
+  cropTop: 0,
+  cropRight: 0,
+  cropBottom: 0,
 };
+
+const MIN_CARD_ART_VISIBLE_PERCENT = 8;
 
 const clampCardArtOffset = (value: unknown, fallback: number) => {
   const numeric = Number(value);
@@ -370,16 +413,54 @@ const clampCardArtOffset = (value: unknown, fallback: number) => {
 const clampCardArtScale = (value: unknown, fallback: number) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(1, Math.min(4, numeric));
+  return Math.max(0.35, Math.min(4, numeric));
+};
+
+const clampCardArtCrop = (value: unknown, fallback: number) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(92, numeric));
 };
 
 const normalizeCardArtPlacement = (
   raw: Partial<CardArtPlacement> | undefined,
   fallback: CardArtPlacement = DEFAULT_CARD_ART_PLACEMENT
-): CardArtPlacement => ({
-  offsetX: clampCardArtOffset(raw?.offsetX, fallback.offsetX),
-  offsetY: clampCardArtOffset(raw?.offsetY, fallback.offsetY),
-  scale: clampCardArtScale(raw?.scale, fallback.scale),
+): CardArtPlacement => {
+  let cropLeft = clampCardArtCrop(raw?.cropLeft, fallback.cropLeft);
+  let cropTop = clampCardArtCrop(raw?.cropTop, fallback.cropTop);
+  let cropRight = clampCardArtCrop(raw?.cropRight, fallback.cropRight);
+  let cropBottom = clampCardArtCrop(raw?.cropBottom, fallback.cropBottom);
+  const maxCropTotal = 100 - MIN_CARD_ART_VISIBLE_PERCENT;
+  const horizontalCropTotal = cropLeft + cropRight;
+  if (horizontalCropTotal > maxCropTotal && horizontalCropTotal > 0) {
+    const ratio = maxCropTotal / horizontalCropTotal;
+    cropLeft *= ratio;
+    cropRight *= ratio;
+  }
+  const verticalCropTotal = cropTop + cropBottom;
+  if (verticalCropTotal > maxCropTotal && verticalCropTotal > 0) {
+    const ratio = maxCropTotal / verticalCropTotal;
+    cropTop *= ratio;
+    cropBottom *= ratio;
+  }
+  return {
+    offsetX: clampCardArtOffset(raw?.offsetX, fallback.offsetX),
+    offsetY: clampCardArtOffset(raw?.offsetY, fallback.offsetY),
+    scale: clampCardArtScale(raw?.scale, fallback.scale),
+    cropLeft: Number(cropLeft.toFixed(3)),
+    cropTop: Number(cropTop.toFixed(3)),
+    cropRight: Number(cropRight.toFixed(3)),
+    cropBottom: Number(cropBottom.toFixed(3)),
+  };
+};
+
+const getCardArtWrapperStyle = (placement: CardArtPlacement) => ({
+  clipPath: `inset(${placement.cropTop}% ${placement.cropRight}% ${placement.cropBottom}% ${placement.cropLeft}%)`,
+});
+
+const getCardArtImageStyle = (placement: CardArtPlacement) => ({
+  transform: `translate(${placement.offsetX}%, ${placement.offsetY}%) scale(${placement.scale})`,
+  transformOrigin: "center center" as const,
 });
 
 const createDefaultEditorData = (ownerFactionId: string): EditorCardData => ({
@@ -553,6 +634,8 @@ export default function CardGame() {
   const [templateEditorType, setTemplateEditorType] = useState<CardType>("fighter");
   const [selectedTemplateField, setSelectedTemplateField] = useState<TemplateFieldKey>("name");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [artEditorOpen, setArtEditorOpen] = useState(false);
+  const [artEditorCropMode, setArtEditorCropMode] = useState(false);
   const [pendingTemplateCopyTarget, setPendingTemplateCopyTarget] = useState<CardType | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [librarySortKey, setLibrarySortKey] = useState<"type" | "score">("type");
@@ -589,15 +672,7 @@ export default function CardGame() {
   const latestCardsRef = useRef<GameCard[]>([]);
   const lastSeenSpyReportIdsRef = useRef<Map<string, string>>(new Map());
   const lastShownResultsRoundRef = useRef<number | null>(null);
-  const cardArtDragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-    width: number;
-    height: number;
-  } | null>(null);
+  const cardArtInteractionRef = useRef<CardArtInteraction | null>(null);
   const dragIntentRef = useRef<{
     cardId: string;
     startX: number;
@@ -641,6 +716,13 @@ export default function CardGame() {
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
   }, []);
+
+  useEffect(() => {
+    if (editorCardId) return;
+    setArtEditorOpen(false);
+    setArtEditorCropMode(false);
+    cardArtInteractionRef.current = null;
+  }, [editorCardId]);
 
   const factionMap = useMemo(() => {
     const map = new Map<string, Faction>();
@@ -1746,13 +1828,32 @@ export default function CardGame() {
     }));
   }, []);
 
-  const startEditorArtDrag = useCallback(
+  const resetEditorArtCrop = useCallback(() => {
+    setEditorData((prev) => ({
+      ...prev,
+      artPlacement: normalizeCardArtPlacement(
+        {
+          ...prev.artPlacement,
+          cropLeft: 0,
+          cropTop: 0,
+          cropRight: 0,
+          cropBottom: 0,
+        },
+        prev.artPlacement
+      ),
+    }));
+  }, []);
+
+  const startEditorArtMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!editorData.artUrl || editorData.imageUrl) return;
-      const rect = event.currentTarget.getBoundingClientRect();
+      const container = event.currentTarget.closest("[data-art-canvas]");
+      if (!(container instanceof HTMLElement)) return;
+      const rect = container.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
-      event.currentTarget.setPointerCapture(event.pointerId);
-      cardArtDragRef.current = {
+      container.setPointerCapture(event.pointerId);
+      cardArtInteractionRef.current = {
+        kind: "move",
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
@@ -1765,27 +1866,100 @@ export default function CardGame() {
     [editorData.artPlacement.offsetX, editorData.artPlacement.offsetY, editorData.artUrl, editorData.imageUrl]
   );
 
-  const moveEditorArtDrag = useCallback(
+  const startEditorArtHandleDrag = useCallback(
+    (handle: CardArtHandle, event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (!editorData.artUrl || editorData.imageUrl) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const container = event.currentTarget.closest("[data-art-canvas]");
+      if (!(container instanceof HTMLElement)) return;
+      const rect = container.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      container.setPointerCapture(event.pointerId);
+      cardArtInteractionRef.current = artEditorCropMode
+        ? {
+            kind: "crop",
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            originPlacement: { ...editorData.artPlacement },
+            handle,
+            width: rect.width,
+            height: rect.height,
+          }
+        : {
+            kind: "scale",
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            originScale: editorData.artPlacement.scale,
+            handle,
+            width: rect.width,
+            height: rect.height,
+          };
+    },
+    [artEditorCropMode, editorData.artPlacement, editorData.artUrl, editorData.imageUrl]
+  );
+
+  const moveEditorArtInteraction = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      const drag = cardArtDragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      const deltaX = ((event.clientX - drag.startX) / drag.width) * 100;
-      const deltaY = ((event.clientY - drag.startY) / drag.height) * 100;
-      updateEditorArtPlacement({
-        offsetX: drag.originX + deltaX,
-        offsetY: drag.originY + deltaY,
-      });
+      const interaction = cardArtInteractionRef.current;
+      if (!interaction || interaction.pointerId !== event.pointerId) return;
+      const deltaX = ((event.clientX - interaction.startX) / interaction.width) * 100;
+      const deltaY = ((event.clientY - interaction.startY) / interaction.height) * 100;
+      if (interaction.kind === "move") {
+        updateEditorArtPlacement({
+          offsetX: interaction.originX + deltaX,
+          offsetY: interaction.originY + deltaY,
+        });
+        return;
+      }
+      if (interaction.kind === "scale") {
+        const resizeIntent =
+          interaction.handle === "se"
+            ? Math.max(deltaX, deltaY)
+            : interaction.handle === "nw"
+            ? Math.max(-deltaX, -deltaY)
+            : interaction.handle === "ne"
+            ? Math.max(deltaX, -deltaY)
+            : Math.max(-deltaX, deltaY);
+        const nextScale = interaction.originScale * (1 + resizeIntent / 80);
+        updateEditorArtPlacement({ scale: nextScale });
+        return;
+      }
+      const origin = interaction.originPlacement;
+      if (interaction.handle === "nw") {
+        updateEditorArtPlacement({
+          cropLeft: origin.cropLeft + deltaX,
+          cropTop: origin.cropTop + deltaY,
+        });
+      } else if (interaction.handle === "ne") {
+        updateEditorArtPlacement({
+          cropRight: origin.cropRight - deltaX,
+          cropTop: origin.cropTop + deltaY,
+        });
+      } else if (interaction.handle === "sw") {
+        updateEditorArtPlacement({
+          cropLeft: origin.cropLeft + deltaX,
+          cropBottom: origin.cropBottom - deltaY,
+        });
+      } else {
+        updateEditorArtPlacement({
+          cropRight: origin.cropRight - deltaX,
+          cropBottom: origin.cropBottom - deltaY,
+        });
+      }
     },
     [updateEditorArtPlacement]
   );
 
-  const endEditorArtDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = cardArtDragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
+  const endEditorArtInteraction = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    const interaction = cardArtInteractionRef.current;
+    if (!interaction || interaction.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    cardArtDragRef.current = null;
+    cardArtInteractionRef.current = null;
   }, []);
 
   const uploadImageAsset = async (file: File): Promise<string | null> => {
@@ -2792,21 +2966,21 @@ export default function CardGame() {
           <>
             {hasLayeredArt ? (
               <>
-                <div className="absolute inset-0 overflow-hidden rounded-xl bg-slate-950/70">
+                <div
+                  className="absolute inset-0 overflow-hidden rounded-xl bg-slate-950/70"
+                  style={getCardArtWrapperStyle(artPlacement)}
+                >
                   <img
                     src={card.artUrl}
                     alt={card.name}
                     className="absolute inset-0 h-full w-full object-cover"
-                    style={{
-                      transform: `translate(${artPlacement.offsetX}%, ${artPlacement.offsetY}%) scale(${artPlacement.scale})`,
-                      transformOrigin: "center center",
-                    }}
+                    style={getCardArtImageStyle(artPlacement)}
                   />
                 </div>
                 <img
                   src={cardTemplate?.templateUrl}
                   alt={`${card.type} template`}
-                  className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                  className="pointer-events-none absolute inset-0 h-full w-full rounded-xl object-cover"
                 />
               </>
             ) : cardFaceUrl ? (
@@ -2951,278 +3125,399 @@ export default function CardGame() {
     abilityDescription: editorData.abilityDescription || "Ability text preview",
     score: `Score: ${Number.isNaN(editorData.score) ? 0 : editorData.score}`,
   };
+  const editorPreviewPlacement = normalizeCardArtPlacement(
+    editorData.artPlacement,
+    DEFAULT_CARD_ART_PLACEMENT
+  );
+  const editorHasCrop =
+    editorPreviewPlacement.cropLeft > 0 ||
+    editorPreviewPlacement.cropTop > 0 ||
+    editorPreviewPlacement.cropRight > 0 ||
+    editorPreviewPlacement.cropBottom > 0;
 
-  const renderEditorArtComposer = (options: {
-    artUploadInputId: string;
-    imageUploadInputId: string;
-  }) => {
+  const renderEditorArtLauncher = () => (
+    <div className="space-y-2">
+      <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+        Character Art
+      </label>
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1 text-xs text-white/60">
+            <div>
+              {editorData.artUrl
+                ? "Character art is attached to this card."
+                : "Upload character art to place it behind the template."}
+            </div>
+            <div>
+              {editorData.imageUrl
+                ? "A full-card override is active and currently replaces the layered art output."
+                : editorHasCrop
+                ? "Crop adjustments are saved for this card."
+                : "No crop adjustments have been saved yet."}
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setArtEditorOpen(true)}
+            className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+          >
+            Open Art Editor
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEditorArtDialog = () => {
     const hasTemplate = Boolean(editorTemplateConfig?.templateUrl);
     const hasFullImageOverride = Boolean(editorData.imageUrl);
-    const hasLayeredArtPreview = Boolean(!hasFullImageOverride && editorData.artUrl && hasTemplate);
-    const previewPlacement = normalizeCardArtPlacement(
-      editorData.artPlacement,
-      DEFAULT_CARD_ART_PLACEMENT
-    );
-    const artControlsDisabled = !editorData.artUrl || hasFullImageOverride;
+    const hasEditableArt = Boolean(editorData.artUrl && !hasFullImageOverride);
+    const cropFrameStyle = {
+      left: `${editorPreviewPlacement.cropLeft}%`,
+      top: `${editorPreviewPlacement.cropTop}%`,
+      width: `${100 - editorPreviewPlacement.cropLeft - editorPreviewPlacement.cropRight}%`,
+      height: `${100 - editorPreviewPlacement.cropTop - editorPreviewPlacement.cropBottom}%`,
+    };
+    const visibleWidth = 100 - editorPreviewPlacement.cropLeft - editorPreviewPlacement.cropRight;
+    const visibleHeight = 100 - editorPreviewPlacement.cropTop - editorPreviewPlacement.cropBottom;
+    const handles: Array<{ handle: CardArtHandle; className: string; cursor: string }> = [
+      {
+        handle: "nw",
+        className: "-left-2.5 -top-2.5",
+        cursor: "cursor-nwse-resize",
+      },
+      {
+        handle: "ne",
+        className: "-right-2.5 -top-2.5",
+        cursor: "cursor-nesw-resize",
+      },
+      {
+        handle: "sw",
+        className: "-bottom-2.5 -left-2.5",
+        cursor: "cursor-nesw-resize",
+      },
+      {
+        handle: "se",
+        className: "-bottom-2.5 -right-2.5",
+        cursor: "cursor-nwse-resize",
+      },
+    ];
 
     return (
-      <div className="space-y-4">
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
-            Character Art
-          </label>
-          <div className="mt-2 grid gap-4 lg:grid-cols-[220px_1fr]">
-            <div className="space-y-2">
-              <div
-                className={`relative aspect-[2/3] overflow-hidden rounded-xl border border-white/20 bg-slate-900/70 ${
-                  editorData.artUrl && !hasFullImageOverride
-                    ? "cursor-grab touch-none active:cursor-grabbing"
-                    : ""
-                }`}
-                onPointerDown={startEditorArtDrag}
-                onPointerMove={moveEditorArtDrag}
-                onPointerUp={endEditorArtDrag}
-                onPointerCancel={endEditorArtDrag}
-              >
-                {hasFullImageOverride ? (
-                  <img
-                    src={editorData.imageUrl}
-                    alt={`${editorData.name || "Card"} full override`}
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                ) : hasLayeredArtPreview ? (
-                  <>
-                    <img
-                      src={editorData.artUrl}
-                      alt={`${editorData.name || "Card"} character art`}
-                      className="absolute inset-0 h-full w-full object-cover"
-                      style={{
-                        transform: `translate(${previewPlacement.offsetX}%, ${previewPlacement.offsetY}%) scale(${previewPlacement.scale})`,
-                        transformOrigin: "center center",
-                      }}
-                    />
-                    <img
-                      src={editorTemplateConfig.templateUrl}
-                      alt={`${editorData.type} template`}
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  </>
-                ) : hasTemplate ? (
-                  <img
-                    src={editorTemplateConfig.templateUrl}
-                    alt={`${editorData.type} template`}
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                ) : editorData.artUrl ? (
-                  <img
-                    src={editorData.artUrl}
-                    alt={`${editorData.name || "Card"} character art`}
-                    className="absolute inset-0 h-full w-full object-cover"
-                    style={{
-                      transform: `translate(${previewPlacement.offsetX}%, ${previewPlacement.offsetY}%) scale(${previewPlacement.scale})`,
-                      transformOrigin: "center center",
-                    }}
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-xs text-white/50">
-                    Upload character art to preview it inside the card.
-                  </div>
-                )}
-                {hasTemplate ? (
-                  <div className="pointer-events-none absolute inset-0 z-10 text-black">
-                    {(Object.keys(editorTemplateConfig.fields) as TemplateFieldKey[]).map((fieldKey) => {
-                      const field = editorTemplateConfig.fields[fieldKey];
-                      return (
+      <Dialog
+        open={artEditorOpen}
+        onOpenChange={(open) => {
+          setArtEditorOpen(open);
+          if (!open) {
+            setArtEditorCropMode(false);
+            cardArtInteractionRef.current = null;
+          }
+        }}
+      >
+        <DialogContent className="h-[92vh] w-[96vw] max-w-[90rem] overflow-hidden border border-white/10 bg-slate-950/98 p-0 text-white">
+          <div className="flex h-full flex-col">
+            <DialogHeader className="border-b border-white/10 px-6 py-4 text-left">
+              <DialogTitle>Character Art Editor</DialogTitle>
+              <p className="text-sm text-white/60">
+                Drag the art to position it. Use the corner handles to {artEditorCropMode ? "crop the visible frame" : "resize the image"}.
+              </p>
+            </DialogHeader>
+            <div className="grid flex-1 overflow-hidden lg:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.85fr)]">
+              <div className="flex min-h-0 items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_rgba(2,6,23,0.96))] p-6">
+                <div className="w-full max-w-[36rem]">
+                  <div
+                    data-art-canvas
+                    className="relative aspect-[2/3] w-full overflow-hidden rounded-[1.75rem] border border-white/15 bg-slate-950/60 shadow-[0_24px_80px_rgba(2,6,23,0.55)] touch-none select-none"
+                    onPointerMove={moveEditorArtInteraction}
+                    onPointerUp={endEditorArtInteraction}
+                    onPointerCancel={endEditorArtInteraction}
+                  >
+                    {hasFullImageOverride ? (
+                      <img
+                        src={editorData.imageUrl}
+                        alt={`${editorData.name || "Card"} full override`}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : editorData.artUrl ? (
+                      <div
+                        className="absolute inset-0 overflow-hidden rounded-[1.75rem] bg-slate-950/70"
+                        style={getCardArtWrapperStyle(editorPreviewPlacement)}
+                      >
                         <div
-                          key={fieldKey}
-                          className="absolute overflow-hidden"
-                          style={{
-                            left: `${field.x}%`,
-                            top: `${field.y}%`,
-                            width: `${field.width}%`,
-                            height: `${field.height}%`,
-                          }}
+                          className={`absolute inset-0 ${hasEditableArt ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          onPointerDown={startEditorArtMove}
                         >
-                          <AutoFitText text={editorPreviewTextByField[fieldKey]} field={field} />
+                          <img
+                            src={editorData.artUrl}
+                            alt={`${editorData.name || "Card"} character art`}
+                            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                            style={getCardArtImageStyle(editorPreviewPlacement)}
+                          />
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                {editorData.artUrl && !hasFullImageOverride ? (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-slate-950/70 px-2 py-1 text-center text-[10px] uppercase tracking-[0.2em] text-white/70">
-                    Drag to reposition art
-                  </div>
-                ) : null}
-              </div>
-              <div className="text-[11px] text-white/55">
-                {hasFullImageOverride
-                  ? "Full-card override is active. Clear it to preview the layered template + character art version."
-                  : hasTemplate
-                  ? "Your character art sits below the template, so any transparent cutouts will reveal it."
-                  : "Upload a template for this card type to see the final layered card preview."}
-              </div>
-            </div>
+                      </div>
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-white/50">
+                        Upload character art to begin composing this card.
+                      </div>
+                    )}
 
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                  onClick={() => {
-                    const input = document.getElementById(options.artUploadInputId);
-                    if (input) input.click();
-                  }}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Character Art
-                </Button>
-                <input
-                  id={options.artUploadInputId}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      handleCharacterArtUpload(file);
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={clearCharacterArt}
-                  className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                  disabled={!editorData.artUrl}
-                >
-                  Clear
-                </Button>
-                {editorData.artUrl ? (
-                  <span className="text-xs text-white/60">Character art ready</span>
-                ) : null}
+                    {hasTemplate ? (
+                      <img
+                        src={editorTemplateConfig.templateUrl}
+                        alt={`${editorData.type} template`}
+                        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : null}
+
+                    {hasTemplate ? (
+                      <div className="pointer-events-none absolute inset-0 z-10 text-black">
+                        {(Object.keys(editorTemplateConfig.fields) as TemplateFieldKey[]).map((fieldKey) => {
+                          const field = editorTemplateConfig.fields[fieldKey];
+                          return (
+                            <div
+                              key={fieldKey}
+                              className="absolute overflow-hidden"
+                              style={{
+                                left: `${field.x}%`,
+                                top: `${field.y}%`,
+                                width: `${field.width}%`,
+                                height: `${field.height}%`,
+                              }}
+                            >
+                              <AutoFitText text={editorPreviewTextByField[fieldKey]} field={field} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {hasEditableArt ? (
+                      <>
+                        <div className="pointer-events-none absolute left-4 top-4 z-20 rounded-full bg-slate-950/75 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-white/70">
+                          {artEditorCropMode ? "Crop Mode" : "Transform Mode"}
+                        </div>
+                        <div
+                          className="pointer-events-none absolute z-20 rounded-xl border-2 border-cyan-300/80 bg-cyan-300/5 shadow-[0_0_0_1px_rgba(15,23,42,0.35)_inset]"
+                          style={cropFrameStyle}
+                        >
+                          <div className="pointer-events-none absolute inset-0 border border-white/15" />
+                          {handles.map((handle) => (
+                            <button
+                              key={handle.handle}
+                              type="button"
+                              className={`pointer-events-auto absolute h-5 w-5 rounded-full border-2 border-slate-950 bg-cyan-300 shadow-lg ${handle.className} ${handle.cursor}`}
+                              onPointerDown={(event) => startEditorArtHandleDrag(handle.handle, event)}
+                              aria-label={`Resize ${handle.handle}`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-white/55">
+                    <span>
+                      {hasFullImageOverride
+                        ? "Full-card override preview is active."
+                        : hasTemplate
+                        ? "The template remains on top while you position the art beneath it."
+                        : "No template is assigned to this card type yet, so you are editing raw background art."}
+                    </span>
+                    {editorData.artUrl ? (
+                      <span>
+                        Visible frame: {visibleWidth.toFixed(1)}% x {visibleHeight.toFixed(1)}%
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
-                  <span>Zoom</span>
-                  <span>{previewPlacement.scale.toFixed(2)}x</span>
-                </div>
-                <div className="mt-3">
-                  <Slider
-                    value={[previewPlacement.scale]}
-                    onValueChange={(values) =>
-                      updateEditorArtPlacement({
-                        scale: values[0] ?? previewPlacement.scale,
-                      })
-                    }
-                    min={1}
-                    max={4}
-                    step={0.05}
-                    disabled={artControlsDisabled}
-                    className="[&_[role=slider]]:border-cyan-300 [&_[role=slider]]:bg-slate-950 [&_[data-disabled]]:opacity-50"
-                  />
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="min-h-0 overflow-y-auto border-t border-white/10 bg-slate-950/96 p-6 lg:border-l lg:border-t-0">
+                <div className="space-y-5">
                   <div>
-                    <label className="mb-1 block text-[10px] uppercase tracking-[0.2em] text-white/60">
-                      X Offset %
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      value={previewPlacement.offsetX}
-                      onChange={(event) =>
-                        updateEditorArtPlacement({
-                          offsetX: Number(event.target.value),
-                        })
-                      }
-                      disabled={artControlsDisabled}
-                      className="border-white/20 bg-slate-900/80 text-xs text-white"
-                    />
+                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                      Character Art
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        onClick={() => {
+                          const input = document.getElementById("card-character-art-upload-dialog");
+                          if (input) input.click();
+                        }}
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload Character Art
+                      </Button>
+                      <input
+                        id="card-character-art-upload-dialog"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleCharacterArtUpload(file);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={clearCharacterArt}
+                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        disabled={!editorData.artUrl}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                    <div className="mt-2 text-xs text-white/55">
+                      {editorData.artUrl
+                        ? "Drag the artwork directly in the preview to reposition it."
+                        : "Start by uploading an image you want to show beneath the card frame."}
+                    </div>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-[10px] uppercase tracking-[0.2em] text-white/60">
-                      Y Offset %
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      value={previewPlacement.offsetY}
-                      onChange={(event) =>
-                        updateEditorArtPlacement({
-                          offsetY: Number(event.target.value),
-                        })
-                      }
-                      disabled={artControlsDisabled}
-                      className="border-white/20 bg-slate-900/80 text-xs text-white"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetEditorArtPlacement}
-                    disabled={artControlsDisabled}
-                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Reset Position
-                  </Button>
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
-                  Full Card Image Override (Optional)
-                </label>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                    onClick={() => {
-                      const input = document.getElementById(options.imageUploadInputId);
-                      if (input) input.click();
-                    }}
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Override
-                  </Button>
-                  <input
-                    id={options.imageUploadInputId}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) handleImageUpload(file);
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={clearCardImageOverride}
-                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                    disabled={!editorData.imageUrl}
-                  >
-                    Clear
-                  </Button>
-                  {editorData.imageUrl ? (
-                    <span className="text-xs text-white/60">Override active</span>
-                  ) : null}
-                </div>
-                <div className="mt-2 text-[11px] text-white/50">
-                  This replaces the layered template preview for the final saved card. Leave it empty
-                  if you want the uploaded character art to show through the template.
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                          Resize Mode
+                        </div>
+                        <div className="mt-1 text-xs text-white/55">
+                          {artEditorCropMode
+                            ? "Handles crop the visible frame without shrinking the image."
+                            : "Handles resize the image itself."}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setArtEditorCropMode((prev) => !prev)}
+                        disabled={!hasEditableArt}
+                        className={`border-white/20 text-white hover:bg-white/10 ${
+                          artEditorCropMode ? "bg-cyan-400/15" : "bg-white/5"
+                        }`}
+                      >
+                        {artEditorCropMode ? "Crop Mode On" : "Enable Crop Mode"}
+                      </Button>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetEditorArtPlacement}
+                        disabled={!editorData.artUrl}
+                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Reset All
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          updateEditorArtPlacement({
+                            offsetX: DEFAULT_CARD_ART_PLACEMENT.offsetX,
+                            offsetY: DEFAULT_CARD_ART_PLACEMENT.offsetY,
+                            scale: DEFAULT_CARD_ART_PLACEMENT.scale,
+                          })
+                        }
+                        disabled={!editorData.artUrl}
+                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      >
+                        Reset Transform
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetEditorArtCrop}
+                        disabled={!editorHasCrop}
+                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      >
+                        Reset Crop
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                      Saved Art State
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-white/60">
+                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                        <div className="uppercase tracking-[0.18em] text-white/45">Offset</div>
+                        <div className="mt-1">
+                          {editorPreviewPlacement.offsetX.toFixed(1)}%, {editorPreviewPlacement.offsetY.toFixed(1)}%
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                        <div className="uppercase tracking-[0.18em] text-white/45">Scale</div>
+                        <div className="mt-1">{editorPreviewPlacement.scale.toFixed(2)}x</div>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                        <div className="uppercase tracking-[0.18em] text-white/45">Crop Top/Left</div>
+                        <div className="mt-1">
+                          {editorPreviewPlacement.cropTop.toFixed(1)}% / {editorPreviewPlacement.cropLeft.toFixed(1)}%
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                        <div className="uppercase tracking-[0.18em] text-white/45">Crop Bottom/Right</div>
+                        <div className="mt-1">
+                          {editorPreviewPlacement.cropBottom.toFixed(1)}% / {editorPreviewPlacement.cropRight.toFixed(1)}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                      Full Card Image Override
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        onClick={() => {
+                          const input = document.getElementById("card-art-upload-dialog");
+                          if (input) input.click();
+                        }}
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload Override
+                      </Button>
+                      <input
+                        id="card-art-upload-dialog"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleImageUpload(file);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={clearCardImageOverride}
+                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        disabled={!editorData.imageUrl}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                    <div className="mt-2 text-xs text-white/55">
+                      If an override is active, it replaces the layered template + character art result for
+                      the final saved card.
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     );
   };
 
@@ -4233,10 +4528,7 @@ export default function CardGame() {
                         className="mt-2 border-white/20 bg-slate-900/80 text-white placeholder:text-white/40"
                       />
                     </div>
-                    {renderEditorArtComposer({
-                      artUploadInputId: "card-character-art-upload-library",
-                      imageUploadInputId: "card-art-upload-library",
-                    })}
+                    {renderEditorArtLauncher()}
                     <div className="flex flex-wrap justify-end gap-2">
                       {editorCardId !== "new" && (
                         <Button
@@ -4706,10 +4998,7 @@ export default function CardGame() {
                 {getFactionName(editorData.ownerFactionId)}
               </div>
             </div>
-            {renderEditorArtComposer({
-              artUploadInputId: "card-character-art-upload",
-              imageUploadInputId: "card-art-upload",
-            })}
+            {renderEditorArtLauncher()}
           </div>
           <div className="flex justify-end gap-2">
             {editorCardId && editorCardId !== "new" && (
@@ -4734,6 +5023,8 @@ export default function CardGame() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {renderEditorArtDialog()}
 
       <Dialog
         open={!!confirmCardDeleteId}
