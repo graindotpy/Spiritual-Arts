@@ -520,6 +520,20 @@ const createDefaultEditorData = (ownerFactionId: string): EditorCardData => ({
   artPlacement: { ...DEFAULT_CARD_ART_PLACEMENT },
 });
 
+const buildEditorDataFromCard = (card: Pick<GameCard, "name" | "type" | "score" | "descriptor" | "abilityName" | "abilityDescription" | "ownerFactionId" | "imageUrl" | "artUrl" | "artAspectRatio" | "artPlacement">): EditorCardData => ({
+  name: card.name,
+  type: card.type,
+  score: card.score,
+  descriptor: card.descriptor,
+  abilityName: card.abilityName,
+  abilityDescription: card.abilityDescription,
+  ownerFactionId: card.ownerFactionId,
+  imageUrl: card.imageUrl ?? "",
+  artUrl: card.artUrl ?? "",
+  artAspectRatio: normalizeArtAspectRatio(card.artAspectRatio, CARD_CANVAS_ASPECT_RATIO),
+  artPlacement: normalizeCardArtPlacement(card.artPlacement, DEFAULT_CARD_ART_PLACEMENT),
+});
+
 const loadImageAspectRatio = (src: string) =>
   new Promise<number | null>((resolve) => {
     if (!src) {
@@ -1766,19 +1780,7 @@ export default function CardGame() {
 
   const openEditor = (card: GameCard) => {
     setEditorCardId(card.id);
-    setEditorData({
-      name: card.name,
-      type: card.type,
-      score: card.score,
-      descriptor: card.descriptor,
-      abilityName: card.abilityName,
-      abilityDescription: card.abilityDescription,
-      ownerFactionId: card.ownerFactionId,
-      imageUrl: card.imageUrl ?? "",
-      artUrl: card.artUrl ?? "",
-      artAspectRatio: normalizeArtAspectRatio(card.artAspectRatio, CARD_CANVAS_ASPECT_RATIO),
-      artPlacement: normalizeCardArtPlacement(card.artPlacement, DEFAULT_CARD_ART_PLACEMENT),
-    });
+    setEditorData(buildEditorDataFromCard(card));
   };
 
   const addNewCard = () => {
@@ -1795,11 +1797,14 @@ export default function CardGame() {
       if (!editorCardId) return;
       const closeEditor = options?.closeEditor ?? false;
       const closeArtEditor = options?.closeArtEditor ?? closeEditor;
-      let nextEditorId = editorCardId;
+      const nextEditorId =
+        editorCardId === "new" ? `card-${Date.now().toString(36)}` : editorCardId;
+      const existingCard =
+        editorCardId === "new" ? null : cards.find((card) => card.id === editorCardId) ?? null;
       const normalizedArtPlacement = editorData.artUrl
         ? normalizeCardArtPlacement(editorData.artPlacement, DEFAULT_CARD_ART_PLACEMENT)
         : undefined;
-      const normalizedCardData = {
+      const normalizedCardData: Omit<GameCard, "id" | "location"> = {
         name: editorData.name.trim() || "New Card",
         type: editorData.type,
         score: Number.isNaN(editorData.score) ? 0 : editorData.score,
@@ -1812,29 +1817,38 @@ export default function CardGame() {
         artAspectRatio: editorData.artUrl ? editorData.artAspectRatio : undefined,
         artPlacement: normalizedArtPlacement,
       };
+      saveQueuedRef.current = true;
       if (editorCardId === "new") {
         const newCard: GameCard = {
-          id: `card-${Date.now().toString(36)}`,
+          id: nextEditorId,
           ...normalizedCardData,
           location: { type: "hand", ownerFactionId: editorData.ownerFactionId },
         };
-        nextEditorId = newCard.id;
-        setCards((prev) => [newCard, ...prev]);
+        setCards((prev) => [newCard, ...prev.filter((card) => card.id !== newCard.id)]);
+        if (!closeEditor) {
+          setEditorData(buildEditorDataFromCard(newCard));
+        }
       } else {
+        const nextCard: GameCard = {
+          ...(existingCard ?? {
+            id: nextEditorId,
+            location: { type: "hand", ownerFactionId: editorData.ownerFactionId } as CardLocation,
+          }),
+          ...normalizedCardData,
+          id: nextEditorId,
+          location:
+            existingCard && existingCard.ownerFactionId !== editorData.ownerFactionId
+              ? { type: "hand", ownerFactionId: editorData.ownerFactionId }
+              : existingCard?.location ?? { type: "hand", ownerFactionId: editorData.ownerFactionId },
+        };
         setCards((prev) =>
-          prev.map((card) =>
-            card.id === editorCardId
-              ? {
-                  ...card,
-                  ...normalizedCardData,
-                  location:
-                    card.ownerFactionId !== editorData.ownerFactionId
-                      ? { type: "hand", ownerFactionId: editorData.ownerFactionId }
-                      : card.location,
-                }
-              : card
-          )
+          prev.some((card) => card.id === editorCardId)
+            ? prev.map((card) => (card.id === editorCardId ? nextCard : card))
+            : [nextCard, ...prev]
         );
+        if (!closeEditor) {
+          setEditorData(buildEditorDataFromCard(nextCard));
+        }
       }
       if (closeArtEditor) {
         setArtEditorOpen(false);
@@ -1847,7 +1861,7 @@ export default function CardGame() {
       }
       setEditorCardId(nextEditorId);
     },
-    [editorCardId, editorData]
+    [cards, editorCardId, editorData]
   );
 
   const saveEditor = useCallback(() => {
