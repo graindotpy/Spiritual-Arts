@@ -46,6 +46,7 @@ type GameCard = {
   ownerFactionId: string;
   imageUrl?: string;
   artUrl?: string;
+  artAspectRatio?: number;
   artPlacement?: CardArtPlacement;
   location: CardLocation;
 };
@@ -94,10 +95,11 @@ type EditorCardData = {
   ownerFactionId: string;
   imageUrl: string;
   artUrl: string;
+  artAspectRatio: number;
   artPlacement: CardArtPlacement;
 };
 
-type CardArtHandle = "nw" | "ne" | "sw" | "se";
+type CardArtHandle = "n" | "e" | "s" | "w" | "nw" | "ne" | "sw" | "se";
 
 type CardArtInteraction =
   | {
@@ -115,7 +117,8 @@ type CardArtInteraction =
       pointerId: number;
       startX: number;
       startY: number;
-      originScale: number;
+      originPlacement: CardArtPlacement;
+      originAspectRatio: number;
       handle: CardArtHandle;
       width: number;
       height: number;
@@ -402,6 +405,7 @@ const DEFAULT_CARD_ART_PLACEMENT: CardArtPlacement = {
   cropBottom: 0,
 };
 
+const CARD_CANVAS_ASPECT_RATIO = 2 / 3;
 const MIN_CARD_ART_VISIBLE_PERCENT = 8;
 
 const clampCardArtOffset = (value: unknown, fallback: number) => {
@@ -454,13 +458,52 @@ const normalizeCardArtPlacement = (
   };
 };
 
-const getCardArtWrapperStyle = (placement: CardArtPlacement) => ({
-  clipPath: `inset(${placement.cropTop}% ${placement.cropRight}% ${placement.cropBottom}% ${placement.cropLeft}%)`,
-});
+const normalizeArtAspectRatio = (value: unknown, fallback = CARD_CANVAS_ASPECT_RATIO) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return numeric;
+};
 
-const getCardArtImageStyle = (placement: CardArtPlacement) => ({
-  transform: `translate(${placement.offsetX}%, ${placement.offsetY}%) scale(${placement.scale})`,
-  transformOrigin: "center center" as const,
+const getCardArtBaseSize = (aspectRatio: number) => {
+  const safeAspectRatio = normalizeArtAspectRatio(aspectRatio);
+  if (safeAspectRatio > CARD_CANVAS_ASPECT_RATIO) {
+    return {
+      width: 100,
+      height: (CARD_CANVAS_ASPECT_RATIO / safeAspectRatio) * 100,
+    };
+  }
+  return {
+    width: (safeAspectRatio / CARD_CANVAS_ASPECT_RATIO) * 100,
+    height: 100,
+  };
+};
+
+const getCardArtBox = (placement: CardArtPlacement, aspectRatio: number) => {
+  const base = getCardArtBaseSize(aspectRatio);
+  const width = base.width * placement.scale;
+  const height = base.height * placement.scale;
+  const left = 50 - width / 2 + placement.offsetX;
+  const top = 50 - height / 2 + placement.offsetY;
+  return { left, top, width, height };
+};
+
+const getCardArtCropBox = (
+  placement: CardArtPlacement,
+  aspectRatio: number
+) => {
+  const artBox = getCardArtBox(placement, aspectRatio);
+  const width = artBox.width * ((100 - placement.cropLeft - placement.cropRight) / 100);
+  const height = artBox.height * ((100 - placement.cropTop - placement.cropBottom) / 100);
+  const left = artBox.left + (artBox.width * placement.cropLeft) / 100;
+  const top = artBox.top + (artBox.height * placement.cropTop) / 100;
+  return { left, top, width, height };
+};
+
+const getCardArtBoxStyle = (box: { left: number; top: number; width: number; height: number }) => ({
+  left: `${box.left}%`,
+  top: `${box.top}%`,
+  width: `${box.width}%`,
+  height: `${box.height}%`,
 });
 
 const createDefaultEditorData = (ownerFactionId: string): EditorCardData => ({
@@ -473,8 +516,27 @@ const createDefaultEditorData = (ownerFactionId: string): EditorCardData => ({
   ownerFactionId,
   imageUrl: "",
   artUrl: "",
+  artAspectRatio: CARD_CANVAS_ASPECT_RATIO,
   artPlacement: { ...DEFAULT_CARD_ART_PLACEMENT },
 });
+
+const loadImageAspectRatio = (src: string) =>
+  new Promise<number | null>((resolve) => {
+    if (!src) {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      if (!img.naturalWidth || !img.naturalHeight) {
+        resolve(null);
+        return;
+      }
+      resolve(img.naturalWidth / img.naturalHeight);
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
 
 const normalizeTemplateField = (
   raw: Partial<TemplateTextField> | undefined,
@@ -724,6 +786,22 @@ export default function CardGame() {
     cardArtInteractionRef.current = null;
   }, [editorCardId]);
 
+  useEffect(() => {
+    if (!editorData.artUrl) return;
+    let active = true;
+    loadImageAspectRatio(editorData.artUrl).then((aspectRatio) => {
+      if (!active || !aspectRatio) return;
+      setEditorData((prev) =>
+        prev.artUrl === editorData.artUrl
+          ? { ...prev, artAspectRatio: normalizeArtAspectRatio(aspectRatio, prev.artAspectRatio) }
+          : prev
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [editorData.artUrl]);
+
   const factionMap = useMemo(() => {
     const map = new Map<string, Faction>();
     for (const faction of factions) {
@@ -895,6 +973,9 @@ export default function CardGame() {
         const legacyCard = card as any;
         const artUrl =
           typeof card?.artUrl === "string" && card.artUrl.trim() ? card.artUrl : undefined;
+        const artAspectRatio = artUrl
+          ? normalizeArtAspectRatio(card?.artAspectRatio, CARD_CANVAS_ASPECT_RATIO)
+          : undefined;
         const ownerFactionId =
           typeof card?.ownerFactionId === "string" && factionIds.has(card.ownerFactionId)
             ? card.ownerFactionId
@@ -915,6 +996,7 @@ export default function CardGame() {
           ownerFactionId,
           imageUrl: typeof card?.imageUrl === "string" ? card.imageUrl : undefined,
           artUrl,
+          artAspectRatio,
           artPlacement: artUrl
             ? normalizeCardArtPlacement(
                 card?.artPlacement as Partial<CardArtPlacement> | undefined,
@@ -1694,6 +1776,7 @@ export default function CardGame() {
       ownerFactionId: card.ownerFactionId,
       imageUrl: card.imageUrl ?? "",
       artUrl: card.artUrl ?? "",
+      artAspectRatio: normalizeArtAspectRatio(card.artAspectRatio, CARD_CANVAS_ASPECT_RATIO),
       artPlacement: normalizeCardArtPlacement(card.artPlacement, DEFAULT_CARD_ART_PLACEMENT),
     });
   };
@@ -1707,11 +1790,16 @@ export default function CardGame() {
     });
   };
 
-  const saveEditor = () => {
-    if (!editorCardId) return;
-    if (editorCardId === "new") {
-      const newCard: GameCard = {
-        id: `card-${Date.now().toString(36)}`,
+  const persistEditorChanges = useCallback(
+    (options?: { closeEditor?: boolean; closeArtEditor?: boolean }) => {
+      if (!editorCardId) return;
+      const closeEditor = options?.closeEditor ?? false;
+      const closeArtEditor = options?.closeArtEditor ?? closeEditor;
+      let nextEditorId = editorCardId;
+      const normalizedArtPlacement = editorData.artUrl
+        ? normalizeCardArtPlacement(editorData.artPlacement, DEFAULT_CARD_ART_PLACEMENT)
+        : undefined;
+      const normalizedCardData = {
         name: editorData.name.trim() || "New Card",
         type: editorData.type,
         score: Number.isNaN(editorData.score) ? 0 : editorData.score,
@@ -1721,41 +1809,58 @@ export default function CardGame() {
         ownerFactionId: editorData.ownerFactionId,
         imageUrl: editorData.imageUrl || undefined,
         artUrl: editorData.artUrl || undefined,
-        artPlacement: editorData.artUrl
-          ? normalizeCardArtPlacement(editorData.artPlacement, DEFAULT_CARD_ART_PLACEMENT)
-          : undefined,
-        location: { type: "hand", ownerFactionId: editorData.ownerFactionId },
+        artAspectRatio: editorData.artUrl ? editorData.artAspectRatio : undefined,
+        artPlacement: normalizedArtPlacement,
       };
-      setCards((prev) => [newCard, ...prev]);
-    } else {
-      setCards((prev) =>
-        prev.map((card) =>
-          card.id === editorCardId
-            ? {
-                ...card,
-                name: editorData.name,
-                type: editorData.type,
-                score: Number.isNaN(editorData.score) ? 0 : editorData.score,
-                descriptor: editorData.descriptor,
-                abilityName: editorData.abilityName,
-                abilityDescription: editorData.abilityDescription,
-                ownerFactionId: editorData.ownerFactionId,
-                imageUrl: editorData.imageUrl || undefined,
-                artUrl: editorData.artUrl || undefined,
-                artPlacement: editorData.artUrl
-                  ? normalizeCardArtPlacement(editorData.artPlacement, DEFAULT_CARD_ART_PLACEMENT)
-                  : undefined,
-                location:
-                  card.ownerFactionId !== editorData.ownerFactionId
-                    ? { type: "hand", ownerFactionId: editorData.ownerFactionId }
-                    : card.location,
-              }
-            : card
-        )
-      );
-    }
-    setEditorCardId(null);
-  };
+      if (editorCardId === "new") {
+        const newCard: GameCard = {
+          id: `card-${Date.now().toString(36)}`,
+          ...normalizedCardData,
+          location: { type: "hand", ownerFactionId: editorData.ownerFactionId },
+        };
+        nextEditorId = newCard.id;
+        setCards((prev) => [newCard, ...prev]);
+      } else {
+        setCards((prev) =>
+          prev.map((card) =>
+            card.id === editorCardId
+              ? {
+                  ...card,
+                  ...normalizedCardData,
+                  location:
+                    card.ownerFactionId !== editorData.ownerFactionId
+                      ? { type: "hand", ownerFactionId: editorData.ownerFactionId }
+                      : card.location,
+                }
+              : card
+          )
+        );
+      }
+      if (closeArtEditor) {
+        setArtEditorOpen(false);
+        setArtEditorCropMode(false);
+        cardArtInteractionRef.current = null;
+      }
+      if (closeEditor) {
+        setEditorCardId(null);
+        return;
+      }
+      setEditorCardId(nextEditorId);
+    },
+    [editorCardId, editorData]
+  );
+
+  const saveEditor = useCallback(() => {
+    persistEditorChanges({ closeEditor: true, closeArtEditor: true });
+  }, [persistEditorChanges]);
+
+  const saveEditorInPlace = useCallback(() => {
+    persistEditorChanges({ closeEditor: false, closeArtEditor: false });
+  }, [persistEditorChanges]);
+
+  const saveEditorAndCloseArtDialog = useCallback(() => {
+    persistEditorChanges({ closeEditor: false, closeArtEditor: true });
+  }, [persistEditorChanges]);
 
   const deleteCard = (cardId: string) => {
     setCards((prev) => {
@@ -1787,11 +1892,20 @@ export default function CardGame() {
   };
 
   const handleCharacterArtUpload = async (file: File) => {
-    const url = await uploadImageAsset(file);
+    const [url, aspectRatio] = await Promise.all([
+      uploadImageAsset(file),
+      new Promise<number | null>((resolve) => {
+        const objectUrl = URL.createObjectURL(file);
+        loadImageAspectRatio(objectUrl)
+          .then(resolve)
+          .finally(() => URL.revokeObjectURL(objectUrl));
+      }),
+    ]);
     if (!url) return;
     setEditorData((prev) => ({
       ...prev,
       artUrl: url,
+      artAspectRatio: normalizeArtAspectRatio(aspectRatio, prev.artAspectRatio),
       artPlacement: { ...DEFAULT_CARD_ART_PLACEMENT },
     }));
   };
@@ -1800,6 +1914,7 @@ export default function CardGame() {
     setEditorData((prev) => ({
       ...prev,
       artUrl: "",
+      artAspectRatio: CARD_CANVAS_ASPECT_RATIO,
       artPlacement: { ...DEFAULT_CARD_ART_PLACEMENT },
     }));
   }, []);
@@ -1892,13 +2007,14 @@ export default function CardGame() {
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
-            originScale: editorData.artPlacement.scale,
+            originPlacement: { ...editorData.artPlacement },
+            originAspectRatio: editorData.artAspectRatio,
             handle,
             width: rect.width,
             height: rect.height,
           };
     },
-    [artEditorCropMode, editorData.artPlacement, editorData.artUrl, editorData.imageUrl]
+    [artEditorCropMode, editorData.artAspectRatio, editorData.artPlacement, editorData.artUrl, editorData.imageUrl]
   );
 
   const moveEditorArtInteraction = useCallback(
@@ -1915,42 +2031,74 @@ export default function CardGame() {
         return;
       }
       if (interaction.kind === "scale") {
-        const resizeIntent =
-          interaction.handle === "se"
-            ? Math.max(deltaX, deltaY)
-            : interaction.handle === "nw"
-            ? Math.max(-deltaX, -deltaY)
-            : interaction.handle === "ne"
-            ? Math.max(deltaX, -deltaY)
-            : Math.max(-deltaX, deltaY);
-        const nextScale = interaction.originScale * (1 + resizeIntent / 80);
-        updateEditorArtPlacement({ scale: nextScale });
+        const originBox = getCardArtBox(interaction.originPlacement, interaction.originAspectRatio);
+        const widthDelta =
+          interaction.handle === "nw" || interaction.handle === "sw"
+            ? -deltaX
+            : interaction.handle === "ne" || interaction.handle === "se"
+            ? deltaX
+            : 0;
+        const heightDelta =
+          interaction.handle === "nw" || interaction.handle === "ne"
+            ? -deltaY
+            : interaction.handle === "sw" || interaction.handle === "se"
+            ? deltaY
+            : 0;
+        const widthFactor = originBox.width > 0 ? (originBox.width + widthDelta) / originBox.width : 1;
+        const heightFactor =
+          originBox.height > 0 ? (originBox.height + heightDelta) / originBox.height : 1;
+        const widthChange = Math.abs(widthFactor - 1);
+        const heightChange = Math.abs(heightFactor - 1);
+        const nextFactor =
+          widthChange >= heightChange
+            ? widthFactor
+            : heightFactor;
+        const nextScale = clampCardArtScale(
+          interaction.originPlacement.scale * nextFactor,
+          interaction.originPlacement.scale
+        );
+        const base = getCardArtBaseSize(interaction.originAspectRatio);
+        const nextWidth = base.width * nextScale;
+        const nextHeight = base.height * nextScale;
+        const anchorLeft =
+          interaction.handle === "ne" || interaction.handle === "se"
+            ? originBox.left
+            : originBox.left + originBox.width - nextWidth;
+        const anchorTop =
+          interaction.handle === "sw" || interaction.handle === "se"
+            ? originBox.top
+            : originBox.top + originBox.height - nextHeight;
+        updateEditorArtPlacement({
+          scale: nextScale,
+          offsetX: anchorLeft - (50 - nextWidth / 2),
+          offsetY: anchorTop - (50 - nextHeight / 2),
+        });
         return;
       }
       const origin = interaction.originPlacement;
-      if (interaction.handle === "nw") {
-        updateEditorArtPlacement({
-          cropLeft: origin.cropLeft + deltaX,
-          cropTop: origin.cropTop + deltaY,
-        });
-      } else if (interaction.handle === "ne") {
-        updateEditorArtPlacement({
-          cropRight: origin.cropRight - deltaX,
-          cropTop: origin.cropTop + deltaY,
-        });
-      } else if (interaction.handle === "sw") {
-        updateEditorArtPlacement({
-          cropLeft: origin.cropLeft + deltaX,
-          cropBottom: origin.cropBottom - deltaY,
-        });
-      } else {
-        updateEditorArtPlacement({
-          cropRight: origin.cropRight - deltaX,
-          cropBottom: origin.cropBottom - deltaY,
-        });
-      }
+      const originBox = getCardArtBox(origin, editorData.artAspectRatio);
+      const cropDeltaX = originBox.width > 0 ? (deltaX / originBox.width) * 100 : 0;
+      const cropDeltaY = originBox.height > 0 ? (deltaY / originBox.height) * 100 : 0;
+      updateEditorArtPlacement({
+        cropLeft:
+          interaction.handle === "w" || interaction.handle === "nw" || interaction.handle === "sw"
+            ? origin.cropLeft + cropDeltaX
+            : origin.cropLeft,
+        cropRight:
+          interaction.handle === "e" || interaction.handle === "ne" || interaction.handle === "se"
+            ? origin.cropRight - cropDeltaX
+            : origin.cropRight,
+        cropTop:
+          interaction.handle === "n" || interaction.handle === "nw" || interaction.handle === "ne"
+            ? origin.cropTop + cropDeltaY
+            : origin.cropTop,
+        cropBottom:
+          interaction.handle === "s" || interaction.handle === "sw" || interaction.handle === "se"
+            ? origin.cropBottom - cropDeltaY
+            : origin.cropBottom,
+      });
     },
-    [updateEditorArtPlacement]
+    [editorData.artAspectRatio, updateEditorArtPlacement]
   );
 
   const endEditorArtInteraction = useCallback((event: ReactPointerEvent<HTMLElement>) => {
@@ -2936,6 +3084,8 @@ export default function CardGame() {
     const hasLayeredArt = Boolean(!hasFullCardOverride && card.artUrl && hasTemplateFrame);
     const cardFaceUrl = hasFullCardOverride ? card.imageUrl : cardTemplate?.templateUrl;
     const artPlacement = normalizeCardArtPlacement(card.artPlacement, DEFAULT_CARD_ART_PLACEMENT);
+    const artAspectRatio = normalizeArtAspectRatio(card.artAspectRatio, CARD_CANVAS_ASPECT_RATIO);
+    const artBox = getCardArtBox(artPlacement, artAspectRatio);
     const shouldRenderOverlayText = Boolean(
       (isSidebar || isLibrary) && cardTemplate?.templateUrl && !hidden
     );
@@ -2966,16 +3116,20 @@ export default function CardGame() {
           <>
             {hasLayeredArt ? (
               <>
-                <div
-                  className="absolute inset-0 overflow-hidden rounded-xl bg-slate-950/70"
-                  style={getCardArtWrapperStyle(artPlacement)}
-                >
-                  <img
-                    src={card.artUrl}
-                    alt={card.name}
-                    className="absolute inset-0 h-full w-full object-cover"
-                    style={getCardArtImageStyle(artPlacement)}
-                  />
+                <div className="absolute inset-0 overflow-hidden rounded-xl bg-slate-950/70">
+                  <div
+                    className="absolute overflow-hidden"
+                    style={{
+                      ...getCardArtBoxStyle(artBox),
+                      clipPath: `inset(${artPlacement.cropTop}% ${artPlacement.cropRight}% ${artPlacement.cropBottom}% ${artPlacement.cropLeft}%)`,
+                    }}
+                  >
+                    <img
+                      src={card.artUrl}
+                      alt={card.name}
+                      className="absolute inset-0 h-full w-full object-fill"
+                    />
+                  </div>
                 </div>
                 <img
                   src={cardTemplate?.templateUrl}
@@ -3129,6 +3283,8 @@ export default function CardGame() {
     editorData.artPlacement,
     DEFAULT_CARD_ART_PLACEMENT
   );
+  const editorArtBox = getCardArtBox(editorPreviewPlacement, editorData.artAspectRatio);
+  const editorCropBox = getCardArtCropBox(editorPreviewPlacement, editorData.artAspectRatio);
   const editorHasCrop =
     editorPreviewPlacement.cropLeft > 0 ||
     editorPreviewPlacement.cropTop > 0 ||
@@ -3173,33 +3329,69 @@ export default function CardGame() {
     const hasTemplate = Boolean(editorTemplateConfig?.templateUrl);
     const hasFullImageOverride = Boolean(editorData.imageUrl);
     const hasEditableArt = Boolean(editorData.artUrl && !hasFullImageOverride);
-    const cropFrameStyle = {
-      left: `${editorPreviewPlacement.cropLeft}%`,
-      top: `${editorPreviewPlacement.cropTop}%`,
-      width: `${100 - editorPreviewPlacement.cropLeft - editorPreviewPlacement.cropRight}%`,
-      height: `${100 - editorPreviewPlacement.cropTop - editorPreviewPlacement.cropBottom}%`,
-    };
-    const visibleWidth = 100 - editorPreviewPlacement.cropLeft - editorPreviewPlacement.cropRight;
-    const visibleHeight = 100 - editorPreviewPlacement.cropTop - editorPreviewPlacement.cropBottom;
-    const handles: Array<{ handle: CardArtHandle; className: string; cursor: string }> = [
+    const visibleWidth = editorCropBox.width;
+    const visibleHeight = editorCropBox.height;
+    const transformHandles: Array<{ handle: CardArtHandle; className: string; cursor: string }> = [
       {
         handle: "nw",
-        className: "left-1.5 top-1.5",
+        className: "-left-3 -top-3",
         cursor: "cursor-nwse-resize",
       },
       {
         handle: "ne",
-        className: "right-1.5 top-1.5",
+        className: "-right-3 -top-3",
         cursor: "cursor-nesw-resize",
       },
       {
         handle: "sw",
-        className: "bottom-1.5 left-1.5",
+        className: "-bottom-3 -left-3",
         cursor: "cursor-nesw-resize",
       },
       {
         handle: "se",
-        className: "bottom-1.5 right-1.5",
+        className: "-bottom-3 -right-3",
+        cursor: "cursor-nwse-resize",
+      },
+    ];
+    const cropHandles: Array<{ handle: CardArtHandle; className: string; cursor: string }> = [
+      {
+        handle: "n",
+        className: "left-1/2 -top-3 -translate-x-1/2",
+        cursor: "cursor-ns-resize",
+      },
+      {
+        handle: "e",
+        className: "-right-3 top-1/2 -translate-y-1/2",
+        cursor: "cursor-ew-resize",
+      },
+      {
+        handle: "s",
+        className: "bottom-[-0.75rem] left-1/2 -translate-x-1/2",
+        cursor: "cursor-ns-resize",
+      },
+      {
+        handle: "w",
+        className: "-left-3 top-1/2 -translate-y-1/2",
+        cursor: "cursor-ew-resize",
+      },
+      {
+        handle: "nw",
+        className: "-left-3 -top-3",
+        cursor: "cursor-nwse-resize",
+      },
+      {
+        handle: "ne",
+        className: "-right-3 -top-3",
+        cursor: "cursor-nesw-resize",
+      },
+      {
+        handle: "sw",
+        className: "-bottom-3 -left-3",
+        cursor: "cursor-nesw-resize",
+      },
+      {
+        handle: "se",
+        className: "-bottom-3 -right-3",
         cursor: "cursor-nwse-resize",
       },
     ];
@@ -3215,20 +3407,20 @@ export default function CardGame() {
           }
         }}
       >
-        <DialogContent className="h-[92vh] w-[96vw] max-w-[90rem] overflow-hidden border border-white/10 bg-slate-950/98 p-0 text-white">
+        <DialogContent className="h-[92vh] w-[96vw] max-w-[90rem] overflow-hidden border border-white/10 bg-slate-950 p-0 text-white">
           <div className="flex h-full flex-col">
             <DialogHeader className="border-b border-white/10 px-6 py-4 text-left">
               <DialogTitle>Character Art Editor</DialogTitle>
               <p className="text-sm text-white/60">
-                Drag the art to position it. Use the corner handles to {artEditorCropMode ? "crop the visible frame" : "resize the image"}.
+                Drag the art to position it. Use the {artEditorCropMode ? "side or corner handles to crop the visible image" : "corner handles on the image itself to resize it"}.
               </p>
             </DialogHeader>
             <div className="grid flex-1 overflow-hidden lg:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.85fr)]">
-              <div className="flex min-h-0 items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_rgba(2,6,23,0.96))] p-6">
+              <div className="flex min-h-0 items-center justify-center bg-[radial-gradient(circle_at_top,_#164e63,_#020617_68%)] p-6">
                 <div className="w-full max-w-[36rem]">
                   <div
                     data-art-canvas
-                    className="relative aspect-[2/3] w-full overflow-hidden rounded-[1.75rem] border border-white/15 bg-slate-950/60 shadow-[0_24px_80px_rgba(2,6,23,0.55)] touch-none select-none"
+                    className="relative aspect-[2/3] w-full overflow-hidden rounded-[1.75rem] border border-white/15 bg-slate-900 shadow-[0_24px_80px_rgba(2,6,23,0.55)] touch-none select-none"
                     onPointerMove={moveEditorArtInteraction}
                     onPointerUp={endEditorArtInteraction}
                     onPointerCancel={endEditorArtInteraction}
@@ -3240,21 +3432,28 @@ export default function CardGame() {
                         className="absolute inset-0 h-full w-full object-cover"
                       />
                     ) : editorData.artUrl ? (
-                      <div
-                        className="absolute inset-0 overflow-hidden rounded-[1.75rem] bg-slate-950/70"
-                        style={getCardArtWrapperStyle(editorPreviewPlacement)}
-                      >
+                      <div className="absolute inset-0 overflow-hidden rounded-[1.75rem] bg-slate-950">
                         <div
-                          className={`absolute inset-0 ${hasEditableArt ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          className={`absolute ${hasEditableArt ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          style={{
+                            ...getCardArtBoxStyle(editorArtBox),
+                            clipPath: `inset(${editorPreviewPlacement.cropTop}% ${editorPreviewPlacement.cropRight}% ${editorPreviewPlacement.cropBottom}% ${editorPreviewPlacement.cropLeft}%)`,
+                          }}
                           onPointerDown={startEditorArtMove}
                         >
                           <img
                             src={editorData.artUrl}
                             alt={`${editorData.name || "Card"} character art`}
-                            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-                            style={getCardArtImageStyle(editorPreviewPlacement)}
+                            className="pointer-events-none absolute inset-0 h-full w-full object-fill"
                           />
                         </div>
+                        <div
+                          className="pointer-events-none absolute overflow-hidden rounded-[1rem] border border-cyan-200/35 bg-transparent"
+                          style={{
+                            ...getCardArtBoxStyle(editorCropBox),
+                            boxShadow: "0 0 0 9999px rgba(2, 6, 23, 0.18)",
+                          }}
+                        />
                       </div>
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-white/50">
@@ -3294,21 +3493,21 @@ export default function CardGame() {
 
                     {hasEditableArt ? (
                       <>
-                        <div className="pointer-events-none absolute left-4 top-4 z-20 rounded-full bg-slate-950/75 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-white/70">
+                        <div className="pointer-events-none absolute left-4 top-4 z-20 rounded-full bg-slate-900 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-white/70">
                           {artEditorCropMode ? "Crop Mode" : "Transform Mode"}
                         </div>
                         <div
                           className="pointer-events-none absolute z-20 rounded-xl border-2 border-cyan-300/80 bg-cyan-300/5 shadow-[0_0_0_1px_rgba(15,23,42,0.35)_inset]"
-                          style={cropFrameStyle}
+                          style={artEditorCropMode ? getCardArtBoxStyle(editorCropBox) : getCardArtBoxStyle(editorArtBox)}
                         >
                           <div className="pointer-events-none absolute inset-0 border border-white/15" />
-                          {handles.map((handle) => (
+                          {(artEditorCropMode ? cropHandles : transformHandles).map((handle) => (
                             <button
-                              key={handle.handle}
+                              key={`${artEditorCropMode ? "crop" : "transform"}-${handle.handle}`}
                               type="button"
                               className={`pointer-events-auto absolute h-6 w-6 rounded-full border-2 border-slate-950 bg-cyan-300 ring-2 ring-white/70 shadow-lg ${handle.className} ${handle.cursor}`}
                               onPointerDown={(event) => startEditorArtHandleDrag(handle.handle, event)}
-                              aria-label={`Resize ${handle.handle}`}
+                              aria-label={`${artEditorCropMode ? "Crop" : "Resize"} ${handle.handle}`}
                             />
                           ))}
                         </div>
@@ -3331,14 +3530,54 @@ export default function CardGame() {
                   </div>
                   {hasEditableArt ? (
                     <div className="mt-2 text-center text-[11px] text-cyan-100/75">
-                      Use the cyan corner dots to resize. Turn on Crop Mode if you want those handles to crop instead.
+                      {artEditorCropMode
+                        ? "Drag a side or corner handle on the visible image to crop that side."
+                        : "Use the cyan corner handles on the image itself to resize it."}
                     </div>
                   ) : null}
                 </div>
               </div>
 
-              <div className="min-h-0 overflow-y-auto border-t border-white/10 bg-slate-950/96 p-6 lg:border-l lg:border-t-0">
+              <div className="min-h-0 overflow-y-auto border-t border-white/10 bg-slate-950 p-6 lg:border-l lg:border-t-0">
                 <div className="space-y-5">
+                  <div className="sticky top-0 z-20 -mx-6 -mt-6 border-b border-white/10 bg-slate-950 px-6 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                          Card Actions
+                        </div>
+                        <div className="mt-1 text-xs text-white/55">
+                          Save the card here without leaving the art editor.
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setArtEditorOpen(false)}
+                          className="border-white/20 bg-slate-900 text-white hover:bg-slate-800"
+                        >
+                          Close
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={saveEditorAndCloseArtDialog}
+                          className="border-white/20 bg-slate-900 text-white hover:bg-slate-800"
+                        >
+                          Save + Close
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={saveEditorInPlace}
+                          className="bg-amber-400/90 text-slate-950 hover:bg-amber-300"
+                        >
+                          Save Card
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
                       Character Art
@@ -3347,7 +3586,7 @@ export default function CardGame() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        className="border-white/20 bg-slate-900 text-white hover:bg-slate-800"
                         onClick={() => {
                           const input = document.getElementById("card-character-art-upload-dialog");
                           if (input) input.click();
@@ -3370,7 +3609,7 @@ export default function CardGame() {
                         type="button"
                         variant="outline"
                         onClick={clearCharacterArt}
-                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        className="border-white/20 bg-slate-900 text-white hover:bg-slate-800"
                         disabled={!editorData.artUrl}
                       >
                         Clear
@@ -3383,7 +3622,7 @@ export default function CardGame() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
@@ -3400,8 +3639,8 @@ export default function CardGame() {
                         variant="outline"
                         onClick={() => setArtEditorCropMode((prev) => !prev)}
                         disabled={!hasEditableArt}
-                        className={`border-white/20 text-white hover:bg-white/10 ${
-                          artEditorCropMode ? "bg-cyan-400/15" : "bg-white/5"
+                        className={`border-white/20 text-white hover:bg-slate-800 ${
+                          artEditorCropMode ? "bg-cyan-400/15" : "bg-slate-950"
                         }`}
                       >
                         {artEditorCropMode ? "Crop Mode On" : "Enable Crop Mode"}
@@ -3413,7 +3652,7 @@ export default function CardGame() {
                         variant="outline"
                         onClick={resetEditorArtPlacement}
                         disabled={!editorData.artUrl}
-                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        className="border-white/20 bg-slate-950 text-white hover:bg-slate-800"
                       >
                         <RotateCcw className="mr-2 h-4 w-4" />
                         Reset All
@@ -3429,7 +3668,7 @@ export default function CardGame() {
                           })
                         }
                         disabled={!editorData.artUrl}
-                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        className="border-white/20 bg-slate-950 text-white hover:bg-slate-800"
                       >
                         Reset Transform
                       </Button>
@@ -3438,35 +3677,35 @@ export default function CardGame() {
                         variant="outline"
                         onClick={resetEditorArtCrop}
                         disabled={!editorHasCrop}
-                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        className="border-white/20 bg-slate-950 text-white hover:bg-slate-800"
                       >
                         Reset Crop
                       </Button>
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
                     <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
                       Saved Art State
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-white/60">
-                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                      <div className="rounded-xl border border-white/10 bg-slate-950 p-3">
                         <div className="uppercase tracking-[0.18em] text-white/45">Offset</div>
                         <div className="mt-1">
                           {editorPreviewPlacement.offsetX.toFixed(1)}%, {editorPreviewPlacement.offsetY.toFixed(1)}%
                         </div>
                       </div>
-                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                      <div className="rounded-xl border border-white/10 bg-slate-950 p-3">
                         <div className="uppercase tracking-[0.18em] text-white/45">Scale</div>
                         <div className="mt-1">{editorPreviewPlacement.scale.toFixed(2)}x</div>
                       </div>
-                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                      <div className="rounded-xl border border-white/10 bg-slate-950 p-3">
                         <div className="uppercase tracking-[0.18em] text-white/45">Crop Top/Left</div>
                         <div className="mt-1">
                           {editorPreviewPlacement.cropTop.toFixed(1)}% / {editorPreviewPlacement.cropLeft.toFixed(1)}%
                         </div>
                       </div>
-                      <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                      <div className="rounded-xl border border-white/10 bg-slate-950 p-3">
                         <div className="uppercase tracking-[0.18em] text-white/45">Crop Bottom/Right</div>
                         <div className="mt-1">
                           {editorPreviewPlacement.cropBottom.toFixed(1)}% / {editorPreviewPlacement.cropRight.toFixed(1)}%
@@ -3483,7 +3722,7 @@ export default function CardGame() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        className="border-white/20 bg-slate-900 text-white hover:bg-slate-800"
                         onClick={() => {
                           const input = document.getElementById("card-art-upload-dialog");
                           if (input) input.click();
@@ -3506,7 +3745,7 @@ export default function CardGame() {
                         type="button"
                         variant="outline"
                         onClick={clearCardImageOverride}
-                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        className="border-white/20 bg-slate-900 text-white hover:bg-slate-800"
                         disabled={!editorData.imageUrl}
                       >
                         Clear
