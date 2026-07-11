@@ -128,7 +128,9 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="wuxia-shell min-h-screen">
+      <div className="wuxia-orb wuxia-orb-left" aria-hidden="true" />
+      <div className="wuxia-orb wuxia-orb-right" aria-hidden="true" />
       <CharacterSheetHeader
         character={character}
         onReturnToMenu={onReturnToMenu}
@@ -136,9 +138,9 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
         onOpenGlossary={() => setGlossaryOpen(true)}
       />
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-1">
+      <main className="wuxia-paper relative z-10 mx-auto my-6 max-w-7xl rounded-[1.75rem] px-4 py-5 sm:my-8 sm:px-6 sm:py-7 lg:px-8">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3 lg:gap-8">
+          <aside className="wuxia-sheet-panel p-5 sm:p-6 lg:col-span-1">
             <SpiritDiePoolComponent
               currentDice={currentDice}
               originalDice={originalDice}
@@ -166,7 +168,7 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                     onClick={() => rollController.roll(selectedDieIndex, selectedDie)}
                     disabled={rollController.isRolling || !selectedSpIsSupported}
                     size="lg"
-                    className="bg-spiritual-600 px-12 py-4 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105 hover:bg-spiritual-700 disabled:scale-100 disabled:opacity-50"
+                    className="rounded-full bg-spiritual-600 px-12 py-4 text-xl font-bold text-white shadow-[0_12px_28px_rgba(34,95,77,0.24)] transition-transform hover:scale-[1.03] hover:bg-spiritual-700 disabled:scale-100 disabled:opacity-50"
                   >
                     {rollController.isRolling ? "ROLLING…" : "ROLL"}
                   </Button>
@@ -187,7 +189,7 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
               onAdd={() => setTrackerDialogOpen(true)}
               onDelete={(trackerId) => deleteTracker.mutate(trackerId)}
             />
-          </div>
+          </aside>
 
           <TechniquesPanel
             techniques={techniques}

@@ -11,15 +11,15 @@ interface TrackersPanelProps {
 
 export function TrackersPanel({ trackers, onAdd, onDelete }: TrackersPanelProps) {
   return (
-    <section className="mt-6" aria-labelledby="trackers-heading">
+    <section className="mt-6 border-t border-[#d1c5af]/70 pt-5 dark:border-white/10" aria-labelledby="trackers-heading">
       <div className="mb-3 flex items-center justify-between">
-        <h2 id="trackers-heading" className="text-lg font-medium text-gray-700 dark:text-gray-300">
+        <h2 id="trackers-heading" className="font-display text-xl text-[#2b4139] dark:text-[#e9e2d5]">
           Trackers
         </h2>
         <Button
           size="sm"
           onClick={onAdd}
-          className="bg-spiritual-600 text-white hover:bg-spiritual-700"
+          className="h-10 w-10 rounded-full bg-spiritual-600 text-white hover:bg-spiritual-700"
           aria-label="Add tracker"
           data-testid="button-add-tracker"
         >

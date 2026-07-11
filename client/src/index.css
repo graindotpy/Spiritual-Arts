@@ -26,15 +26,17 @@
   --ring: hsl(20, 14.3%, 4.1%);
   --radius: 0.5rem;
   
-  /* Custom spiritual colors */
-  --spiritual-50: hsl(255, 100%, 98%);
-  --spiritual-100: hsl(250, 91%, 95%);
-  --spiritual-400: hsl(262, 83%, 70%);
-  --spiritual-500: hsl(262, 83%, 58%);
-  --spiritual-600: hsl(254, 91%, 62%);
-  --spiritual-700: hsl(263, 84%, 47%);
-  --spiritual-800: hsl(263, 78%, 35%);
-  --spiritual-900: hsl(264, 69%, 29%);
+  /* Campaign jade palette */
+  --spiritual-50: hsl(150, 24%, 97%);
+  --spiritual-100: hsl(149, 25%, 91%);
+  --spiritual-200: hsl(151, 23%, 82%);
+  --spiritual-300: hsl(154, 22%, 68%);
+  --spiritual-400: hsl(157, 26%, 53%);
+  --spiritual-500: hsl(159, 34%, 43%);
+  --spiritual-600: hsl(160, 43%, 34%);
+  --spiritual-700: hsl(162, 48%, 26%);
+  --spiritual-800: hsl(163, 48%, 20%);
+  --spiritual-900: hsl(164, 43%, 15%);
 }
 
 .dark {
@@ -79,6 +81,8 @@
 @layer utilities {
   .text-spiritual-50 { color: var(--spiritual-50); }
   .text-spiritual-100 { color: var(--spiritual-100); }
+  .text-spiritual-200 { color: var(--spiritual-200); }
+  .text-spiritual-300 { color: var(--spiritual-300); }
   .text-spiritual-400 { color: var(--spiritual-400); }
   .text-spiritual-500 { color: var(--spiritual-500); }
   .text-spiritual-600 { color: var(--spiritual-600); }
@@ -88,6 +92,8 @@
   
   .bg-spiritual-50 { background-color: var(--spiritual-50); }
   .bg-spiritual-100 { background-color: var(--spiritual-100); }
+  .bg-spiritual-200 { background-color: var(--spiritual-200); }
+  .bg-spiritual-300 { background-color: var(--spiritual-300); }
   .bg-spiritual-400 { background-color: var(--spiritual-400); }
   .bg-spiritual-500 { background-color: var(--spiritual-500); }
   .bg-spiritual-600 { background-color: var(--spiritual-600); }
@@ -97,6 +103,8 @@
   
   .border-spiritual-50 { border-color: var(--spiritual-50); }
   .border-spiritual-100 { border-color: var(--spiritual-100); }
+  .border-spiritual-200 { border-color: var(--spiritual-200); }
+  .border-spiritual-300 { border-color: var(--spiritual-300); }
   .border-spiritual-400 { border-color: var(--spiritual-400); }
   .border-spiritual-500 { border-color: var(--spiritual-500); }
   .border-spiritual-600 { border-color: var(--spiritual-600); }
@@ -119,4 +127,710 @@
 
 .spirit-die:hover {
   animation: dice-glow 2s ease-in-out infinite;
+}
+
+/* Wuxia campaign landing page */
+.font-display {
+  font-family: "IM Fell English", Georgia, "Times New Roman", serif;
+}
+
+.wuxia-shell {
+  --wuxia-paper: 247 241 228;
+  --wuxia-ink: 31 50 43;
+  --wuxia-jade: 53 100 84;
+  --wuxia-line: 194 181 157;
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+  color: rgb(var(--wuxia-ink));
+  background-color: #ede6d8;
+  background-image:
+    radial-gradient(circle at 9% 4%, rgba(255, 253, 247, 0.95), transparent 31rem),
+    radial-gradient(circle at 92% 16%, rgba(119, 148, 132, 0.2), transparent 28rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.22), transparent 44%),
+    repeating-linear-gradient(
+      2deg,
+      rgba(80, 61, 39, 0.018) 0,
+      rgba(80, 61, 39, 0.018) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+}
+
+.dark .wuxia-shell {
+  --wuxia-paper: 24 35 31;
+  --wuxia-ink: 238 232 220;
+  --wuxia-jade: 145 188 173;
+  --wuxia-line: 105 125 115;
+  background-color: #101a17;
+  background-image:
+    radial-gradient(circle at 9% 4%, rgba(67, 91, 81, 0.38), transparent 30rem),
+    radial-gradient(circle at 92% 18%, rgba(77, 120, 103, 0.23), transparent 30rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 44%),
+    repeating-linear-gradient(
+      2deg,
+      rgba(255, 255, 255, 0.012) 0,
+      rgba(255, 255, 255, 0.012) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+}
+
+.wuxia-shell ::selection {
+  color: #fffaf0;
+  background: #3d6d5d;
+}
+
+.wuxia-topbar {
+  border-bottom: 1px solid rgba(161, 145, 116, 0.34);
+  background: rgba(247, 241, 228, 0.78);
+  box-shadow: 0 8px 32px rgba(55, 42, 24, 0.04);
+  backdrop-filter: blur(18px) saturate(115%);
+}
+
+.dark .wuxia-topbar {
+  border-bottom-color: rgba(199, 215, 206, 0.1);
+  background: rgba(16, 26, 23, 0.78);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.wuxia-kicker,
+.wuxia-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #53645d;
+}
+
+.dark .wuxia-kicker,
+.dark .wuxia-eyebrow {
+  color: #98aaa2;
+}
+
+.wuxia-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #4a7566;
+}
+
+.dark .wuxia-eyebrow {
+  color: #92b9aa;
+}
+
+.campaign-mark {
+  display: inline-flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: #315f50;
+  border: 1px solid rgba(75, 112, 98, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.64);
+  box-shadow:
+    0 6px 16px rgba(62, 47, 27, 0.08),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.34);
+}
+
+.campaign-mark svg {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.campaign-mark-ring,
+.campaign-mark-mountain,
+.campaign-mark-ground {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.campaign-mark-ring {
+  stroke-width: 1.2;
+  opacity: 0.4;
+}
+
+.campaign-mark-mountain {
+  stroke-width: 1.8;
+}
+
+.campaign-mark-ground {
+  stroke-width: 1.3;
+  opacity: 0.7;
+}
+
+.dark .campaign-mark {
+  color: #9abcae;
+  border-color: rgba(154, 188, 174, 0.24);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.025);
+}
+
+.wuxia-orb {
+  position: absolute;
+  z-index: -1;
+  width: 28rem;
+  height: 28rem;
+  pointer-events: none;
+  border-radius: 999px;
+  filter: blur(80px);
+  opacity: 0.24;
+}
+
+.wuxia-orb-left {
+  top: 8rem;
+  left: -18rem;
+  background: #d5bb8d;
+}
+
+.wuxia-orb-right {
+  top: 26rem;
+  right: -18rem;
+  background: #7d9e90;
+}
+
+.dark .wuxia-orb {
+  opacity: 0.12;
+}
+
+.wuxia-hero-copy {
+  animation: wuxia-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.wuxia-landscape {
+  --landscape-sky-top: #e8ddc7;
+  --landscape-sky-bottom: #b9c9b9;
+  --landscape-sun: #d9ae66;
+  --landscape-ink: #334d43;
+  --landscape-mountain-far: #b4bba8;
+  --landscape-mountain-mid: #789081;
+  --landscape-mountain-near: #344f45;
+  --landscape-mist: #f4efe3;
+  --landscape-river: #f6e8cb;
+  position: relative;
+  min-height: 20rem;
+  overflow: hidden;
+  border: 1px solid rgba(91, 114, 101, 0.24);
+  border-radius: 1.6rem 1.6rem 4.8rem 1.6rem;
+  background: #cfceba;
+  box-shadow:
+    0 30px 65px rgba(47, 50, 38, 0.18),
+    0 3px 8px rgba(47, 50, 38, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.44);
+  animation: wuxia-landscape-arrive 750ms 90ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.wuxia-landscape::before,
+.wuxia-landscape::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+.wuxia-landscape::before {
+  background:
+    linear-gradient(125deg, rgba(255, 255, 255, 0.22), transparent 34%),
+    repeating-linear-gradient(
+      92deg,
+      rgba(48, 57, 49, 0.02) 0,
+      rgba(48, 57, 49, 0.02) 1px,
+      transparent 1px,
+      transparent 6px
+    );
+  mix-blend-mode: soft-light;
+}
+
+.wuxia-landscape::after {
+  inset: 0.55rem;
+  border: 1px solid rgba(255, 252, 243, 0.4);
+  border-radius: 1.1rem 1.1rem 4.3rem 1.1rem;
+}
+
+.dark .wuxia-landscape {
+  --landscape-sky-top: #1c302c;
+  --landscape-sky-bottom: #354b44;
+  --landscape-sun: #d0ae70;
+  --landscape-ink: #c2cbbf;
+  --landscape-mountain-far: #5e7067;
+  --landscape-mountain-mid: #3b554b;
+  --landscape-mountain-near: #172b25;
+  --landscape-mist: #8fa59a;
+  --landscape-river: #d7c391;
+  border-color: rgba(177, 201, 189, 0.16);
+  background: #233a33;
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, 0.36),
+    0 3px 8px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.wuxia-birds {
+  opacity: 0.55;
+}
+
+.wuxia-pines {
+  stroke-width: 3;
+  opacity: 0.74;
+}
+
+.wuxia-mist {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.wuxia-mist-one {
+  animation: wuxia-mist-drift 14s ease-in-out infinite alternate;
+}
+
+.wuxia-mist-two {
+  animation: wuxia-mist-drift-reverse 18s ease-in-out infinite alternate;
+}
+
+.wuxia-art-label {
+  position: absolute;
+  z-index: 3;
+  right: 1.7rem;
+  bottom: 1.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: rgba(255, 250, 240, 0.94);
+  text-shadow: 0 1px 12px rgba(14, 30, 25, 0.44);
+}
+
+.wuxia-art-label strong,
+.wuxia-art-label small {
+  display: block;
+}
+
+.wuxia-art-label strong {
+  font-family: "IM Fell English", Georgia, serif;
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+.wuxia-art-label small {
+  margin-top: 0.08rem;
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.wuxia-art-seal {
+  display: inline-flex;
+  width: 2.15rem;
+  height: 2.15rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 242, 222, 0.76);
+  border-radius: 0.38rem;
+  background: #a34d3e;
+  box-shadow: inset 0 0 0 2px rgba(120, 42, 32, 0.26);
+  font-family: "IM Fell English", Georgia, serif;
+  font-size: 0.78rem;
+  letter-spacing: -0.03em;
+  transform: rotate(-3deg);
+}
+
+.wuxia-paper {
+  width: min(calc(100% - 2rem), 80rem);
+  border: 1px solid rgba(174, 158, 128, 0.38);
+  background:
+    linear-gradient(rgba(250, 246, 237, 0.91), rgba(247, 241, 228, 0.94)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(89, 68, 43, 0.025) 0,
+      rgba(89, 68, 43, 0.025) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  box-shadow:
+    0 26px 70px rgba(64, 48, 29, 0.12),
+    0 2px 8px rgba(64, 48, 29, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(12px);
+}
+
+.wuxia-paper::before {
+  position: absolute;
+  inset: 0.55rem;
+  content: "";
+  pointer-events: none;
+  border: 1px solid rgba(133, 112, 78, 0.1);
+  border-radius: 1.32rem;
+}
+
+.dark .wuxia-paper {
+  border-color: rgba(185, 205, 195, 0.12);
+  background:
+    linear-gradient(rgba(24, 36, 32, 0.94), rgba(21, 32, 28, 0.96)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.018) 0,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.28),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.dark .wuxia-paper::before {
+  border-color: rgba(213, 226, 218, 0.05);
+}
+
+.campaign-toolbar-button {
+  border-color: rgba(142, 125, 96, 0.46);
+  background: rgba(255, 250, 240, 0.64);
+  color: #34473f;
+  box-shadow: 0 2px 8px rgba(63, 48, 29, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+.campaign-toolbar-button:hover {
+  border-color: rgba(74, 117, 102, 0.72);
+  background: rgba(255, 252, 245, 0.94);
+  color: #214f41;
+}
+
+.dark .campaign-toolbar-button {
+  border-color: rgba(190, 211, 200, 0.14);
+  background: rgba(255, 255, 255, 0.045);
+  color: #e8e1d4;
+}
+
+.dark .campaign-toolbar-button:hover {
+  border-color: rgba(143, 181, 166, 0.42);
+  background: rgba(255, 255, 255, 0.085);
+  color: #fffaf0;
+}
+
+.wuxia-sheet-panel {
+  position: relative;
+  border: 1px solid rgba(177, 159, 129, 0.34);
+  border-radius: 1.2rem;
+  background: rgba(255, 252, 245, 0.68);
+  box-shadow:
+    0 12px 30px rgba(63, 48, 29, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.dark .wuxia-sheet-panel {
+  border-color: rgba(180, 202, 191, 0.1);
+  background: rgba(35, 50, 44, 0.72);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.campaign-inner-surface {
+  border: 1px solid rgba(183, 165, 135, 0.28);
+  border-radius: 0.85rem;
+  background: rgba(238, 233, 218, 0.52);
+}
+
+.dark .campaign-inner-surface {
+  border-color: rgba(183, 205, 194, 0.08);
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.campaign-technique-card {
+  border-radius: 1rem;
+  background: rgba(255, 253, 247, 0.72);
+  box-shadow: 0 7px 18px rgba(63, 48, 29, 0.045);
+}
+
+.campaign-technique-card-idle {
+  border-color: rgba(184, 166, 136, 0.38);
+}
+
+.campaign-technique-card-idle:hover {
+  border-color: rgba(75, 119, 102, 0.54);
+  box-shadow: 0 12px 25px rgba(54, 75, 64, 0.1);
+}
+
+.campaign-technique-card-selected {
+  border-color: var(--spiritual-500);
+  background: color-mix(in srgb, var(--spiritual-50) 82%, white);
+  box-shadow: 0 14px 30px rgba(42, 104, 83, 0.13);
+}
+
+.campaign-effect-surface {
+  border: 1px solid rgba(182, 164, 134, 0.2);
+  background: rgba(233, 228, 212, 0.58);
+}
+
+.dark .campaign-technique-card {
+  background: rgba(24, 39, 33, 0.82);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
+}
+
+.dark .campaign-technique-card-idle {
+  border-color: rgba(180, 202, 191, 0.1);
+}
+
+.dark .campaign-technique-card-idle:hover {
+  border-color: rgba(143, 181, 166, 0.34);
+}
+
+.dark .campaign-technique-card-selected {
+  border-color: var(--spiritual-400);
+  background: rgba(36, 72, 59, 0.6);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.22);
+}
+
+.dark .campaign-effect-surface {
+  border-color: rgba(181, 204, 192, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.wuxia-card {
+  min-height: 338px;
+  border: 1px solid rgba(177, 159, 129, 0.42);
+  border-radius: 1.15rem;
+  background:
+    linear-gradient(150deg, rgba(255, 253, 247, 0.96), rgba(243, 235, 219, 0.96)),
+    repeating-linear-gradient(
+      90deg,
+      rgba(82, 61, 35, 0.02) 0,
+      rgba(82, 61, 35, 0.02) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+  box-shadow:
+    0 14px 32px rgba(63, 48, 29, 0.09),
+    0 2px 4px rgba(63, 48, 29, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  transition:
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 300ms ease,
+    box-shadow 300ms ease;
+}
+
+.wuxia-card::after {
+  position: absolute;
+  z-index: 12;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 7px 0 0 rgba(70, 102, 88, 0.055);
+}
+
+.wuxia-card:hover,
+.wuxia-card:focus-within {
+  border-color: rgba(82, 121, 104, 0.6);
+  box-shadow:
+    0 24px 44px rgba(53, 62, 48, 0.16),
+    0 4px 8px rgba(53, 62, 48, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  transform: translateY(-6px);
+}
+
+.dark .wuxia-card {
+  border-color: rgba(180, 202, 191, 0.12);
+  background:
+    linear-gradient(150deg, rgba(35, 50, 44, 0.98), rgba(25, 38, 33, 0.98)),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.015) 0,
+      rgba(255, 255, 255, 0.015) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.22),
+    0 2px 4px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.dark .wuxia-card::after {
+  box-shadow: inset 7px 0 0 rgba(143, 181, 166, 0.045);
+}
+
+.dark .wuxia-card:hover,
+.dark .wuxia-card:focus-within {
+  border-color: rgba(143, 181, 166, 0.4);
+  box-shadow:
+    0 28px 52px rgba(0, 0, 0, 0.34),
+    0 4px 10px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.wuxia-card-reveal {
+  animation: wuxia-card-reveal 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.wuxia-card-skeleton:hover,
+.wuxia-card-skeleton:focus-within {
+  border-color: rgba(177, 159, 129, 0.42);
+  box-shadow:
+    0 14px 32px rgba(63, 48, 29, 0.09),
+    0 2px 4px rgba(63, 48, 29, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  transform: none;
+}
+
+.wuxia-level-seal {
+  border: 1px solid rgba(255, 239, 220, 0.58);
+  background: #9b4437;
+  box-shadow:
+    0 7px 18px rgba(36, 27, 23, 0.25),
+    inset 0 0 0 3px rgba(111, 34, 27, 0.22),
+    inset 0 0 0 4px rgba(255, 235, 216, 0.2);
+}
+
+.wuxia-new-card {
+  background:
+    radial-gradient(circle at 50% 37%, rgba(97, 133, 116, 0.11), transparent 7.5rem),
+    linear-gradient(150deg, rgba(255, 253, 247, 0.94), rgba(239, 234, 219, 0.94));
+}
+
+.wuxia-new-card::before {
+  position: absolute;
+  top: 3.8rem;
+  left: 50%;
+  width: 9.5rem;
+  height: 9.5rem;
+  content: "";
+  pointer-events: none;
+  border: 1px solid rgba(65, 105, 88, 0.12);
+  border-right-color: transparent;
+  border-radius: 999px;
+  transform: translateX(-50%) rotate(-18deg);
+}
+
+.dark .wuxia-new-card {
+  background:
+    radial-gradient(circle at 50% 37%, rgba(139, 180, 163, 0.1), transparent 7.5rem),
+    linear-gradient(150deg, rgba(34, 49, 43, 0.98), rgba(24, 36, 31, 0.98));
+}
+
+.wuxia-new-card-mark {
+  color: #356454;
+  border: 1px solid rgba(67, 111, 94, 0.25);
+  background: rgba(226, 235, 226, 0.68);
+  box-shadow:
+    0 9px 25px rgba(64, 91, 77, 0.12),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
+.dark .wuxia-new-card-mark {
+  color: #a3c4b7;
+  border-color: rgba(154, 192, 177, 0.2);
+  background: rgba(132, 169, 154, 0.08);
+  box-shadow:
+    0 9px 25px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.018);
+}
+
+@keyframes wuxia-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wuxia-landscape-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes wuxia-card-reveal {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes wuxia-mist-drift {
+  from { transform: translateX(-12px); }
+  to { transform: translateX(18px); }
+}
+
+@keyframes wuxia-mist-drift-reverse {
+  from { transform: translateX(14px); }
+  to { transform: translateX(-20px); }
+}
+
+@media (max-width: 639px) {
+  .wuxia-topbar {
+    position: relative;
+  }
+
+  .wuxia-landscape {
+    min-height: 17rem;
+    border-radius: 1.25rem 1.25rem 3.5rem 1.25rem;
+  }
+
+  .wuxia-landscape::after {
+    border-radius: 0.78rem 0.78rem 3rem 0.78rem;
+  }
+
+  .wuxia-art-label {
+    right: 1.2rem;
+    bottom: 1.1rem;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .wuxia-card-action {
+    opacity: 1 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wuxia-hero-copy,
+  .wuxia-landscape,
+  .wuxia-card-reveal,
+  .wuxia-mist-one,
+  .wuxia-mist-two {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+
+  .wuxia-card,
+  .wuxia-card img,
+  .wuxia-card svg,
+  .wuxia-new-card-mark svg {
+    transition: none !important;
+  }
+
+  .wuxia-card:hover,
+  .wuxia-card:focus-within {
+    transform: none;
+  }
+
+  .spirit-die:hover {
+    animation: none;
+  }
 }

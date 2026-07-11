@@ -50,12 +50,15 @@ export default function SpiritDiePoolComponent({
   onManualDieAdjust,
 }: SpiritDiePoolProps) {
   return (
-    <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-      <div className="text-center mb-4">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Spirit Die Pool</h3>
+    <div>
+      <div className="mb-5 text-center">
+        <p className="wuxia-kicker mb-1.5">Inner reserves</p>
+        <h2 className="font-display text-2xl text-[#20352e] dark:text-[#f1eadc]">
+          Spirit Die Pool
+        </h2>
       </div>
       
-      <div className="mb-4 flex flex-wrap items-center justify-center gap-3">
+      <div className="campaign-inner-surface mb-5 flex flex-wrap items-center justify-center gap-3 p-3">
         <div className="flex items-center gap-2" data-testid="manual-tracking-toggle">
           <Settings className="h-4 w-4 text-gray-500 dark:text-gray-400" />
           <Label htmlFor="manual-tracking" className="text-sm text-gray-700 dark:text-gray-300">
@@ -68,7 +71,13 @@ export default function SpiritDiePoolComponent({
             data-testid="switch-manual-tracking"
           />
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onOverride}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onOverride}
+          className="campaign-toolbar-button"
+        >
           <SlidersHorizontal className="mr-2 h-4 w-4" />
           Override Pool
         </Button>
@@ -79,7 +88,7 @@ export default function SpiritDiePoolComponent({
         )}
       </div>
       
-      <div className="flex items-start justify-center space-x-4 mt-4">
+      <div className="mt-4 flex flex-wrap items-start justify-center gap-x-4 gap-y-2">
         {/* Show all dice positions based on original dice */}
         {originalDice.map((originalDie, index) => {
           const currentDie = currentDice[index];
@@ -161,13 +170,13 @@ export default function SpiritDiePoolComponent({
       </div>
 
       {/* Long Rest Button */}
-      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="mt-4 border-t border-[#d1c5af]/70 pt-4 dark:border-white/10">
         <div className="flex justify-end">
           <Button
             onClick={onRestoreAll}
             variant="outline"
             size="sm"
-            className="border-spiritual-600 text-spiritual-600 hover:bg-spiritual-50 dark:border-spiritual-400 dark:text-spiritual-400 dark:hover:bg-spiritual-900"
+            className="campaign-toolbar-button"
           >
             <RotateCcw className="w-4 h-4 mr-2" />
             Long Rest

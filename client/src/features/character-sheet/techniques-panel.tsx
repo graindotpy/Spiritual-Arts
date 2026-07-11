@@ -32,12 +32,15 @@ export function TechniquesPanel({
   const preferences = useTechniquePreferences();
 
   return (
-    <section className="lg:col-span-2" aria-labelledby="techniques-heading">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 id="techniques-heading" className="text-2xl font-bold text-gray-900 dark:text-white">
-          Techniques
-        </h2>
-        <Button onClick={onAdd} className="bg-spiritual-600 text-white hover:bg-spiritual-700">
+    <section className="wuxia-sheet-panel p-5 sm:p-6 lg:col-span-2" aria-labelledby="techniques-heading">
+      <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="wuxia-kicker mb-1.5">Cultivated arts</p>
+          <h2 id="techniques-heading" className="font-display text-3xl text-[#20352e] dark:text-[#f1eadc]">
+            Techniques
+          </h2>
+        </div>
+        <Button onClick={onAdd} className="w-full rounded-full bg-spiritual-600 text-white hover:bg-spiritual-700 sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Add Technique
         </Button>
@@ -69,7 +72,7 @@ export function TechniquesPanel({
         )}
 
         {!isLoading && techniques.length === 0 && (
-          <Card>
+          <Card className="campaign-inner-surface border-0 shadow-none">
             <CardContent className="py-12 text-center">
               <p className="text-gray-500 dark:text-gray-400">
                 No techniques yet. Add one to get started.

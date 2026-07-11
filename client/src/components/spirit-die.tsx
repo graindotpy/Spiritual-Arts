@@ -56,15 +56,15 @@ export default function SpiritDie({
           "flex h-14 w-14 cursor-pointer select-none items-center justify-center rounded-lg border-2 text-lg font-bold shadow-lg transition-all duration-200",
           isActive
             ? cn(
-                "border-spiritual-300 bg-gradient-to-br from-spiritual-400 to-spiritual-600 text-white",
-                "hover:scale-105 hover:shadow-xl dark:border-spiritual-400 dark:from-spiritual-500 dark:to-spiritual-700",
+                "border-spiritual-300 bg-gradient-to-br from-spiritual-600 to-spiritual-800 text-white",
+                "hover:scale-105 hover:shadow-xl dark:border-spiritual-400",
                 "[text-shadow:_0_1px_2px_rgb(0_0_0_/_0.8)]",
               )
             : "border-gray-400 bg-gradient-to-br from-gray-300 to-gray-500 text-gray-100 dark:border-gray-500 dark:from-gray-600 dark:to-gray-800 dark:text-gray-300",
           isSelected &&
             (isManualMode
               ? "scale-105 ring-4 ring-blue-400 ring-opacity-60"
-              : "scale-105 ring-4 ring-spiritual-400 ring-opacity-60"),
+              : "scale-105 ring-4 ring-[#68a28a]/60"),
         )}
         onClick={handleClick}
         aria-label={`${isManualMode ? "Change" : "Select"} ${size} spirit die`}

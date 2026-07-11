@@ -51,7 +51,7 @@ export default function TrackerComponent({ tracker, onDelete }: TrackerProps) {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+    <div className="campaign-inner-surface p-3">
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-sm font-medium text-gray-900 dark:text-white">
           {tracker.name}

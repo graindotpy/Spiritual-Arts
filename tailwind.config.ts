@@ -13,6 +13,18 @@ export default {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        spiritual: {
+          50: "var(--spiritual-50)",
+          100: "var(--spiritual-100)",
+          200: "var(--spiritual-200)",
+          300: "var(--spiritual-300)",
+          400: "var(--spiritual-400)",
+          500: "var(--spiritual-500)",
+          600: "var(--spiritual-600)",
+          700: "var(--spiritual-700)",
+          800: "var(--spiritual-800)",
+          900: "var(--spiritual-900)",
+        },
         card: {
           DEFAULT: "var(--card)",
           foreground: "var(--card-foreground)",

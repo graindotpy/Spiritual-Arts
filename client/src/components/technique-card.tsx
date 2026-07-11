@@ -103,16 +103,16 @@ export default function TechniqueCard({
         }
       }}
       className={cn(
-        "cursor-pointer border-2 p-4 text-gray-900 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spiritual-500 focus-visible:ring-offset-2 dark:text-white",
+        "campaign-technique-card cursor-pointer border-2 p-4 text-gray-900 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spiritual-500 focus-visible:ring-offset-2 dark:text-white",
         isSelected
-          ? "scale-[1.01] border-spiritual-500 bg-spiritual-50 shadow-lg dark:bg-spiritual-900"
-          : "border-gray-200 bg-white hover:border-spiritual-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800",
+          ? "campaign-technique-card-selected scale-[1.01]"
+          : "campaign-technique-card-idle",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 className="font-display text-xl text-[#263a33] dark:text-[#eee7da]">
               {effect?.alternateName || technique.name}
             </h3>
             {effect && (
@@ -147,13 +147,13 @@ export default function TechniqueCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 self-end sm:self-auto">
           <Button
             type="button"
             size="icon"
             variant="ghost"
             onClick={() => onMinimizedChange(!isMinimized)}
-            className="h-8 w-8 text-gray-500"
+            className="h-10 w-10 text-gray-500 sm:h-8 sm:w-8"
             aria-label={isMinimized ? "Expand technique" : "Collapse technique"}
           >
             {isMinimized ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -163,7 +163,7 @@ export default function TechniqueCard({
             size="icon"
             variant="ghost"
             onClick={() => onEdit(technique)}
-            className="h-8 w-8 text-gray-500"
+            className="h-10 w-10 text-gray-500 sm:h-8 sm:w-8"
             aria-label={`Edit ${technique.name}`}
           >
             <Edit className="h-4 w-4" />
@@ -178,7 +178,7 @@ export default function TechniqueCard({
                   onDelete(technique.id);
                 }
               }}
-              className="h-8 w-8 text-gray-500 hover:text-red-600"
+              className="h-10 w-10 text-gray-500 hover:text-red-600 sm:h-8 sm:w-8"
               aria-label={`Delete ${technique.name}`}
             >
               <Trash2 className="h-4 w-4" />
@@ -196,7 +196,7 @@ export default function TechniqueCard({
             className="text-sm text-gray-600 dark:text-gray-300"
           />
           {effect && (
-            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
+            <div className="campaign-effect-surface rounded-lg p-3">
               <h4 className="mb-2 font-medium text-gray-900 dark:text-white">
                 Effect ({currentSp} SP investment)
               </h4>
