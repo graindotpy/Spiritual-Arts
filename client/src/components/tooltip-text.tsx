@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Maximize2 } from "lucide-react";
 import ExpandedTooltipDialog from "./expanded-tooltip-dialog";
-import { useTooltipContext } from "@/contexts/tooltip-context";
 import { useGlossaryTerms, type GlossaryScope } from "@/hooks/use-glossary";
+import { cn } from "@/lib/utils";
 import type { GlossaryTerm, DmGlossaryTerm } from "@shared/schema";
 
 interface TooltipTextProps {
@@ -16,12 +16,10 @@ interface TooltipTextProps {
 
 export default function TooltipText({ text, entityId, scope, className }: TooltipTextProps) {
   const [expandedTerm, setExpandedTerm] = useState<GlossaryTerm | DmGlossaryTerm | null>(null);
-  const { setIsEnhancedTooltipOpen } = useTooltipContext();
-  
   const { data: glossaryTerms = [] } = useGlossaryTerms<GlossaryTerm | DmGlossaryTerm>(scope, entityId);
 
   if (!glossaryTerms || glossaryTerms.length === 0) {
-    return <div className={`${className} whitespace-pre-line`}>{text}</div>;
+    return <div className={cn("whitespace-pre-line", className)}>{text}</div>;
   }
 
   // Create a regex pattern to match all keywords (case-insensitive)
@@ -49,12 +47,14 @@ export default function TooltipText({ text, entityId, scope, className }: Toolti
 
     if (tooltip) {
       parts.push(
-        <TooltipProvider key={match.index}>
-          <Tooltip delayDuration={200}>
+        <Tooltip key={`${tooltip.id}:${match.index}`} delayDuration={200}>
             <TooltipTrigger asChild>
-              <span className="text-spiritual-600 dark:text-spiritual-400 underline decoration-dotted cursor-help font-medium">
-                {match![0]}
-              </span>
+              <button
+                type="button"
+                className="cursor-help font-medium text-spiritual-600 underline decoration-dotted dark:text-spiritual-400"
+              >
+                {match[0]}
+              </button>
             </TooltipTrigger>
             <TooltipContent 
               className="max-w-xs bg-white dark:bg-gray-800 border border-spiritual-200 dark:border-spiritual-600 shadow-lg"
@@ -76,7 +76,6 @@ export default function TooltipText({ text, entityId, scope, className }: Toolti
                     e.stopPropagation();
                     e.nativeEvent.stopImmediatePropagation();
                     setExpandedTerm(tooltip);
-                    setIsEnhancedTooltipOpen(true);
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -92,7 +91,6 @@ export default function TooltipText({ text, entityId, scope, className }: Toolti
               </div>
             </TooltipContent>
           </Tooltip>
-        </TooltipProvider>
       );
     } else {
       parts.push(match![0]);
@@ -108,10 +106,10 @@ export default function TooltipText({ text, entityId, scope, className }: Toolti
 
   return (
     <>
-      <div className={`${className} whitespace-pre-line`}>
-        {parts.map((part, index) => (
-          typeof part === 'string' ? part : <span key={index}>{part}</span>
-        ))}
+      <div className={cn("whitespace-pre-line", className)}>
+        {parts.map((part, index) =>
+          typeof part === "string" ? <span key={`text:${index}`}>{part}</span> : part,
+        )}
       </div>
       
       {expandedTerm && (
@@ -119,7 +117,6 @@ export default function TooltipText({ text, entityId, scope, className }: Toolti
           open={!!expandedTerm}
           onClose={() => {
             setExpandedTerm(null);
-            setIsEnhancedTooltipOpen(false);
           }}
           term={expandedTerm}
           entityId={entityId}

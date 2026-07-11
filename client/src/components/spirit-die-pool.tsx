@@ -1,14 +1,13 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { RotateCcw, Settings } from "lucide-react";
+import { RotateCcw, Settings, SlidersHorizontal } from "lucide-react";
 import SpiritDie from "./spirit-die";
 import AnimatedDie from "./animated-die";
-import type { SpiritDiePool, DieSize } from "@shared/schema";
+import type { DieSize, SpiritDieSlot } from "@shared/schema";
 
 interface SpiritDiePoolProps {
-  currentDice: DieSize[];
+  currentDice: SpiritDieSlot[];
   originalDice: DieSize[];
   selectedDieIndex: number | null;
   onDieSelect: (index: number) => void;
@@ -23,7 +22,6 @@ interface SpiritDiePoolProps {
   isManualTracking: boolean;
   onManualTrackingToggle: () => void;
   onManualDieAdjust: (index: number, newValue: DieSize) => void;
-  maxDiceForLevel: DieSize[];
 }
 
 export default function SpiritDiePoolComponent({ 
@@ -42,7 +40,6 @@ export default function SpiritDiePoolComponent({
   isManualTracking,
   onManualTrackingToggle,
   onManualDieAdjust,
-  maxDiceForLevel
 }: SpiritDiePoolProps) {
   return (
     <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
@@ -50,18 +47,28 @@ export default function SpiritDiePoolComponent({
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Spirit Die Pool</h3>
       </div>
       
-      {/* Manual Tracking Switch */}
-      <div className="flex items-center justify-center space-x-3 mb-4" data-testid="manual-tracking-toggle">
-        <Settings className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-        <Label htmlFor="manual-tracking" className="text-sm text-gray-700 dark:text-gray-300">
-          Manual Tracking
-        </Label>
-        <Switch 
-          id="manual-tracking"
-          checked={isManualTracking}
-          onCheckedChange={onManualTrackingToggle}
-          data-testid="switch-manual-tracking"
-        />
+      <div className="mb-4 flex flex-wrap items-center justify-center gap-3">
+        <div className="flex items-center gap-2" data-testid="manual-tracking-toggle">
+          <Settings className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+          <Label htmlFor="manual-tracking" className="text-sm text-gray-700 dark:text-gray-300">
+            Manual Tracking
+          </Label>
+          <Switch
+            id="manual-tracking"
+            checked={isManualTracking}
+            onCheckedChange={onManualTrackingToggle}
+            data-testid="switch-manual-tracking"
+          />
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={onOverride}>
+          <SlidersHorizontal className="mr-2 h-4 w-4" />
+          Override Pool
+        </Button>
+        {isUsingOverride && (
+          <Button type="button" variant="ghost" size="sm" onClick={onResetToLevel}>
+            Reset to Level
+          </Button>
+        )}
       </div>
       
       <div className="flex items-start justify-center space-x-4 mt-4">
@@ -89,7 +96,7 @@ export default function SpiritDiePoolComponent({
                       onClick={!isManualTracking ? () => onDieSelect(index) : undefined}
                       isManualMode={isManualTracking}
                       onWheelAdjust={isManualTracking ? (newValue) => onManualDieAdjust(index, newValue) : undefined}
-                      maxValue={maxDiceForLevel[index]}
+                      maxValue={originalDie}
                     />
                   )
                 ) : (
@@ -124,7 +131,7 @@ export default function SpiritDiePoolComponent({
           );
         })}
         
-        {currentDice.length === 0 && (
+        {currentDice.every((die) => die === null) && (
           <div className="text-center py-8 flex flex-col items-center">
             <p className="text-gray-500 dark:text-gray-400 mb-4">No active dice remaining</p>
             {originalDice.length > 0 && (

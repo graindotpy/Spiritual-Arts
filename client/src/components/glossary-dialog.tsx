@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2, BookOpen } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { requestJson } from "@/lib/api";
+import { characterKeys } from "@/lib/query-keys";
 import { useToast } from "@/hooks/use-toast";
 import type { GlossaryTerm, InsertGlossaryTerm } from "@shared/schema";
 
@@ -26,18 +27,16 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: glossaryTerms = [], isLoading } = useQuery({
-    queryKey: ["/api/character", characterId, "glossary"],
+  const { data: glossaryTerms = [], isLoading } = useQuery<GlossaryTerm[]>({
+    queryKey: characterKeys.glossary(characterId),
     enabled: open && !!characterId,
   });
 
   const createTerm = useMutation({
-    mutationFn: async (data: InsertGlossaryTerm) => {
-      const response = await apiRequest("POST", `/api/character/${characterId}/glossary`, data);
-      return response.json();
-    },
+    mutationFn: (data: Omit<InsertGlossaryTerm, "characterId">) =>
+      requestJson<GlossaryTerm>("POST", `/api/character/${characterId}/glossary`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "glossary"] });
+      queryClient.invalidateQueries({ queryKey: characterKeys.glossary(characterId) });
       setNewKeyword("");
       setNewDefinition("");
       toast({
@@ -57,11 +56,10 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
   const updateTerm = useMutation({
     mutationFn: async (data: { id: string } & Partial<InsertGlossaryTerm>) => {
       const { id, ...updateData } = data;
-      const response = await apiRequest("PUT", `/api/glossary/${id}`, updateData);
-      return response.json();
+      return requestJson<GlossaryTerm>("PUT", `/api/glossary/${id}`, updateData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "glossary"] });
+      queryClient.invalidateQueries({ queryKey: characterKeys.glossary(characterId) });
       setEditingTerm(null);
       setEditKeyword("");
       setEditDefinition("");
@@ -81,10 +79,10 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
 
   const deleteTerm = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/glossary/${id}`);
+      await requestJson<{ success: boolean }>("DELETE", `/api/glossary/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "glossary"] });
+      queryClient.invalidateQueries({ queryKey: characterKeys.glossary(characterId) });
       toast({
         title: "Success",
         description: "Glossary term deleted successfully",
@@ -104,7 +102,6 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
     if (!newKeyword.trim() || !newDefinition.trim()) return;
 
     await createTerm.mutateAsync({
-      characterId,
       keyword: newKeyword.trim(),
       definition: newDefinition.trim(),
       expandedContent: null,
@@ -136,7 +133,7 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-[var(--dialog-background)] text-gray-900 dark:text-gray-100 border-gray-200 dark:border-gray-600">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -265,7 +262,8 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handleDelete(term.id, term.keyword)}
+                             onClick={() => handleDelete(term.id, term.keyword)}
+                            aria-label={`Delete ${term.keyword}`}
                             className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
                           >
                             <Trash2 className="w-4 h-4" />

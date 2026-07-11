@@ -1,10 +1,11 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { ThemeProvider } from "@/components/theme-provider";
 
-createRoot(document.getElementById("root")!).render(
-  <ThemeProvider>
-    <App />
-  </ThemeProvider>
-);
+const root = document.getElementById("root");
+
+if (!root) {
+  throw new Error("Application root element was not found");
+}
+
+createRoot(root).render(<App />);

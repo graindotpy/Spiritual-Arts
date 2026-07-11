@@ -4,7 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { requestJson } from "@/lib/api";
+import { characterKeys } from "@/lib/query-keys";
+import type { Tracker } from "@shared/schema";
 
 interface TrackerDialogProps {
   isOpen: boolean;
@@ -19,12 +21,11 @@ export default function TrackerDialog({ isOpen, onClose, characterId }: TrackerD
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; target?: string }) => {
-      const response = await apiRequest('POST', `/api/character/${characterId}/trackers`, data);
-      return response.json();
+      return requestJson<Tracker>("POST", `/api/character/${characterId}/trackers`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['/api/character', characterId, 'trackers']
+        queryKey: characterKeys.trackers(characterId),
       });
       onClose();
       setName("");
@@ -50,7 +51,7 @@ export default function TrackerDialog({ isOpen, onClose, characterId }: TrackerD
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add New Tracker</DialogTitle>

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircle, XCircle } from "lucide-react";
 
@@ -13,20 +12,14 @@ export default function RollResultNotification({
   success = true, 
   isVisible 
 }: RollResultNotificationProps) {
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    if (isVisible && result !== null) {
-      setShow(true);
-    } else {
-      setShow(false);
-    }
-  }, [isVisible, result]);
-
-  if (!show || result === null) return null;
+  if (!isVisible || result === null) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-4 duration-300">
+    <div
+      className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-4 duration-300"
+      role="status"
+      aria-live="polite"
+    >
       <div className={cn(
         "flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border backdrop-blur-sm",
         success 

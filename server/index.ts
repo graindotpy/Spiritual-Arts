@@ -1,71 +1,103 @@
-import express, { type Request, Response, NextFunction } from "express";
+import express from "express";
+import { databaseConnection } from "./db";
+import { apiErrorHandler } from "./http/errors";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { log, serveStatic, setupVite } from "./vite";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+
+let databaseClose: Promise<void> | undefined;
+
+function closeDatabase(): Promise<void> {
+  databaseClose ??= (async () => {
+    try {
+      await databaseConnection?.pool.end();
+    } catch (error) {
+      console.error("Failed to close the database pool:", error);
+      process.exitCode = 1;
+    }
+  })();
+  return databaseClose;
+}
 
 app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+  const startedAt = Date.now();
 
   res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+    if (req.path.startsWith("/api")) {
+      log(
+        `${req.method} ${req.path} ${res.statusCode} in ${Date.now() - startedAt}ms`,
+      );
     }
   });
 
   next();
 });
 
-(async () => {
+async function start(): Promise<void> {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Vite's fallback must be registered after API routes and their 404 handler.
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
+  app.use(apiErrorHandler);
+
+  const port = Number.parseInt(process.env.PORT || "5000", 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("PORT must be an integer between 1 and 65535");
+  }
+  const listenOptions: { port: number; host: string; reusePort?: boolean } = {
     port,
     host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  };
+
+  if (process.platform !== "win32") {
+    listenOptions.reusePort = true;
+  }
+
+  server.once("error", (error) => {
+    console.error("HTTP server error:", error);
+    process.exitCode = 1;
+    void closeDatabase();
+  });
+  server.listen(listenOptions, () => {
     log(`serving on port ${port}`);
   });
-})();
+
+  let shuttingDown = false;
+  const shutDown = (signal: NodeJS.Signals) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log(`received ${signal}; closing server`);
+
+    const forceExit = setTimeout(() => {
+      console.error("Server did not close within 10 seconds");
+      process.exit(1);
+    }, 10_000);
+    forceExit.unref();
+
+    server.close((error) => {
+      clearTimeout(forceExit);
+      if (error) {
+        console.error("Failed to close server cleanly:", error);
+        process.exitCode = 1;
+      }
+      void closeDatabase();
+    });
+  };
+
+  process.once("SIGINT", shutDown);
+  process.once("SIGTERM", shutDown);
+}
+
+void start().catch((error: unknown) => {
+  console.error("Failed to start server:", error);
+  process.exitCode = 1;
+  void closeDatabase();
+});

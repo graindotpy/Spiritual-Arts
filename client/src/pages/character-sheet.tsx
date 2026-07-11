@@ -1,26 +1,38 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Home, Moon, Sun, TrendingUp, BookOpen } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import SpiritDiePoolComponent from "@/components/spirit-die-pool";
-import TechniqueCard from "@/components/technique-card";
 import TechniqueEditor from "@/components/technique-editor";
 import SpiritDieOverride from "@/components/spirit-die-override";
-import EditableCharacterHeader from "@/components/editable-character-header";
 import LevelEditor from "@/components/level-editor";
 import GlossaryDialog from "@/components/glossary-dialog";
-import { useTheme } from "@/components/theme-provider";
-import { useCharacterState } from "@/hooks/use-character-state";
-import { useWebSocket } from "@/hooks/use-websocket";
+import TrackerDialog from "@/components/tracker-dialog";
 import SpiritRollNotification from "@/components/spirit-roll-notification";
 import RollResultNotification from "@/components/roll-result-notification";
-import TrackerComponent from "@/components/tracker";
-import TrackerDialog from "@/components/tracker-dialog";
-import { SPIRIT_DIE_PROGRESSION } from "@shared/schema";
-import type { Character, Technique, SpiritDiePool, DieSize, Tracker } from "@shared/schema";
+import { useCharacterState } from "@/hooks/use-character-state";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { useToast } from "@/hooks/use-toast";
+import { requestJson } from "@/lib/api";
+import { characterKeys } from "@/lib/query-keys";
+import { CharacterSheetHeader } from "@/features/character-sheet/character-sheet-header";
+import { TechniquesPanel } from "@/features/character-sheet/techniques-panel";
+import { TrackersPanel } from "@/features/character-sheet/trackers-panel";
+import { useRollController } from "@/features/character-sheet/use-roll-controller";
+import {
+  canSpiritDieMeetInvestment,
+  getDieMaximum,
+  getSpiritDiceForLevel,
+  normalizeSpiritDieSlots,
+  restoreSpiritDieSlot,
+  type DieSize,
+  type SpiritDieSlot,
+} from "@shared/spirit-dice";
+import type {
+  Character,
+  SpiritDiePool,
+  Technique,
+  Tracker,
+} from "@shared/schema";
 
 interface CharacterSheetProps {
   character: Character;
@@ -28,503 +40,206 @@ interface CharacterSheetProps {
 }
 
 export default function CharacterSheet({ character, onReturnToMenu }: CharacterSheetProps) {
-  const { theme, toggleTheme } = useTheme();
-  const [selectedDieIndex, setSelectedDieIndex] = useState<number | null>(null);
-  const [selectedTechnique, setSelectedTechnique] = useState<string | null>(null);
-  const [selectedSP, setSelectedSP] = useState<number>(0);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editingTechnique, setEditingTechnique] = useState<Technique | null>(null);
-  const [isOverrideOpen, setIsOverrideOpen] = useState(false);
-  const [isLevelEditorOpen, setIsLevelEditorOpen] = useState(false);
-  const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
-  const [isTrackerDialogOpen, setIsTrackerDialogOpen] = useState(false);
-  const [isRolling, setIsRolling] = useState(false);
-  const [rollResult, setRollResult] = useState<number | null>(null);
-  const [rollSuccess, setRollSuccess] = useState<boolean>(true);
-  const [showResultNotification, setShowResultNotification] = useState(false);
-  
-  // Manual tracking state
-  const [isManualTracking, setIsManualTracking] = useState(false);
-
-  // WebSocket for real-time roll notifications
-  const { isConnected, lastRollBroadcast } = useWebSocket();
-
-  // Fetch fresh character data to ensure we have the latest level
-  const { data: freshCharacter } = useQuery<Character>({
-    queryKey: ["/api/character", character.id],
-  });
-
-  // Use fresh character data if available, fallback to prop
-  const currentCharacter = freshCharacter || character;
-
-  const { data: spiritDiePool } = useQuery<SpiritDiePool>({
-    queryKey: ["/api/character", currentCharacter.id, "spirit-die-pool"],
-  });
-
-  const techniquesQuery = useQuery<Technique[]>({
-    queryKey: ["/api/character", currentCharacter.id, "techniques"],
-  });
-  const techniques = techniquesQuery.data || [];
-
-  const trackersQuery = useQuery<Tracker[]>({
-    queryKey: ["/api/character", currentCharacter.id, "trackers"],
-  });
-  const trackers = trackersQuery.data || [];
-
-  const {
-    updateSpiritDiePool,
-    rollSpiritedie
-  } = useCharacterState(currentCharacter.id);
-
+  const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [selectedDieIndex, setSelectedDieIndex] = useState<number | null>(null);
+  const [editingTechnique, setEditingTechnique] = useState<Technique | null>(null);
+  const [isTechniqueEditorOpen, setTechniqueEditorOpen] = useState(false);
+  const [isOverrideOpen, setOverrideOpen] = useState(false);
+  const [isLevelEditorOpen, setLevelEditorOpen] = useState(false);
+  const [isGlossaryOpen, setGlossaryOpen] = useState(false);
+  const [isTrackerDialogOpen, setTrackerDialogOpen] = useState(false);
+  const [isManualTracking, setManualTracking] = useState(false);
+  const { lastRollBroadcast } = useWebSocket();
 
-  // Delete tracker mutation
-  const deleteTrackerMutation = useMutation({
-    mutationFn: async (trackerId: string) => {
-      const response = await apiRequest('DELETE', `/api/trackers/${trackerId}`);
-      return response.json();
-    },
-    onSuccess: () => {
-      trackersQuery.refetch();
-      toast({ title: "Tracker deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete tracker", variant: "destructive" });
-    }
+  const spiritDiceQuery = useQuery<SpiritDiePool>({
+    queryKey: characterKeys.spiritDice(character.id),
+  });
+  const techniquesQuery = useQuery<Technique[]>({
+    queryKey: characterKeys.techniques(character.id),
+  });
+  const trackersQuery = useQuery<Tracker[]>({
+    queryKey: characterKeys.trackers(character.id),
   });
 
-  // Delete technique mutation
-  const deleteTechniqueMutation = useMutation({
-    mutationFn: async (techniqueId: string) => {
-      const response = await fetch(`/api/techniques/${techniqueId}`, { 
-        method: "DELETE",
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to delete technique: ${response.statusText}`);
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      techniquesQuery.refetch();
-      toast({ title: "Technique deleted successfully" });
-    },
-    onError: (error) => {
-      console.error('Delete error:', error);
-      toast({ title: "Failed to delete technique", variant: "destructive" });
-    }
-  });
+  const { updateSpiritDiePool, deleteTechnique } = useCharacterState(character.id);
+  const rollController = useRollController(character.id);
+  const spiritDiePool = spiritDiceQuery.data;
+  const techniques = techniquesQuery.data ?? [];
+  const trackers = trackersQuery.data ?? [];
 
-  // Get level-based dice or use override
-  const levelBasedDice = SPIRIT_DIE_PROGRESSION[currentCharacter.level] || ['d4'];
-  const isUsingOverride = spiritDiePool?.overrideDice !== null;
-  const currentDice = spiritDiePool?.currentDice as DieSize[] || levelBasedDice;
-  // Original dice should always be level-based unless there's an explicit override
-  const originalDice = isUsingOverride ? (spiritDiePool?.overrideDice as DieSize[] || levelBasedDice) : levelBasedDice as DieSize[];
+  const levelDice = useMemo(() => getSpiritDiceForLevel(character.level), [character.level]);
+  const originalDice = useMemo(
+    () => (spiritDiePool?.overrideDice ? [...spiritDiePool.overrideDice] : levelDice),
+    [levelDice, spiritDiePool?.overrideDice],
+  );
+  const currentDice = useMemo(
+    () => normalizeSpiritDieSlots(spiritDiePool?.currentDice ?? originalDice, originalDice.length),
+    [originalDice, spiritDiePool?.currentDice],
+  );
+  const selectedDie = selectedDieIndex === null
+    ? null
+    : (currentDice[selectedDieIndex] ?? null);
+  const selectedSpIsSupported = canSpiritDieMeetInvestment(
+    selectedDie,
+    rollController.selectedSp,
+  );
+  const isUsingOverride = spiritDiePool?.overrideDice != null;
 
-  // Auto-select first die if none selected and dice are available
-  if (selectedDieIndex === null && currentDice.length > 0) {
-    setSelectedDieIndex(0);
-  }
-
-  // Reset selection if die no longer exists
-  if (selectedDieIndex !== null && selectedDieIndex >= currentDice.length) {
-    setSelectedDieIndex(currentDice.length > 0 ? 0 : null);
-  }
-
-  // Global cleanup to ensure page scrolling is always restored
   useEffect(() => {
-    const cleanup = () => {
-      document.body.style.overflow = 'unset';
-    };
+    setSelectedDieIndex((currentIndex) => {
+      if (currentIndex !== null && currentDice[currentIndex] !== null) {
+        return currentIndex;
+      }
+      const firstAvailable = currentDice.findIndex((die) => die !== null);
+      return firstAvailable >= 0 ? firstAvailable : null;
+    });
+  }, [currentDice]);
 
-    // Cleanup on window focus/blur events
-    window.addEventListener('blur', cleanup);
-    window.addEventListener('beforeunload', cleanup);
-    
-    return () => {
-      cleanup();
-      window.removeEventListener('blur', cleanup);
-      window.removeEventListener('beforeunload', cleanup);
-    };
-  }, []);
+  const deleteTracker = useMutation({
+    mutationFn: (trackerId: string) =>
+      requestJson<{ success: boolean }>("DELETE", `/api/trackers/${trackerId}`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: characterKeys.trackers(character.id) });
+      toast({ title: "Tracker deleted" });
+    },
+    onError: () => toast({ title: "Tracker deletion failed", variant: "destructive" }),
+  });
 
-
+  const saveCurrentDice = async (dice: SpiritDieSlot[]) => {
+    await updateSpiritDiePool.mutateAsync({ currentDice: dice });
+  };
 
   const handleDiceOverride = async (dice: DieSize[]) => {
-    await updateSpiritDiePool.mutateAsync({
-      currentDice: dice,
-      overrideDice: dice
-    });
+    await updateSpiritDiePool.mutateAsync({ currentDice: dice, overrideDice: dice });
   };
 
   const handleResetToLevel = async () => {
-    const levelDice = SPIRIT_DIE_PROGRESSION[character.level] || ['d4'];
-    await updateSpiritDiePool.mutateAsync({
-      currentDice: levelDice,
-      overrideDice: null
-    });
+    await updateSpiritDiePool.mutateAsync({ currentDice: levelDice, overrideDice: null });
   };
 
-  const handleTechniqueSelect = (techniqueId: string, sp: number) => {
-    // Select the technique and SP level for rolling later
-    setSelectedTechnique(techniqueId);
-    setSelectedSP(sp);
+  const handleRestoreDie = async (index: number) => {
+    await saveCurrentDice(restoreSpiritDieSlot(currentDice, originalDice, index));
   };
 
-  const handleRollButtonClick = async () => {
-    if (selectedTechnique && selectedSP > 0 && selectedDieIndex !== null) {
-      setIsRolling(true);
-      try {
-        const result = await rollSpiritedie.mutateAsync({ 
-          spInvestment: selectedSP,
-          dieIndex: selectedDieIndex 
-        });
-        setRollResult(result.value);
-        setRollSuccess(result.success);
-        
-        // Stop rolling after animation completes and show result notification
-        setTimeout(() => {
-          setIsRolling(false);
-          setShowResultNotification(true);
-          
-          // Hide result notification after 1 second
-          setTimeout(() => {
-            setShowResultNotification(false);
-            setRollResult(null);
-          }, 1000);
-        }, 1500); // Updated to match new animation duration
-      } catch (error) {
-        setIsRolling(false);
-        setRollResult(null);
-        setShowResultNotification(false);
-      }
-    }
+  const handleManualDieAdjust = async (index: number, value: DieSize) => {
+    const updated = [...currentDice];
+    updated[index] = value;
+    await saveCurrentDice(updated);
   };
 
-  const handleDieSelect = (index: number) => {
-    setSelectedDieIndex(index);
-  };
-
-  const handleDieRestore = async (index: number) => {
-    // Create a copy of current dice array
-    const newDice = [...currentDice];
-    
-    // Increase die by one step in progression (e.g., depleted -> d4, d4 -> d6, etc.)
-    if (index < currentDice.length) {
-      const currentDie = currentDice[index];
-      const originalDie = originalDice[index];
-      
-      // Define the progression sequence including depleted
-      const progression: (DieSize | "depleted")[] = ["depleted", "d4", "d6", "d8", "d10", "d12"];
-      
-      // Find current position and move one step up
-      const currentIndex = progression.indexOf(currentDie);
-      const originalIndex = progression.indexOf(originalDie as DieSize);
-      
-      if (currentIndex >= 0 && currentIndex < originalIndex && currentIndex < progression.length - 1) {
-        newDice[index] = progression[currentIndex + 1] as DieSize;
-        
-        await updateSpiritDiePool.mutateAsync({
-          currentDice: newDice
-        });
-      }
-    }
-  };
-
-  const handleRestoreAll = async () => {
-    // Long rest fully resets all dice to their maximum possible values
-    await updateSpiritDiePool.mutateAsync({
-      currentDice: originalDice
-    });
-  };
-
-  // Manual tracking handlers
-  const handleManualTrackingToggle = () => {
-    setIsManualTracking(!isManualTracking);
-  };
-
-  const handleManualDieAdjust = async (index: number, newValue: DieSize) => {
-    // Create a copy of current dice array and update the specific die
-    const newDice = [...currentDice];
-    newDice[index] = newValue;
-    
-    // Update without showing toast notification (silent update for manual mode)
-    try {
-      const response = await apiRequest("PUT", `/api/character/${currentCharacter.id}/spirit-die-pool`, {
-        currentDice: newDice
-      });
-      
-      // Silently refresh the cache without toast
-      // Force refresh of spirit die pool data
-      const queryClient = (await import("@/lib/queryClient")).queryClient;
-      queryClient.invalidateQueries({ queryKey: ["/api/character", currentCharacter.id, "spirit-die-pool"] });
-    } catch (error) {
-      // Only show error toasts
-      toast({
-        title: "Error",
-        description: "Failed to update die value",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleEditTechnique = (technique: Technique) => {
+  const openTechniqueEditor = (technique: Technique | null) => {
     setEditingTechnique(technique);
-    setIsEditorOpen(true);
+    setTechniqueEditorOpen(true);
   };
-
-  const handleDeleteTechnique = (techniqueId: string) => {
-    deleteTechniqueMutation.mutate(techniqueId);
-  };
-
-  const handleAddTechnique = () => {
-    setEditingTechnique(null);
-    setIsEditorOpen(true);
-  };
-
-  // Remove selected technique data since we no longer track selection
-
-  if (!character) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-spiritual-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading character sheet...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                onClick={onReturnToMenu}
-                variant="outline"
-                size="sm"
-                className="flex items-center border-spiritual-600 text-spiritual-600 hover:bg-spiritual-50 dark:border-spiritual-400 dark:text-spiritual-400 dark:hover:bg-spiritual-900"
-              >
-                <Home className="w-4 h-4 mr-2" />
-                Main Menu
-              </Button>
-              
-              <div>
-                <h1 className="text-2xl font-bold text-spiritual-700 dark:text-spiritual-400">
-                  {currentCharacter.name}
-                </h1>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {currentCharacter.path} • Level {currentCharacter.level}
-                  </p>
-                  <Button
-                    onClick={() => setIsLevelEditorOpen(true)}
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-xs"
-                  >
-                    <TrendingUp className="w-3 h-3 mr-1" />
-                    Edit
-                  </Button>
-                </div>
-              </div>
-            </div>
-            
-            <Button
-              onClick={toggleTheme}
-              variant="outline"
-              size="sm"
-              className="p-2"
-            >
-              {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            </Button>
-          </div>
-        </div>
-      </header>
+      <CharacterSheetHeader
+        character={character}
+        onReturnToMenu={onReturnToMenu}
+        onEditLevel={() => setLevelEditorOpen(true)}
+        onOpenGlossary={() => setGlossaryOpen(true)}
+      />
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Character Info & Spirit Die Pool */}
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           <div className="lg:col-span-1">
-            <div className="space-y-6">
-              <SpiritDiePoolComponent
-                currentDice={currentDice}
-                originalDice={originalDice}
-                selectedDieIndex={selectedDieIndex}
-                onDieSelect={handleDieSelect}
-                onDieRestore={handleDieRestore}
-                onRestoreAll={handleRestoreAll}
-                isUsingOverride={isUsingOverride}
-                onOverride={() => setIsOverrideOpen(true)}
-                onResetToLevel={handleResetToLevel}
-                isRolling={isRolling}
-                rollResult={rollResult}
-                // Manual tracking props
-                isManualTracking={isManualTracking}
-                onManualTrackingToggle={handleManualTrackingToggle}
-                onManualDieAdjust={handleManualDieAdjust}
-                maxDiceForLevel={levelBasedDice}
-              />
-              
-              {/* Big ROLL Button */}
-              {selectedTechnique && selectedSP > 0 && selectedDieIndex !== null && (
-                <div className="mt-6 flex justify-center">
+            <SpiritDiePoolComponent
+              currentDice={currentDice}
+              originalDice={originalDice}
+              selectedDieIndex={selectedDieIndex}
+              onDieSelect={setSelectedDieIndex}
+              onDieRestore={handleRestoreDie}
+              onRestoreAll={() => saveCurrentDice([...originalDice])}
+              isUsingOverride={isUsingOverride}
+              onOverride={() => setOverrideOpen(true)}
+              onResetToLevel={handleResetToLevel}
+              isRolling={rollController.isRolling}
+              rollResult={rollController.result?.value ?? null}
+              isManualTracking={isManualTracking}
+              onManualTrackingToggle={() => setManualTracking((active) => !active)}
+              onManualDieAdjust={handleManualDieAdjust}
+            />
+
+            {rollController.selectedTechniqueId &&
+              rollController.selectedSp > 0 &&
+              selectedDieIndex !== null && (
+                <div className="mt-6 flex flex-col items-center gap-2">
                   <Button
-                    onClick={handleRollButtonClick}
-                    disabled={isRolling}
+                    onClick={() => rollController.roll(selectedDieIndex, selectedDie)}
+                    disabled={rollController.isRolling || !selectedSpIsSupported}
                     size="lg"
-                    className="bg-spiritual-600 hover:bg-spiritual-700 text-white font-bold py-4 px-12 text-xl shadow-lg transform transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:scale-100"
+                    className="bg-spiritual-600 px-12 py-4 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105 hover:bg-spiritual-700 disabled:scale-100 disabled:opacity-50"
                   >
-                    {isRolling ? "ROLLING..." : "ROLL"}
+                    {rollController.isRolling ? "ROLLING…" : "ROLL"}
                   </Button>
-                </div>
-              )}
-              
-              {/* Trackers Section */}
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">Trackers</h3>
-                  <Button
-                    size="sm"
-                    onClick={() => setIsTrackerDialogOpen(true)}
-                    className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
-                    data-testid="button-add-tracker"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-                
-                <div className="space-y-2">
-                  {trackers.map((tracker) => (
-                    <TrackerComponent
-                      key={tracker.id}
-                      tracker={tracker}
-                      onDelete={(id) => deleteTrackerMutation.mutate(id)}
-                    />
-                  ))}
-                  
-                  {trackers.length === 0 && (
-                    <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-                      No trackers yet. Click + to add one.
-                    </div>
+                  {!selectedSpIsSupported && selectedDie && (
+                    <p
+                      className="text-center text-sm text-amber-700 dark:text-amber-300"
+                      role="status"
+                    >
+                      {selectedDie.toUpperCase()} supports up to {getDieMaximum(selectedDie)} SP.
+                      Select a larger Spirit Die for this technique.
+                    </p>
                   )}
                 </div>
-              </div>
-            </div>
+              )}
+
+            <TrackersPanel
+              trackers={trackers}
+              onAdd={() => setTrackerDialogOpen(true)}
+              onDelete={(trackerId) => deleteTracker.mutate(trackerId)}
+            />
           </div>
 
-          {/* Middle Column - Techniques */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Techniques</h2>
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => setIsGlossaryOpen(true)} 
-                  variant="outline"
-                  className="border-spiritual-600 text-spiritual-600 hover:bg-spiritual-50 dark:border-spiritual-400 dark:text-spiritual-400 dark:hover:bg-spiritual-900"
-                >
-                  <BookOpen className="w-5 h-5 mr-2" />
-                  Glossary
-                </Button>
-                <Button
-                  onClick={handleAddTechnique}
-                  className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Technique
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {techniquesQuery.isLoading ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-spiritual-600"></div>
-                  <span className="ml-3 text-gray-600 dark:text-gray-400">Loading techniques...</span>
-                </div>
-              ) : (
-                techniques.map((technique) => (
-                  <TechniqueCard
-                    key={technique.id}
-                    technique={technique}
-                    isSelected={selectedTechnique === technique.id}
-                    selectedSP={selectedTechnique === technique.id ? selectedSP : undefined}
-                    onSelect={handleTechniqueSelect}
-                    onEdit={() => handleEditTechnique(technique)}
-                    onDelete={handleDeleteTechnique}
-                  />
-                ))
-              )}
-              
-              {!techniquesQuery.isLoading && techniques.length === 0 && (
-                <Card>
-                  <CardContent className="text-center py-12">
-                    <p className="text-gray-500 dark:text-gray-400">
-                      No techniques yet. Click "Add Technique" to create your first one.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </div>
+          <TechniquesPanel
+            techniques={techniques}
+            isLoading={techniquesQuery.isLoading}
+            selectedTechniqueId={rollController.selectedTechniqueId}
+            selectedSp={rollController.selectedSp}
+            selectedDie={selectedDie}
+            onSelect={rollController.selectTechnique}
+            onAdd={() => openTechniqueEditor(null)}
+            onEdit={openTechniqueEditor}
+            onDelete={(techniqueId) => deleteTechnique.mutate(techniqueId)}
+          />
         </div>
 
-        {/* Dialogs */}
         <TechniqueEditor
-          isOpen={isEditorOpen}
-          onClose={() => setIsEditorOpen(false)}
+          isOpen={isTechniqueEditorOpen}
+          onClose={() => setTechniqueEditorOpen(false)}
           technique={editingTechnique}
-          characterId={currentCharacter.id}
+          characterId={character.id}
         />
-
         <SpiritDieOverride
           isOpen={isOverrideOpen}
-          onClose={() => setIsOverrideOpen(false)}
+          onClose={() => setOverrideOpen(false)}
           currentDice={originalDice}
           onSave={handleDiceOverride}
         />
-
-        {/* Level Editor Dialog */}
         <LevelEditor
-          character={currentCharacter}
+          character={character}
           isOpen={isLevelEditorOpen}
-          onClose={() => setIsLevelEditorOpen(false)}
+          onClose={() => setLevelEditorOpen(false)}
         />
-        
-        {/* Glossary Dialog */}
         <GlossaryDialog
           open={isGlossaryOpen}
-          characterId={currentCharacter.id}
-          onClose={() => setIsGlossaryOpen(false)}
+          characterId={character.id}
+          onClose={() => setGlossaryOpen(false)}
         />
-        
-        {/* Tracker Dialog */}
         <TrackerDialog
           isOpen={isTrackerDialogOpen}
-          onClose={() => setIsTrackerDialogOpen(false)}
-          characterId={currentCharacter.id}
+          onClose={() => setTrackerDialogOpen(false)}
+          characterId={character.id}
         />
-
       </main>
 
-      {/* Real-time Spirit Die Roll Notifications */}
-      <SpiritRollNotification 
-        rollData={lastRollBroadcast}
-        currentCharacterId={currentCharacter.id}
-      />
-
-      {/* Roll Result Notification */}
+      <SpiritRollNotification rollData={lastRollBroadcast} currentCharacterId={character.id} />
       <RollResultNotification
-        result={rollResult}
-        success={rollSuccess}
-        isVisible={showResultNotification}
+        result={rollController.result?.value ?? null}
+        success={rollController.result?.success ?? false}
+        isVisible={rollController.showResult}
       />
     </div>
   );

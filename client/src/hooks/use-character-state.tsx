@@ -1,223 +1,155 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { requestJson } from "@/lib/api";
+import { characterKeys } from "@/lib/query-keys";
 import { useToast } from "@/hooks/use-toast";
-import type { InsertTechnique, InsertSpiritDiePool, InsertActiveEffect, Character } from "@shared/schema";
+import type {
+  ActiveEffect,
+  Character,
+  InsertActiveEffect,
+  InsertSpiritDiePool,
+  InsertTechnique,
+  RollResult,
+  SpiritDiePool,
+  Technique,
+} from "@shared/schema";
+
+function requireCharacterId(characterId: string | undefined): string {
+  if (!characterId) {
+    throw new Error("No character is selected");
+  }
+  return characterId;
+}
 
 export function useCharacterState(characterId: string | undefined) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const invalidateCharacter = async () => {
+    if (!characterId) return;
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: characterKeys.all }),
+      queryClient.invalidateQueries({ queryKey: characterKeys.detail(characterId) }),
+    ]);
+  };
+
   const updateCharacter = useMutation({
-    mutationFn: async (data: Partial<Character>) => {
-      if (!characterId) throw new Error("No character ID");
-      const response = await apiRequest("PUT", `/api/character/${characterId}`, data);
-      return response.json();
+    mutationFn: (data: Pick<Partial<Character>, "name" | "path" | "level">) => {
+      const id = requireCharacterId(characterId);
+      return requestJson<Character>("PUT", `/api/character/${id}`, data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "spirit-die-pool"] });
-      toast({
-        title: "Success",
-        description: "Character updated successfully",
-      });
+    onSuccess: async () => {
+      await invalidateCharacter();
+      if (characterId) {
+        await queryClient.invalidateQueries({ queryKey: characterKeys.spiritDice(characterId) });
+      }
+      toast({ title: "Character updated" });
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to update character",
+        title: "Character update failed",
+        description: "Your changes could not be saved.",
         variant: "destructive",
       });
     },
   });
 
   const updateSpiritDiePool = useMutation({
-    mutationFn: async (data: Partial<InsertSpiritDiePool>) => {
-      if (!characterId) throw new Error("No character ID");
-      const response = await apiRequest("PUT", `/api/character/${characterId}/spirit-die-pool`, data);
-      return response.json();
+    mutationFn: (data: Partial<Omit<InsertSpiritDiePool, "characterId">>) => {
+      const id = requireCharacterId(characterId);
+      return requestJson<SpiritDiePool>("PUT", `/api/character/${id}/spirit-die-pool`, data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "spirit-die-pool"] });
-      toast({
-        title: "Success",
-        description: "Spirit die pool updated successfully",
-      });
+    onSuccess: (pool) => {
+      if (!characterId) return;
+      queryClient.setQueryData(characterKeys.spiritDice(characterId), pool);
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to update spirit die pool",
+        title: "Spirit dice update failed",
+        description: "The die pool could not be saved.",
         variant: "destructive",
       });
     },
   });
 
   const rollSpiritedie = useMutation({
-    mutationFn: async (data: { spInvestment: number; dieIndex?: number }) => {
-      if (!characterId) throw new Error("No character ID");
-      const response = await apiRequest("POST", `/api/character/${characterId}/roll`, data);
-      return response.json();
-    },
-    onSuccess: (result) => {
-      // Delay the pool refresh to allow animation and notification to complete
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "spirit-die-pool"] });
-      }, 2000);
-      
-      toast({
-        title: result.success ? "Success!" : "Failed",
-        description: result.success 
-          ? `Rolled ${result.value} - Success!` 
-          : `Rolled ${result.value} - Die reduced`,
-        variant: result.success ? "default" : "destructive",
-      });
+    mutationFn: (data: { spInvestment: number; dieIndex?: number }) => {
+      const id = requireCharacterId(characterId);
+      return requestJson<RollResult>("POST", `/api/character/${id}/roll`, data);
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to roll die",
+        title: "Roll failed",
+        description: "The selected die could not be rolled.",
         variant: "destructive",
       });
     },
   });
 
-
-
   const createTechnique = useMutation({
-    mutationFn: async (data: Omit<InsertTechnique, 'characterId'>) => {
-      if (!characterId) throw new Error("No character ID");
-      const response = await apiRequest("POST", `/api/character/${characterId}/techniques`, data);
-      return response.json();
+    mutationFn: (data: Omit<InsertTechnique, "characterId">) => {
+      const id = requireCharacterId(characterId);
+      return requestJson<Technique>("POST", `/api/character/${id}/techniques`, data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "techniques"] });
-      toast({
-        title: "Success",
-        description: "Technique created successfully",
-      });
+    onSuccess: async () => {
+      if (!characterId) return;
+      await queryClient.invalidateQueries({ queryKey: characterKeys.techniques(characterId) });
+      toast({ title: "Technique created" });
     },
     onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to create technique",
-        variant: "destructive",
-      });
+      toast({ title: "Technique creation failed", variant: "destructive" });
     },
   });
 
   const updateTechnique = useMutation({
-    mutationFn: async (data: { id: string } & Partial<InsertTechnique>) => {
-      const { id, ...updateData } = data;
-      const response = await apiRequest("PUT", `/api/techniques/${id}`, updateData);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "techniques"] });
-      toast({
-        title: "Success",
-        description: "Technique updated successfully",
-      });
+    mutationFn: ({ id, ...update }: { id: string } & Partial<InsertTechnique>) =>
+      requestJson<Technique>("PUT", `/api/techniques/${id}`, update),
+    onSuccess: async () => {
+      if (!characterId) return;
+      await queryClient.invalidateQueries({ queryKey: characterKeys.techniques(characterId) });
+      toast({ title: "Technique updated" });
     },
     onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update technique",
-        variant: "destructive",
-      });
+      toast({ title: "Technique update failed", variant: "destructive" });
     },
   });
 
   const deleteTechnique = useMutation({
-    mutationFn: async (techniqueId: string) => {
-      const response = await apiRequest("DELETE", `/api/techniques/${techniqueId}`, {});
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "techniques"] });
-      toast({
-        title: "Success",
-        description: "Technique deleted successfully",
-      });
+    mutationFn: (techniqueId: string) =>
+      requestJson<{ success: boolean }>("DELETE", `/api/techniques/${techniqueId}`),
+    onSuccess: async () => {
+      if (!characterId) return;
+      await queryClient.invalidateQueries({ queryKey: characterKeys.techniques(characterId) });
+      toast({ title: "Technique deleted" });
     },
     onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to delete technique",
-        variant: "destructive",
-      });
+      toast({ title: "Technique deletion failed", variant: "destructive" });
     },
   });
 
   const createActiveEffect = useMutation({
-    mutationFn: async (data: Omit<InsertActiveEffect, 'characterId'>) => {
-      if (!characterId) throw new Error("No character ID");
-      const response = await apiRequest("POST", `/api/character/${characterId}/active-effects`, data);
-      return response.json();
+    mutationFn: (data: Omit<InsertActiveEffect, "characterId">) => {
+      const id = requireCharacterId(characterId);
+      return requestJson<ActiveEffect>("POST", `/api/character/${id}/active-effects`, data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "active-effects"] });
-      toast({
-        title: "Success",
-        description: "Active effect added",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to add active effect",
-        variant: "destructive",
-      });
+    onSuccess: async () => {
+      if (!characterId) return;
+      await queryClient.invalidateQueries({ queryKey: characterKeys.activeEffects(characterId) });
     },
   });
 
   const deleteActiveEffect = useMutation({
-    mutationFn: async (effectId: string) => {
-      const response = await apiRequest("DELETE", `/api/active-effects/${effectId}`, {});
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "active-effects"] });
-      toast({
-        title: "Success",
-        description: "Active effect removed",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to remove active effect",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const updateCharacterLevel = useMutation({
-    mutationFn: async (data: { level: number }) => {
-      if (!characterId) throw new Error("No character ID");
-      const response = await apiRequest("PUT", `/api/character/${characterId}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/character", characterId, "spirit-die-pool"] });
-      toast({
-        title: "Success",
-        description: "Character level updated successfully",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update character level",
-        variant: "destructive",
-      });
+    mutationFn: (effectId: string) =>
+      requestJson<{ success: boolean }>("DELETE", `/api/active-effects/${effectId}`),
+    onSuccess: async () => {
+      if (!characterId) return;
+      await queryClient.invalidateQueries({ queryKey: characterKeys.activeEffects(characterId) });
     },
   });
 
   return {
     updateCharacter,
+    updateCharacterLevel: updateCharacter,
     updateSpiritDiePool,
-    updateCharacterLevel,
     rollSpiritedie,
     createTechnique,
     updateTechnique,
