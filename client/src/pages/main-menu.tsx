@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
@@ -41,6 +41,23 @@ const pageOptions = [{ label: "Path Manuals", path: "/" }];
 
 const toolbarButtonClass =
   "border-[#b8aa90]/70 bg-[#fffaf0]/65 text-[#27352f] shadow-sm backdrop-blur transition-colors hover:border-[#557d6f] hover:bg-[#fffaf0] hover:text-[#204e42] dark:border-white/15 dark:bg-white/[0.06] dark:text-[#e9e2d3] dark:hover:border-[#82a99a]/60 dark:hover:bg-white/[0.1] dark:hover:text-white";
+
+function formatSessionDate(value: string) {
+  if (!value) return "To be announced";
+
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return trimmed;
+
+  const [, year, month, day] = match;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
+}
 
 function CampaignMark() {
   return (
@@ -147,6 +164,7 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
   const [isDmMode, setDmMode] = useState(
     () => localStorage.getItem("dmMode") === "true",
   );
+  const [nextSessionDate, setNextSessionDate] = useState(() => localStorage.getItem("nextSessionDate") ?? "");
   const [isManageMode, setManageMode] = useState(
     () =>
       localStorage.getItem("dmMode") === "true" &&
@@ -194,6 +212,12 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
       }
       return next;
     });
+  };
+
+  const handleNextSessionDateChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setNextSessionDate(value);
+    localStorage.setItem("nextSessionDate", value);
   };
 
   const toggleDmMode = () => {
@@ -345,7 +369,7 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
           <div className="max-w-2xl wuxia-hero-copy">
             <p className="wuxia-eyebrow">
               <Sparkles className="h-3.5 w-3.5" />
-              Your campaign companion
+              campaign companion
             </p>
             <h1 className="font-display mt-5 text-5xl leading-[0.95] tracking-[-0.035em] text-[#1c3029] sm:text-6xl lg:text-7xl dark:text-[#f3ecde]">
               Walk the path.
@@ -354,8 +378,7 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
               </span>
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-[#5f655e] sm:text-lg dark:text-[#b9bdb5]">
-              Keep every path manual, spirit die, and hard-won technique close at hand as your
-              story unfolds.
+              Kozan campaign companion app. Track Paths, Spirit Die, unique mechanics, and more.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button
@@ -377,7 +400,27 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
             </div>
           </div>
 
-          <CampaignLandscape />
+          <div className="flex items-start justify-start lg:justify-start lg:pr-8">
+            <div className="w-full max-w-[18rem] -mt-2 lg:-mt-6">
+              <p className="font-display text-2xl leading-[0.95] tracking-[-0.035em] text-[#1c3029] sm:text-3xl dark:text-[#f3ecde]">
+                Next Session Date
+              </p>
+              {isDmMode ? (
+                <input
+                  type="text"
+                  value={nextSessionDate}
+                  onChange={handleNextSessionDateChange}
+                  placeholder="YYYY-MM-DD"
+                  className="mt-2 w-full border-none bg-transparent p-0 font-display text-3xl leading-[0.95] tracking-[-0.035em] text-[#436f60] outline-none placeholder:text-[#8a998f] focus:ring-0 dark:text-[#9fc5b7] sm:text-4xl"
+                  aria-label="Next Session Date"
+                />
+              ) : (
+                <p className="mt-2 font-display text-3xl leading-[0.95] tracking-[-0.035em] text-[#436f60] dark:text-[#9fc5b7] sm:text-4xl">
+                  {formatSessionDate(nextSessionDate)}
+                </p>
+              )}
+            </div>
+          </div>
         </section>
 
         <section
@@ -388,7 +431,7 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
             <div>
               <p className="wuxia-eyebrow">
                 <span className="h-px w-7 bg-current opacity-50" />
-                The fellowship
+                The party
               </p>
               <h2 className="font-display mt-3 text-3xl text-[#20352e] sm:text-4xl dark:text-[#f1eadc]">
                 Choose your character

@@ -35,7 +35,7 @@ export function TechniquesPanel({
     <section className="wuxia-sheet-panel p-5 sm:p-6 lg:col-span-2" aria-labelledby="techniques-heading">
       <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="wuxia-kicker mb-1.5">Cultivated arts</p>
+          <p className="wuxia-kicker mb-1.5">Path Manual</p>
           <h2 id="techniques-heading" className="font-display text-3xl text-[#20352e] dark:text-[#f1eadc]">
             Techniques
           </h2>

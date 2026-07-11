@@ -73,8 +73,20 @@
     @apply border-border;
   }
 
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    min-height: 100dvh;
+    background-color: #ede6d8;
+  }
+
+  .dark body {
+    background-color: #101a17;
   }
 }
 
@@ -142,6 +154,7 @@
   position: relative;
   isolation: isolate;
   overflow-x: clip;
+  min-height: 100dvh;
   color: rgb(var(--wuxia-ink));
   background-color: #ede6d8;
   background-image:

@@ -52,7 +52,7 @@ export default function SpiritDiePoolComponent({
   return (
     <div>
       <div className="mb-5 text-center">
-        <p className="wuxia-kicker mb-1.5">Inner reserves</p>
+        <p className="wuxia-kicker mb-1.5">Spirit Die Tracking</p>
         <h2 className="font-display text-2xl text-[#20352e] dark:text-[#f1eadc]">
           Spirit Die Pool
         </h2>
