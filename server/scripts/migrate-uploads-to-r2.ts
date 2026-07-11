@@ -1,31 +1,11 @@
 import fs from "fs";
 import path from "path";
-import dotenv from "dotenv";
 import { sql } from "drizzle-orm";
-import { db } from "../db";
+import { databaseConnection, requireDatabase } from "../db";
 import { isR2Enabled, uploadToR2 } from "../r2";
-
-dotenv.config();
-dotenv.config({ path: ".env.local", override: true });
+import { inspectRasterImage } from "../uploads/image-store";
 
 const baseUrl = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
-
-function getContentType(filename: string) {
-  const ext = path.extname(filename).toLowerCase();
-  switch (ext) {
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg";
-    case ".png":
-      return "image/png";
-    case ".webp":
-      return "image/webp";
-    case ".gif":
-      return "image/gif";
-    default:
-      return undefined;
-  }
-}
 
 async function uploadFolder(localDir: string, keyPrefix: string) {
   if (!fs.existsSync(localDir)) return { uploaded: 0, skipped: 0 };
@@ -41,8 +21,13 @@ async function uploadFolder(localDir: string, keyPrefix: string) {
 
     try {
       const body = await fs.promises.readFile(fullPath);
-      const contentType = getContentType(filename);
-      await uploadToR2({ key, body, contentType });
+      const format = inspectRasterImage(body);
+      if (!format) {
+        skipped += 1;
+        console.warn(`Skipped unsupported image format: ${key}`);
+        continue;
+      }
+      await uploadToR2({ key, body, contentType: format.contentType });
       uploaded += 1;
       console.log(`Uploaded ${key}`);
     } catch (error) {
@@ -56,6 +41,7 @@ async function uploadFolder(localDir: string, keyPrefix: string) {
 
 async function updatePortraitUrls() {
   if (!baseUrl) return 0;
+  const db = requireDatabase();
   const result = await db.execute(sql`
     UPDATE characters
     SET portrait_url = replace(portrait_url, '/uploads/portraits/', ${baseUrl + "/portraits/"})
@@ -66,6 +52,7 @@ async function updatePortraitUrls() {
 
 async function updateImageUrlsInText() {
   if (!baseUrl) return 0;
+  const db = requireDatabase();
   const replacement = baseUrl + "/images/";
   let updated = 0;
 
@@ -87,29 +74,56 @@ async function updateImageUrlsInText() {
     }
   }
 
+  const cardImageReplacement = baseUrl + "/card-images/";
+  const cardStates = await db.execute(sql`
+    UPDATE card_game_states
+    SET state = replace(
+      replace(state::text, '/uploads/images/', ${replacement}),
+      '/uploads/card-images/',
+      ${cardImageReplacement}
+    )::jsonb
+    WHERE state::text LIKE '%/uploads/images/%'
+       OR state::text LIKE '%/uploads/card-images/%'
+  `);
+  updated += cardStates.rowCount || 0;
+
   return updated;
 }
 
 async function main() {
   if (!isR2Enabled()) {
-    console.error("R2 is not configured. Set R2_* environment variables first.");
-    process.exit(1);
+    throw new Error("R2 is not configured. Set R2_* environment variables first.");
   }
 
   if (!baseUrl) {
-    console.error("R2_PUBLIC_BASE_URL is required.");
-    process.exit(1);
+    throw new Error("R2_PUBLIC_BASE_URL is required");
   }
+
+  requireDatabase();
 
   const uploadsRoot = path.join(process.cwd(), "uploads");
   const portraitsDir = path.join(uploadsRoot, "portraits");
   const imagesDir = path.join(uploadsRoot, "images");
+  const cardImagesDir = path.join(uploadsRoot, "card-images");
 
   console.log("Uploading portraits...");
   const portraitStats = await uploadFolder(portraitsDir, "portraits");
 
   console.log("Uploading images...");
   const imageStats = await uploadFolder(imagesDir, "images");
+
+  console.log("Uploading card images...");
+  const cardImageStats = await uploadFolder(cardImagesDir, "card-images");
+
+  if (
+    portraitStats.skipped > 0 ||
+    imageStats.skipped > 0 ||
+    cardImageStats.skipped > 0
+  ) {
+    throw new Error(
+      "Some local images could not be uploaded; database URLs were not changed",
+    );
+  }
 
   console.log("Updating database URLs...");
   const portraitsUpdated = await updatePortraitUrls();
@@ -121,6 +135,7 @@ async function main() {
       {
         portraits: portraitStats,
         images: imageStats,
+        cardImages: cardImageStats,
         portraitsUpdated,
         textUpdated,
       },
@@ -130,7 +145,11 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error("Migration failed:", error);
-  process.exit(1);
-});
+void main()
+  .catch((error: unknown) => {
+    console.error("Migration failed:", error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await databaseConnection?.pool.end();
+  });

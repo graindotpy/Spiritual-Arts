@@ -14,90 +14,35 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
-type CardType = "fighter" | "spy" | "support";
-type RowType = "fighter" | "spy";
-type Phase =
-  | "deploy_spies"
-  | "deploy_fighters"
-  | "redeploy"
-  | "results";
-type RedeployStage = "select" | "place";
-
-type CardLocation =
-  | { type: "hand"; ownerFactionId: string }
-  | {
-      type: "slot";
-      battlefieldId: string;
-      lane: 0 | 1;
-      row: RowType;
-      index: number;
-    }
-  | { type: "attached"; hostId: string };
-
-type GameCard = {
-  id: string;
-  name: string;
-  type: CardType;
-  score: number;
-  descriptor: string;
-  abilityName: string;
-  abilityDescription: string;
-  ownerFactionId: string;
-  imageUrl?: string;
-  artUrl?: string;
-  artAspectRatio?: number;
-  artPlacement?: CardArtPlacement;
-  location: CardLocation;
-};
-
-type TemplateFieldKey =
-  | "name"
-  | "descriptor"
-  | "abilityName"
-  | "abilityDescription"
-  | "score";
-type FontVariant = "normal" | "bold" | "italic" | "boldItalic";
-
-type TemplateTextField = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  minFontSize: number;
-  variant: FontVariant;
-  align: "left" | "center" | "right";
-};
-
-type CardArtPlacement = {
-  offsetX: number;
-  offsetY: number;
-  scale: number;
-  cropLeft: number;
-  cropTop: number;
-  cropRight: number;
-  cropBottom: number;
-};
-
-type CardTemplateLayout = {
-  templateUrl?: string;
-  fields: Record<TemplateFieldKey, TemplateTextField>;
-};
-
-type EditorCardData = {
-  name: string;
-  type: CardType;
-  score: number;
-  descriptor: string;
-  abilityName: string;
-  abilityDescription: string;
-  ownerFactionId: string;
-  imageUrl: string;
-  artUrl: string;
-  artAspectRatio: number;
-  artPlacement: CardArtPlacement;
-};
+import {
+  cardGameConflictResponse,
+  loadCardGameState,
+  parsePersistedUpdatedAt,
+  saveCardGameState,
+  uploadCardGameImage,
+} from "@/features/card-game/api";
+import { deriveSpyOutcomeFromTransition } from "@/features/card-game/model";
+import type {
+  Battlefield,
+  CardArtPlacement,
+  CardLocation,
+  CardTemplateLayout,
+  CardType,
+  EditorCardData,
+  Faction,
+  FontVariant,
+  GameCard,
+  MatchLogEntry,
+  PersistedCardGameState,
+  Phase,
+  RedeployStage,
+  ResultsAnnouncement,
+  RowType,
+  SpyOutcome,
+  SpyReportEvent,
+  TemplateFieldKey,
+  TemplateTextField,
+} from "@/features/card-game/types";
 
 type CardArtHandle = "n" | "e" | "s" | "w" | "nw" | "ne" | "sw" | "se";
 
@@ -134,20 +79,6 @@ type CardArtInteraction =
       height: number;
     };
 
-type Faction = {
-  id: string;
-  name: string;
-  isDm: boolean;
-  color: string;
-};
-
-type Battlefield = {
-  id: string;
-  name: string;
-  description: string;
-  factionIds: string[];
-};
-
 type DragState = {
   cardId: string;
   offsetX: number;
@@ -155,52 +86,6 @@ type DragState = {
   x: number;
   y: number;
   origin: CardLocation;
-};
-
-type PersistedCardGameState = {
-  phase: Phase;
-  redeployStage?: RedeployStage;
-  redeployStages?: Record<string, RedeployStage>;
-  nextPhaseVotes?: Record<string, boolean>;
-  phaseVoteDirection?: "next" | "prev" | null;
-  recentRedeployIds?: string[];
-  round: number;
-  activeBattlefieldId: string;
-  battlefields: Battlefield[];
-  cards: GameCard[];
-  cardTemplates?: Record<CardType, CardTemplateLayout>;
-  redeployIds: string[];
-  redeploySelections?: Record<string, string[]>;
-  factions: Faction[];
-  spyReportEvent?: SpyReportEvent | null;
-  matchLog?: MatchLogEntry[];
-  updatedAt: number;
-};
-
-type SpyOutcome = {
-  neutralizedSpyNames: string[];
-  successfulSpyNames: string[];
-  neutralizedEnemyCount: number;
-};
-
-type SpyReportEvent = {
-  id: string;
-  outcomes: Record<string, SpyOutcome>;
-};
-
-type ResultsAnnouncement = {
-  round: number;
-  winnerFactionId: string | null;
-  winnerScore: number;
-  runnerUpScore: number;
-};
-
-type MatchLogEntry = {
-  id: string;
-  round: number;
-  message: string;
-  createdAt: number;
-  eventKey?: string;
 };
 
 const initialFactions: Faction[] = [
@@ -377,14 +262,6 @@ const normalizeHexColor = (value: unknown, fallback: string) => {
     return `#${expanded.toLowerCase()}`;
   }
   return fallback;
-};
-
-const parsePersistedUpdatedAt = (value: unknown) => {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  const parsed = Date.parse(String(value));
-  return Number.isFinite(parsed) ? parsed : undefined;
 };
 
 const BOARD_BASE_WIDTH = 1760;
@@ -756,6 +633,7 @@ export default function CardGame() {
   const queuedSaveStateRef = useRef<PersistedCardGameState | null>(null);
   const latestPersistedStateRef = useRef<PersistedCardGameState | null>(null);
   const flushQueuedSaveRef = useRef<(() => void) | null>(null);
+  const isUnmountedRef = useRef(false);
   const latestPhaseRef = useRef<Phase>("deploy_spies");
   const latestCardsRef = useRef<GameCard[]>([]);
   const lastSeenSpyReportIdsRef = useRef<Map<string, string>>(new Map());
@@ -1240,71 +1118,6 @@ export default function CardGame() {
     []
   );
 
-  const deriveSpyOutcomeFromTransition = useCallback(
-    (
-      prevPhase: Phase,
-      prevCards: GameCard[],
-      nextPhase: Phase,
-      nextCards: GameCard[],
-      viewerFactionId: string | null
-    ): SpyOutcome | null => {
-      if (!viewerFactionId) return null;
-      if (prevPhase !== "deploy_spies" || nextPhase === "deploy_spies") return null;
-
-      const nextById = new Map(nextCards.map((card) => [card.id, card]));
-      const neutralizedOwnSpyNames = new Set<string>();
-      const successfulOwnSpyNames = new Set<string>();
-      const enemyMovedLaneKeys = new Set<string>();
-      let neutralizedEnemyCount = 0;
-
-      for (const prevCard of prevCards) {
-        if (prevCard.type !== "spy") continue;
-        if (prevCard.location.type !== "slot" || prevCard.location.row !== "spy") continue;
-        const nextCard = nextById.get(prevCard.id);
-        const movedToHand = Boolean(nextCard && nextCard.location.type === "hand");
-        const laneKey = `${prevCard.location.battlefieldId}::${prevCard.location.lane}`;
-
-        if (prevCard.ownerFactionId === viewerFactionId) {
-          if (movedToHand) {
-            neutralizedOwnSpyNames.add(prevCard.name || "Unnamed Spy");
-          }
-          continue;
-        }
-
-        if (movedToHand) {
-          enemyMovedLaneKeys.add(laneKey);
-          neutralizedEnemyCount += 1;
-        }
-      }
-
-      if (enemyMovedLaneKeys.size) {
-        for (const prevCard of prevCards) {
-          if (prevCard.type !== "spy") continue;
-          if (prevCard.ownerFactionId !== viewerFactionId) continue;
-          if (prevCard.location.type !== "slot" || prevCard.location.row !== "spy") continue;
-          const laneKey = `${prevCard.location.battlefieldId}::${prevCard.location.lane}`;
-          if (!enemyMovedLaneKeys.has(laneKey)) continue;
-          const nextCard = nextById.get(prevCard.id);
-          const movedToHand = Boolean(nextCard && nextCard.location.type === "hand");
-          if (!movedToHand) {
-            successfulOwnSpyNames.add(prevCard.name || "Unnamed Spy");
-          }
-        }
-      }
-
-      if (!neutralizedOwnSpyNames.size && !successfulOwnSpyNames.size && neutralizedEnemyCount === 0) {
-        return null;
-      }
-
-      return {
-        neutralizedSpyNames: Array.from(neutralizedOwnSpyNames),
-        successfulSpyNames: Array.from(successfulOwnSpyNames),
-        neutralizedEnemyCount,
-      };
-    },
-    []
-  );
-
   const applyPersistedState = useCallback((state: PersistedCardGameState) => {
     const canDeriveOutcome = hasAppliedRemoteStateRef.current;
     const derivedSpyOutcome = canDeriveOutcome
@@ -1340,7 +1153,7 @@ export default function CardGame() {
     skipNextSaveRef.current = true;
     lastUpdatedAtRef.current = state.updatedAt;
     hasAppliedRemoteStateRef.current = true;
-  }, [deriveSpyOutcomeFromTransition, viewFactionId]);
+  }, [viewFactionId]);
 
   const scheduleQueuedSave = useCallback((delay = 300) => {
     if (saveTimerRef.current) {
@@ -1369,15 +1182,18 @@ export default function CardGame() {
     saveQueuedRef.current = false;
     pendingSaveRef.current = true;
     const state = { ...queuedState, updatedAt: lastUpdatedAtRef.current };
+    let retryDelay = 0;
 
-    fetch("/api/card-game/state", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state }),
-    })
-      .then(async (response) => {
-        if (response.status === 409) {
-          const data = await response.json();
+    saveCardGameState(state)
+      .then((data) => {
+        const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
+        if (typeof remoteUpdatedAt === "number") {
+          lastUpdatedAtRef.current = Math.max(lastUpdatedAtRef.current, remoteUpdatedAt);
+        }
+      })
+      .catch((error) => {
+        const data = cardGameConflictResponse(error);
+        if (data) {
           const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
           if (typeof remoteUpdatedAt === "number") {
             lastUpdatedAtRef.current = Math.max(lastUpdatedAtRef.current, remoteUpdatedAt);
@@ -1386,22 +1202,17 @@ export default function CardGame() {
           saveQueuedRef.current = true;
           return;
         }
-        if (!response.ok) {
-          return;
-        }
-        const data = await response.json();
-        const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
-        if (typeof remoteUpdatedAt === "number") {
-          lastUpdatedAtRef.current = Math.max(lastUpdatedAtRef.current, remoteUpdatedAt);
-        }
-      })
-      .catch((error) => {
         console.error("Failed to save card game state", error);
+        if (!isUnmountedRef.current) {
+          queuedSaveStateRef.current = latestPersistedStateRef.current ?? queuedState;
+          saveQueuedRef.current = true;
+          retryDelay = 1500;
+        }
       })
       .finally(() => {
         pendingSaveRef.current = false;
-        if (queuedSaveStateRef.current) {
-          scheduleQueuedSave(0);
+        if (!isUnmountedRef.current && queuedSaveStateRef.current) {
+          scheduleQueuedSave(retryDelay);
         }
       });
   }, [scheduleQueuedSave]);
@@ -1410,14 +1221,19 @@ export default function CardGame() {
     flushQueuedSaveRef.current = flushQueuedSave;
   }, [flushQueuedSave]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    isUnmountedRef.current = false;
+    return () => {
+      isUnmountedRef.current = true;
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
       }
-    },
-    []
-  );
+      if (queuedSaveStateRef.current && !pendingSaveRef.current) {
+        flushQueuedSaveRef.current?.();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedFactionId) {
@@ -1512,38 +1328,37 @@ export default function CardGame() {
 
   useEffect(() => {
     let isActive = true;
+    const controller = new AbortController();
     const loadState = async () => {
       try {
-        const response = await fetch("/api/card-game/state");
-        if (!response.ok) {
-          return;
-        }
-        const data = await response.json();
+        const data = await loadCardGameState(controller.signal);
         if (!isActive) return;
         const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
         const normalized = normalizeState(data?.state, remoteUpdatedAt);
         hasLoadedStateRef.current = true;
         applyPersistedState(normalized);
       } catch (error) {
-        console.error("Failed to load card game state", error);
+        if (!controller.signal.aborted) {
+          console.error("Failed to load card game state", error);
+        }
       }
     };
 
     loadState();
     return () => {
       isActive = false;
+      controller.abort();
     };
   }, [applyPersistedState, normalizeState]);
 
   useEffect(() => {
-    if (pollingRef.current) {
-      window.clearInterval(pollingRef.current);
-    }
-    pollingRef.current = window.setInterval(async () => {
+    let cancelled = false;
+    let controller: AbortController | null = null;
+    const poll = async () => {
+      controller = new AbortController();
       try {
-        const response = await fetch("/api/card-game/state");
-        if (!response.ok) return;
-        const data = await response.json();
+        const data = await loadCardGameState(controller.signal);
+        if (cancelled) return;
         if (pendingSaveRef.current || saveQueuedRef.current) return;
         const remoteUpdatedAt = parsePersistedUpdatedAt(data?.updatedAt);
         const normalized = normalizeState(data?.state, remoteUpdatedAt);
@@ -1551,12 +1366,22 @@ export default function CardGame() {
           applyPersistedState(normalized);
         }
       } catch (error) {
-        console.error("Failed to poll card game state", error);
+        if (!controller.signal.aborted) {
+          console.error("Failed to poll card game state", error);
+        }
+      } finally {
+        controller = null;
+        if (!cancelled) {
+          pollingRef.current = window.setTimeout(poll, 2000);
+        }
       }
-    }, 2000);
+    };
+    pollingRef.current = window.setTimeout(poll, 2000);
     return () => {
+      cancelled = true;
+      controller?.abort();
       if (pollingRef.current) {
-        window.clearInterval(pollingRef.current);
+        window.clearTimeout(pollingRef.current);
         pollingRef.current = null;
       }
     };
@@ -2152,15 +1977,7 @@ export default function CardGame() {
 
   const uploadImageAsset = async (file: File): Promise<string | null> => {
     try {
-      const formData = new FormData();
-      formData.append("image", file);
-      const response = await fetch("/api/upload/image", {
-        method: "POST",
-        body: formData,
-      });
-      if (!response.ok) return null;
-      const data = await response.json();
-      return typeof data?.url === "string" ? data.url : null;
+      return await uploadCardGameImage(file);
     } catch (error) {
       console.error("Failed to upload image", error);
       return null;

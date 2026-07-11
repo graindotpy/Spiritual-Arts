@@ -1,10 +1,10 @@
 import express, { type Express } from "express";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
-import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
 
@@ -20,10 +20,16 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  const replitHosts = [
+    ...(process.env.REPLIT_DOMAINS ?? "").split(","),
+    process.env.REPLIT_DEV_DOMAIN ?? "",
+  ]
+    .map((host) => host.trim())
+    .filter(Boolean);
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
-    allowedHosts: true as const,
+    allowedHosts: ["localhost", "127.0.0.1", ...replitHosts],
   };
 
   const vite = await createViteServer({
@@ -56,7 +62,7 @@ export async function setupVite(app: Express, server: Server) {
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`,
+        `src="/src/main.tsx?v=${randomUUID()}"`,
       );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);

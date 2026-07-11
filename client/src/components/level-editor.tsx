@@ -1,13 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TrendingUp, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { useCharacterState } from "@/hooks/use-character-state";
 import type { Character } from "@shared/schema";
-import { SPIRIT_DIE_PROGRESSION } from "@shared/schema";
 
 interface LevelEditorProps {
   character: Character;
@@ -17,8 +16,15 @@ interface LevelEditorProps {
 
 export default function LevelEditor({ character, isOpen, onClose }: LevelEditorProps) {
   const [level, setLevel] = useState(character.level.toString());
-  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+  const { updateCharacterLevel } = useCharacterState(character.id);
+  const isSaving = updateCharacterLevel.isPending;
+
+  useEffect(() => {
+    if (isOpen) {
+      setLevel(character.level.toString());
+    }
+  }, [character.id, character.level, isOpen]);
 
   const handleSave = async () => {
     const newLevel = parseInt(level);
@@ -38,67 +44,11 @@ export default function LevelEditor({ character, isOpen, onClose }: LevelEditorP
       return;
     }
 
-    setIsSaving(true);
     try {
-      const response = await fetch(`/api/character/${character.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ level: newLevel }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update level');
-      }
-
-      // Update spirit die pool to match new level
-      const newLevelDice = SPIRIT_DIE_PROGRESSION[newLevel] || ['d4'];
-      
-      // Always delete and recreate the spirit die pool to ensure clean state
-      // First delete existing pool
-      await fetch(`/api/character/${character.id}/spirit-die-pool`, {
-        method: 'DELETE'
-      });
-
-      // Create fresh spirit die pool with new level dice
-      const spiritDieResponse = await fetch(`/api/character/${character.id}/spirit-die-pool`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          characterId: character.id,
-          currentDice: newLevelDice,
-          overrideDice: null
-        }),
-      });
-
-      // Don't fail if spirit die pool operations fail
-      if (!spiritDieResponse.ok) {
-        console.warn('Spirit die pool creation failed, but level was updated successfully');
-      }
-
-      // Invalidate character queries to refresh the UI
-      await queryClient.invalidateQueries({ queryKey: ["/api/characters"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/character", character.id] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/character", character.id, "spirit-die-pool"] });
-
-      toast({
-        title: "Level updated",
-        description: `${character.name} is now level ${newLevel} with updated spirit dice`,
-      });
-
+      await updateCharacterLevel.mutateAsync({ level: newLevel });
       onClose();
-    } catch (error) {
-      console.error('Level update error:', error);
-      toast({
-        title: "Update failed",
-        description: "Failed to update character level. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
+    } catch {
+      // The shared mutation reports the error consistently.
     }
   };
 
@@ -108,7 +58,7 @@ export default function LevelEditor({ character, isOpen, onClose }: LevelEditorP
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

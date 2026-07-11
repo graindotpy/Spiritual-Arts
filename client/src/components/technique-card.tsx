@@ -1,321 +1,215 @@
-import { useState, useRef, useEffect } from "react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Edit, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import TooltipText from "./tooltip-text";
-import { useTooltipContext } from "@/contexts/tooltip-context";
 import { characterGlossaryScope } from "@/hooks/use-glossary";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import type { Technique, SPEffect, TechniquePreference } from "@shared/schema";
+import type { SPEffect, Technique, TriggerType } from "@shared/schema";
+import {
+  canSpiritDieMeetInvestment,
+  getDieMaximum,
+  type SpiritDieSlot,
+} from "@shared/spirit-dice";
 
 interface TechniqueCardProps {
   technique: Technique;
   isSelected: boolean;
   selectedSP?: number;
+  selectedDie: SpiritDieSlot;
+  isMinimized: boolean;
+  onMinimizedChange: (isMinimized: boolean) => void;
   onSelect: (techniqueId: string, sp: number) => void;
   onEdit: (technique: Technique) => void;
   onDelete?: (techniqueId: string) => void;
 }
 
-// Simple user ID generator for demo purposes
-const getUserId = () => {
-  let userId = localStorage.getItem('userId');
-  if (!userId) {
-    userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    localStorage.setItem('userId', userId);
-  }
-  return userId;
+const TRIGGER_STYLES: Record<TriggerType, string> = {
+  action: "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200",
+  bonus: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200",
+  reaction: "bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200",
+  passive: "bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200",
 };
 
-export default function TechniqueCard({ 
-  technique, 
-  isSelected, 
+const TRIGGER_LABELS: Record<TriggerType, string> = {
+  action: "Action",
+  bonus: "Bonus Action",
+  reaction: "Reaction",
+  passive: "Passive",
+};
+
+export default function TechniqueCard({
+  technique,
+  isSelected,
   selectedSP,
-  onSelect, 
-  onEdit, 
-  onDelete 
+  selectedDie,
+  isMinimized,
+  onMinimizedChange,
+  onSelect,
+  onEdit,
+  onDelete,
 }: TechniqueCardProps) {
-  const [currentSP, setCurrentSP] = useState<number>(0);
-  const [isHovered, setIsHovered] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const { isEnhancedTooltipOpen } = useTooltipContext();
-  const queryClient = useQueryClient();
-  
-  const userId = getUserId();
+  const effects = technique.spEffects as SPEffect;
+  const spOptions = useMemo(
+    () => Object.keys(effects).map(Number).filter(Number.isFinite).sort((a, b) => a - b),
+    [effects],
+  );
+  const [currentSp, setCurrentSp] = useState(() => selectedSP ?? spOptions[0] ?? 0);
 
-  // Query user preferences
-  const { data: preferences = [] } = useQuery<TechniquePreference[]>({
-    queryKey: ['/api/technique-preferences', userId],
-    queryFn: async () => {
-      const response = await apiRequest('GET', `/api/technique-preferences/${userId}`);
-      return response.json();
-    },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
-
-  // Mutation to update preferences
-  const updatePreferenceMutation = useMutation({
-    mutationFn: async ({ isMinimized }: { isMinimized: boolean }) => {
-      const response = await apiRequest('POST', `/api/technique-preferences`, {
-        userId,
-        techniqueId: technique.id,
-        isMinimized
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['/api/technique-preferences', userId]
-      });
-    }
-  });
-
-  const spEffects = technique.spEffects as SPEffect;
-  const spOptions = Object.keys(spEffects).map(Number).sort((a, b) => a - b);
-  
-  // Initialize currentSP if not set
   useEffect(() => {
-    if (currentSP === 0 && spOptions.length > 0) {
-      setCurrentSP(spOptions[0]);
-    }
-  }, [currentSP, spOptions]);
-
-  // Update local isMinimized state based on user preferences
-  useEffect(() => {
-    const preference = preferences.find(p => p.techniqueId === technique.id);
-    if (preference) {
-      setIsMinimized(preference.isMinimized);
-    }
-  }, [preferences, technique.id]);
-
-  const handleWheel = (e: React.WheelEvent) => {
-    if (!isHovered || spOptions.length === 0) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-
-    const currentIndex = spOptions.indexOf(currentSP);
-    let newIndex = currentIndex;
-
-    if (e.deltaY < 0 && currentIndex < spOptions.length - 1) {
-      newIndex = currentIndex + 1;
-    } else if (e.deltaY > 0 && currentIndex > 0) {
-      newIndex = currentIndex - 1;
-    }
-
-    const newSP = spOptions[newIndex];
-    setCurrentSP(newSP);
-    // Don't auto-roll on scroll, only update selection
-  };
-
-  // Prevent page scrolling when hovering over technique card
-  useEffect(() => {
-    const handleMouseLeave = () => {
-      setIsHovered(false);
-      document.body.style.overflow = 'unset';
-    };
-
-    const handlePageScroll = (e: WheelEvent) => {
-      // If we're hovering and scrolling, prevent page scroll
-      if (isHovered && cardRef.current) {
-        const rect = cardRef.current.getBoundingClientRect();
-        const isInBounds = e.clientX >= rect.left && e.clientX <= rect.right && 
-                          e.clientY >= rect.top && e.clientY <= rect.bottom;
-        
-        if (isInBounds) {
-          e.preventDefault();
-        } else {
-          // Mouse is outside card bounds, clear hover state
-          setIsHovered(false);
-          document.body.style.overflow = 'unset';
-        }
-      }
-    };
-
-    if (isHovered) {
-      document.body.style.overflow = 'hidden';
-      document.addEventListener('wheel', handlePageScroll, { passive: false });
-      document.addEventListener('mouseleave', handleMouseLeave);
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-
-    // Cleanup function
-    return () => {
-      document.body.style.overflow = 'unset';
-      document.removeEventListener('wheel', handlePageScroll);
-      document.removeEventListener('mouseleave', handleMouseLeave);
-    };
-  }, [isHovered]);
-
-  const handleClick = () => {
-    // Prevent rolling when enhanced tooltip dialog is open
-    if (isEnhancedTooltipOpen) {
+    if (selectedSP && spOptions.includes(selectedSP)) {
+      setCurrentSp(selectedSP);
       return;
     }
-    
-    if (currentSP > 0) {
-      onSelect(technique.id, currentSP);
+    if (!spOptions.includes(currentSp)) {
+      setCurrentSp(spOptions[0] ?? 0);
     }
+  }, [currentSp, selectedSP, spOptions]);
+
+  const effect = effects[String(currentSp)];
+  const selectSp = (sp: number) => {
+    setCurrentSp(sp);
+    onSelect(technique.id, sp);
   };
 
-  // Update parent when SP level changes for selected technique
-  useEffect(() => {
-    if (isSelected && currentSP > 0) {
-      onSelect(technique.id, currentSP);
-    }
-  }, [currentSP, isSelected, technique.id, onSelect]);
-
-  // Update the selected SP when currentSP changes and this technique is selected
-  useEffect(() => {
-    if (isSelected && currentSP > 0) {
-      onSelect(technique.id, currentSP);
-    }
-  }, [currentSP, isSelected, technique.id, onSelect]);
-
-  const getTriggerColor = (type: string) => {
-    switch (type) {
-      case 'action':
-        return 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200';
-      case 'bonus':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200';
-      case 'reaction':
-        return 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200';
-      case 'passive':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
-    }
-  };
-
-  const formatTriggerType = (type: string) => {
-    switch (type) {
-      case 'action':
-        return 'Action';
-      case 'bonus':
-        return 'Bonus Action';
-      case 'reaction':
-        return 'Reaction';
-      case 'passive':
-        return 'Passive';
-      default:
-        return type;
+  const selectCurrentTechnique = () => {
+    if (currentSp > 0) {
+      onSelect(technique.id, currentSp);
     }
   };
 
   return (
-    <div
-      ref={cardRef}
-      className={cn(
-        "p-4 transition-all duration-200 cursor-pointer group border-2 rounded-lg",
-        isSelected 
-          ? "bg-spiritual-50 dark:bg-spiritual-900 border-spiritual-500 shadow-lg scale-[1.02]" 
-          : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700",
-        "text-gray-900 dark:text-white",
-        "hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-spiritual-300 hover:shadow-md hover:scale-105"
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => {
-        setIsHovered(false);
-        document.body.style.overflow = 'unset';
+    <Card
+      role="group"
+      tabIndex={0}
+      aria-current={isSelected ? "true" : undefined}
+      aria-label={`${technique.name}. Press Enter to select at ${currentSp} SP`}
+      onClick={(event) => {
+        const target = event.target;
+        if (
+          target instanceof Element &&
+          target.closest("button, a, input, textarea, select, [contenteditable='true']")
+        ) {
+          return;
+        }
+        selectCurrentTechnique();
       }}
-      onWheel={handleWheel}
-      onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectCurrentTechnique();
+        }
+      }}
+      className={cn(
+        "cursor-pointer border-2 p-4 text-gray-900 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spiritual-500 focus-visible:ring-offset-2 dark:text-white",
+        isSelected
+          ? "scale-[1.01] border-spiritual-500 bg-spiritual-50 shadow-lg dark:bg-spiritual-900"
+          : "border-gray-200 bg-white hover:border-spiritual-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800",
+      )}
     >
-        <div className="flex-1">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-3">
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-spiritual-600">
-                {currentSP > 0 && spEffects[currentSP]?.alternateName ? spEffects[currentSP].alternateName : technique.name}
-              </h4>
-              {currentSP > 0 && spEffects[currentSP] && (
-                <Badge className={getTriggerColor(spEffects[currentSP].actionType)}>
-                  {formatTriggerType(spEffects[currentSP].actionType)}
-                </Badge>
-              )}
-              {currentSP > 0 && (
-                <Badge className="dark:bg-spiritual-900 dark:text-spiritual-300 bg-[#40177d] text-[#ffffff]">
-                  {currentSP} SP
-                </Badge>
-              )}
-            </div>
-            
-            {/* Action buttons */}
-            <div className="flex items-center space-x-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const newMinimizedState = !isMinimized;
-                  setIsMinimized(newMinimizedState);
-                  updatePreferenceMutation.mutate({ isMinimized: newMinimizedState });
-                }}
-                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 h-auto p-1"
-                title={isMinimized ? "Expand technique" : "Minimize technique"}
-              >
-                {isMinimized ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(technique);
-                }}
-                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 h-auto p-1"
-              >
-                <Edit className="w-4 h-4" />
-              </Button>
-              {onDelete && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm(`Are you sure you want to delete "${technique.name}"? This cannot be undone.`)) {
-                      onDelete(technique.id);
-                    }
-                  }}
-                  className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 h-auto p-1"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {effect?.alternateName || technique.name}
+            </h3>
+            {effect && (
+              <Badge className={TRIGGER_STYLES[effect.actionType]}>
+                {TRIGGER_LABELS[effect.actionType]}
+              </Badge>
+            )}
           </div>
-          
-          {/* Expandable Content */}
-          {!isMinimized && (
-            <>
-              <TooltipText 
-                text={technique.triggerDescription}
-                entityId={technique.characterId}
-                scope={characterGlossaryScope}
-                className="text-sm text-gray-600 dark:text-gray-300 mb-3"
-              />
-              
-              {/* Dynamic Effect Display */}
-              {currentSP > 0 && spEffects[currentSP] && (
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                  <h5 className="font-medium text-gray-900 dark:text-white mb-2">
-                    Effect ({currentSP} SP Investment):
-                  </h5>
-                  <TooltipText 
-                    text={spEffects[currentSP].effect}
-                    entityId={technique.characterId}
-                    scope={characterGlossaryScope}
-                    className="text-sm text-gray-700 dark:text-gray-300"
-                  />
-                </div>
-              )}
-            </>
+          <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="SP investment">
+            {spOptions.map((sp) => {
+              const isSupported = canSpiritDieMeetInvestment(selectedDie, sp);
+              const unavailableReason = selectedDie
+                ? `${selectedDie.toUpperCase()} supports techniques up to ${getDieMaximum(selectedDie)} SP`
+                : "Select an available Spirit Die first";
+
+              return (
+                <Button
+                  key={sp}
+                  type="button"
+                  size="sm"
+                  variant={currentSp === sp ? "default" : "outline"}
+                  onClick={() => selectSp(sp)}
+                  disabled={!isSupported}
+                  title={isSupported ? undefined : unavailableReason}
+                  aria-pressed={isSelected && selectedSP === sp}
+                  className={cn(currentSp === sp && "bg-spiritual-700 hover:bg-spiritual-800")}
+                >
+                  {sp} SP
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={() => onMinimizedChange(!isMinimized)}
+            className="h-8 w-8 text-gray-500"
+            aria-label={isMinimized ? "Expand technique" : "Collapse technique"}
+          >
+            {isMinimized ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={() => onEdit(technique)}
+            className="h-8 w-8 text-gray-500"
+            aria-label={`Edit ${technique.name}`}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          {onDelete && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() => {
+                if (confirm(`Are you sure you want to delete "${technique.name}"? This cannot be undone.`)) {
+                  onDelete(technique.id);
+                }
+              }}
+              className="h-8 w-8 text-gray-500 hover:text-red-600"
+              aria-label={`Delete ${technique.name}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           )}
         </div>
-    </div>
+      </div>
+
+      {!isMinimized && (
+        <div className="mt-4 space-y-3">
+          <TooltipText
+            text={technique.triggerDescription}
+            entityId={technique.characterId}
+            scope={characterGlossaryScope}
+            className="text-sm text-gray-600 dark:text-gray-300"
+          />
+          {effect && (
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-700">
+              <h4 className="mb-2 font-medium text-gray-900 dark:text-white">
+                Effect ({currentSp} SP investment)
+              </h4>
+              <TooltipText
+                text={effect.effect}
+                entityId={technique.characterId}
+                scope={characterGlossaryScope}
+                className="text-sm text-gray-700 dark:text-gray-300"
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }

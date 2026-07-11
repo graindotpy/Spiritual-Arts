@@ -1,34 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  loadCardGameState,
+  parsePersistedUpdatedAt,
+} from "@/features/card-game/api";
+import type { Faction, PersistedCardGameState } from "@/features/card-game/types";
+import { useCardGameAutosave } from "@/features/card-game/use-card-game-autosave";
 
-type Faction = {
-  id: string;
-  name: string;
-  isDm: boolean;
-};
-
-type PersistedCardGameState = {
-  phase: string;
-  round: number;
-  activeBattlefieldId: string;
-  battlefields: Array<{
-    id: string;
-    name: string;
-    description: string;
-    factionIds: string[];
-  }>;
-  cards: Array<{
-    id: string;
-    ownerFactionId: string;
-    location: { type: string; battlefieldId?: string; lane?: number };
-  }>;
-  redeployIds: string[];
-  factions: Faction[];
-  updatedAt: number;
-};
+const FACTION_COLORS = ["#10b981", "#f43f5e", "#38bdf8", "#f59e0b", "#a78bfa", "#14b8a6"];
 
 const createEmptyState = (): PersistedCardGameState => ({
   phase: "deploy_spies",
@@ -48,64 +30,118 @@ export default function FactionsPage() {
   const [newFactionName, setNewFactionName] = useState("");
   const [newFactionIsDm, setNewFactionIsDm] = useState(false);
   const [error, setError] = useState("");
+  const deletedFactionIdsRef = useRef(new Set<string>());
 
   const factions = cardState.factions;
 
   useEffect(() => {
     let isActive = true;
+    const controller = new AbortController();
     const load = async () => {
       try {
-        const response = await fetch("/api/card-game/state");
-        if (!response.ok) return;
-        const data = await response.json();
+        const data = await loadCardGameState(controller.signal);
         if (!isActive) return;
-        const state = data?.state as PersistedCardGameState | null;
+        const state = data.state;
         if (!state) {
-          setCardState(createEmptyState());
+          setCardState({
+            ...createEmptyState(),
+            updatedAt: parsePersistedUpdatedAt(data.updatedAt) ?? 0,
+          });
           setIsLoaded(true);
           return;
         }
         setCardState({
+          ...createEmptyState(),
           ...state,
-          factions: Array.isArray(state.factions) ? state.factions : [],
+          factions: Array.isArray(state.factions)
+            ? state.factions.map((faction, index) => ({
+                ...faction,
+                color:
+                  typeof faction.color === "string"
+                    ? faction.color
+                    : FACTION_COLORS[index % FACTION_COLORS.length] ?? "#10b981",
+              }))
+            : [],
           battlefields: Array.isArray(state.battlefields) ? state.battlefields : [],
           cards: Array.isArray(state.cards) ? state.cards : [],
-          updatedAt: typeof state.updatedAt === "number" ? state.updatedAt : Date.now(),
+          updatedAt:
+            parsePersistedUpdatedAt(data.updatedAt) ??
+            (typeof state.updatedAt === "number" ? state.updatedAt : Date.now()),
         });
         setIsLoaded(true);
       } catch (err) {
-        console.error("Failed to load card game state", err);
-        setError("Failed to load factions.");
+        if (!controller.signal.aborted) {
+          console.error("Failed to load card game state", err);
+          setError("Failed to load factions.");
+        }
       }
     };
 
     load();
     return () => {
       isActive = false;
+      controller.abort();
     };
   }, []);
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    const handle = window.setTimeout(() => {
-      fetch("/api/card-game/state", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: cardState }),
-      }).catch((err) => {
-        console.error("Failed to save factions", err);
-        setError("Failed to save factions.");
-      });
-    }, 300);
+  const rebaseFactionChanges = useCallback(
+    (local: PersistedCardGameState, remote: PersistedCardGameState) => {
+      const deletedIds = deletedFactionIdsRef.current;
+      const localFactionIds = new Set(local.factions.map((faction) => faction.id));
+      const remoteFactions = Array.isArray(remote.factions) ? remote.factions : [];
+      const remoteBattlefields = Array.isArray(remote.battlefields)
+        ? remote.battlefields
+        : [];
+      const remoteCards = Array.isArray(remote.cards) ? remote.cards : [];
+      const remoteOnlyFactions = remoteFactions.filter(
+        (faction) => !localFactionIds.has(faction.id) && !deletedIds.has(faction.id),
+      );
 
-    return () => window.clearTimeout(handle);
-  }, [cardState, isLoaded]);
+      return {
+        ...createEmptyState(),
+        ...remote,
+        factions: [...local.factions, ...remoteOnlyFactions],
+        battlefields: remoteBattlefields.map((battlefield) => ({
+          ...battlefield,
+          factionIds: Array.isArray(battlefield.factionIds)
+            ? battlefield.factionIds.filter((id) => !deletedIds.has(id))
+            : [],
+        })),
+        cards: remoteCards.filter((card) => !deletedIds.has(card.ownerFactionId)),
+      };
+    },
+    [],
+  );
+
+  const recordSavedFactionChanges = useCallback((saved: PersistedCardGameState) => {
+    const savedFactionIds = new Set(saved.factions.map((faction) => faction.id));
+    for (const id of deletedFactionIdsRef.current) {
+      if (!savedFactionIds.has(id)) deletedFactionIdsRef.current.delete(id);
+    }
+  }, []);
+
+  useCardGameAutosave({
+    state: cardState,
+    enabled: isLoaded,
+    rebaseOnConflict: rebaseFactionChanges,
+    onRebased: setCardState,
+    onSaved: recordSavedFactionChanges,
+    onError: (err) => {
+      console.error("Failed to save factions", err);
+      setError("Failed to save factions. Retrying…");
+    },
+  });
 
   const addFaction = () => {
     const name = newFactionName.trim();
     if (!name) return;
     const id = `faction-${Date.now().toString(36)}`;
-    const next: Faction = { id, name, isDm: newFactionIsDm };
+    const next: Faction = {
+      id,
+      name,
+      isDm: newFactionIsDm,
+      color: FACTION_COLORS[factions.length % FACTION_COLORS.length] ?? "#10b981",
+    };
     setCardState((prev) => ({
       ...prev,
       factions: [next, ...prev.factions],
@@ -127,6 +163,7 @@ export default function FactionsPage() {
   };
 
   const deleteFaction = (id: string) => {
+    deletedFactionIdsRef.current.add(id);
     setCardState((prev) => ({
       ...prev,
       factions: prev.factions.filter((faction) => faction.id !== id),

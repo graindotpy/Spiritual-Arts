@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Trash2 } from "lucide-react";
 import { useCharacterState } from "@/hooks/use-character-state";
-import type { Technique, SPEffect, TriggerType } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+import type { InsertTechnique, Technique, SPEffect, TriggerType } from "@shared/schema";
 
 interface TechniqueEditorProps {
   technique: Technique | null;
@@ -39,6 +40,7 @@ export default function TechniqueEditor({
   const [spEffects, setSPEffects] = useState<SPEffectEntry[]>([]);
 
   const { createTechnique, updateTechnique } = useCharacterState(characterId);
+  const { toast } = useToast();
 
   // Initialize form when technique changes
   useEffect(() => {
@@ -62,7 +64,7 @@ export default function TechniqueEditor({
       setTriggerDescription("");
       setSPEffects([{ sp: 1, effect: "", actionType: "action", enabled: true, alternateName: "" }]);
     }
-  }, [technique]);
+  }, [isOpen, technique]);
 
   const handleAddSPLevel = () => {
     const maxSP = spEffects.length > 0 ? Math.max(...spEffects.map(e => e.sp)) : 0;
@@ -73,7 +75,11 @@ export default function TechniqueEditor({
     setSPEffects(spEffects.filter((_, i) => i !== index));
   };
 
-  const handleSPEffectChange = (index: number, field: keyof SPEffectEntry, value: any) => {
+  const handleSPEffectChange = <K extends keyof SPEffectEntry>(
+    index: number,
+    field: K,
+    value: SPEffectEntry[K],
+  ) => {
     const updated = [...spEffects];
     updated[index] = { ...updated[index], [field]: value };
     setSPEffects(updated);
@@ -83,11 +89,27 @@ export default function TechniqueEditor({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const enabledEntries = spEffects.filter((entry) => entry.enabled && entry.effect.trim());
+    if (enabledEntries.length === 0) {
+      toast({
+        title: "Add an SP effect",
+        description: "A technique needs at least one enabled investment level.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (new Set(enabledEntries.map((entry) => entry.sp)).size !== enabledEntries.length) {
+      toast({
+        title: "Duplicate SP levels",
+        description: "Each investment level must use a different SP value.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     const spEffectsObj: SPEffect = {};
-    spEffects
-      .filter(entry => entry.enabled && entry.effect.trim())
-      .forEach(entry => {
+    enabledEntries.forEach(entry => {
         spEffectsObj[entry.sp] = {
           effect: entry.effect,
           actionType: entry.actionType,
@@ -95,9 +117,9 @@ export default function TechniqueEditor({
         };
       });
 
-    const techniqueData = {
-      name,
-      triggerDescription,
+    const techniqueData: Omit<InsertTechnique, "characterId"> = {
+      name: name.trim(),
+      triggerDescription: triggerDescription.trim(),
       spEffects: spEffectsObj
     };
 
@@ -114,7 +136,7 @@ export default function TechniqueEditor({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-[var(--dialog-background)] text-gray-900 dark:text-gray-100 border-gray-200 dark:border-gray-600">
         <DialogHeader>
           <DialogTitle>
@@ -173,7 +195,9 @@ export default function TechniqueEditor({
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           checked={entry.enabled}
-                          onCheckedChange={(checked) => handleSPEffectChange(index, 'enabled', checked)}
+                          onCheckedChange={(checked) =>
+                            handleSPEffectChange(index, "enabled", checked === true)
+                          }
                         />
                         <Label className="text-sm text-gray-700 dark:text-gray-300">
                           Enable this investment level

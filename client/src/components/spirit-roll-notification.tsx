@@ -1,35 +1,36 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dice6, CheckCircle, XCircle, User } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { SpiritDieRollBroadcast } from '@/hooks/use-websocket';
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { CheckCircle, Dice6, User, X, XCircle } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import type { SpiritDieRollBroadcast } from "@/hooks/use-websocket";
 
 interface SpiritRollNotificationProps {
   rollData: SpiritDieRollBroadcast | null;
   currentCharacterId?: string;
 }
 
-export default function SpiritRollNotification({ rollData, currentCharacterId }: SpiritRollNotificationProps) {
+export default function SpiritRollNotification({
+  rollData,
+  currentCharacterId,
+}: SpiritRollNotificationProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (rollData && rollData.character.id !== currentCharacterId) {
-      setVisible(true);
-      
-      // Auto-hide after 8 seconds
-      const timer = setTimeout(() => {
-        setVisible(false);
-      }, 8000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [rollData, currentCharacterId]);
+    const shouldShow = Boolean(rollData && rollData.character.id !== currentCharacterId);
+    setVisible(shouldShow);
+    if (!shouldShow) return;
+
+    const timer = setTimeout(() => setVisible(false), 8_000);
+    return () => clearTimeout(timer);
+  }, [currentCharacterId, rollData]);
 
   if (!rollData) return null;
-
   const { character, roll } = rollData;
+  const resultColor = roll.success
+    ? "text-green-600 dark:text-green-400"
+    : "text-red-600 dark:text-red-400";
 
   return (
     <AnimatePresence>
@@ -38,74 +39,50 @@ export default function SpiritRollNotification({ rollData, currentCharacterId }:
           initial={{ opacity: 0, y: -100, scale: 0.8 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -100, scale: 0.8 }}
-          transition={{ 
-            type: "spring", 
-            stiffness: 200, 
-            damping: 20,
-            duration: 0.6 
-          }}
-          className="fixed top-4 right-4 z-50 max-w-sm"
+          transition={{ type: "spring", stiffness: 200, damping: 20, duration: 0.6 }}
+          className="fixed right-4 top-4 z-50 max-w-sm"
+          role="status"
+          aria-live="polite"
         >
-          <Card className="bg-white dark:bg-gray-800 border-2 border-spiritual-200 dark:border-spiritual-700 shadow-lg">
+          <Card className="border-2 border-spiritual-200 bg-white shadow-lg dark:border-spiritual-700 dark:bg-gray-800">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
-                {/* Character Avatar */}
-                <Avatar className="w-10 h-10 border-2 border-spiritual-200 dark:border-spiritual-600">
-                  <AvatarImage src={character.portraitUrl || undefined} alt={character.name} />
+                <Avatar className="h-10 w-10 border-2 border-spiritual-200 dark:border-spiritual-600">
+                  <AvatarImage src={character.portraitUrl || undefined} alt="" />
                   <AvatarFallback className="bg-spiritual-100 dark:bg-spiritual-800">
-                    <User className="w-5 h-5 text-spiritual-600 dark:text-spiritual-400" />
+                    <User className="h-5 w-5 text-spiritual-600 dark:text-spiritual-400" />
                   </AvatarFallback>
                 </Avatar>
-                
-                <div className="flex-1 min-w-0">
-                  {/* Character Info */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <h4 className="font-semibold text-gray-900 dark:text-white text-sm truncate">
+
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 flex items-center gap-2">
+                    <h4 className="truncate text-sm font-semibold text-gray-900 dark:text-white">
                       {character.name}
                     </h4>
                     <Badge variant="outline" className="text-xs">
                       {character.path}
                     </Badge>
                   </div>
-                  
-                  {/* Roll Info */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <Dice6 className="w-4 h-4 text-spiritual-600 dark:text-spiritual-400" />
+                  <div className="mb-2 flex items-center gap-2">
+                    <Dice6 className="h-4 w-4 text-spiritual-600 dark:text-spiritual-400" />
                     <span className="text-sm text-gray-600 dark:text-gray-300">
                       Rolled {roll.dieSize} for {roll.spInvestment} SP
                     </span>
                   </div>
-                  
-                  {/* Result */}
-                  <div className="flex items-center gap-2">
-                    {roll.success ? (
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-red-600" />
-                    )}
-                    <span className={`font-bold text-lg ${
-                      roll.success 
-                        ? 'text-green-600 dark:text-green-400' 
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      {roll.value}
-                    </span>
-                    <span className={`text-sm font-medium ${
-                      roll.success 
-                        ? 'text-green-600 dark:text-green-400' 
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      {roll.success ? 'Success!' : 'Failed'}
-                    </span>
+                  <div className={"flex items-center gap-2 " + resultColor}>
+                    {roll.success ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                    <span className="text-lg font-bold">{roll.value}</span>
+                    <span className="text-sm font-medium">{roll.success ? "Success!" : "Failed"}</span>
                   </div>
                 </div>
-                
-                {/* Close Button */}
+
                 <button
+                  type="button"
                   onClick={() => setVisible(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="Dismiss roll notification"
                 >
-                  ✕
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </CardContent>

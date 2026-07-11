@@ -1,23 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { requestJson } from "@/lib/api";
+import { characterKeys, dmKeys } from "@/lib/query-keys";
 import type { GlossaryTerm, DmGlossaryTerm } from "@shared/schema";
 
 export interface GlossaryScope {
-  queryKeyBase: string;
+  queryKey: (entityId: string) => readonly string[];
   listPath: (entityId: string) => string;
   updatePath: (termId: string) => string;
 }
 
 // Character glossary scope
 export const characterGlossaryScope: GlossaryScope = {
-  queryKeyBase: "/api/character",
+  queryKey: characterKeys.glossary,
   listPath: (characterId: string) => `/api/character/${characterId}/glossary`,
   updatePath: (termId: string) => `/api/glossary/${termId}`,
 };
 
 // DM glossary scope
 export const dmGlossaryScope: GlossaryScope = {
-  queryKeyBase: "/api/dm",
+  queryKey: dmKeys.glossary,
   listPath: (userId: string) => `/api/dm/${userId}/glossary`,
   updatePath: (termId: string) => `/api/dm/glossary/${termId}`,
 };
@@ -28,11 +29,8 @@ export function useGlossaryTerms<T = GlossaryTerm | DmGlossaryTerm>(
   entityId: string
 ) {
   return useQuery<T[]>({
-    queryKey: [scope.queryKeyBase, entityId, "glossary"],
-    queryFn: async () => {
-      const response = await apiRequest('GET', scope.listPath(entityId));
-      return response.json();
-    },
+    queryKey: scope.queryKey(entityId),
+    queryFn: () => requestJson<T[]>("GET", scope.listPath(entityId)),
     enabled: !!entityId,
   });
 }
@@ -48,11 +46,14 @@ export function useGlossaryMutations(
 
   const updateTerm = useMutation({
     mutationFn: async (data: { termId: string; update: Partial<GlossaryTerm | DmGlossaryTerm> }) => {
-      const response = await apiRequest("PUT", scope.updatePath(data.termId), data.update);
-      return response.json();
+      return requestJson<GlossaryTerm | DmGlossaryTerm>(
+        "PUT",
+        scope.updatePath(data.termId),
+        data.update,
+      );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [scope.queryKeyBase, entityId, "glossary"] });
+      queryClient.invalidateQueries({ queryKey: scope.queryKey(entityId) });
       onSuccess?.();
     },
     onError: () => {

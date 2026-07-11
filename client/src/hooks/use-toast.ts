@@ -6,7 +6,7 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 1_000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -71,7 +71,7 @@ const addToRemoveQueue = (toastId: string) => {
   toastTimeouts.set(toastId, timeout)
 }
 
-export const reducer = (state: State, action: Action): State => {
+const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case "ADD_TOAST":
       return {
@@ -179,7 +179,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+  }, [])
 
   return {
     ...state,
@@ -188,4 +188,4 @@ function useToast() {
   }
 }
 
-export { useToast, toast }
+export { useToast }

@@ -3,7 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Camera, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
+import { requestJson } from "@/lib/api";
+import { characterKeys } from "@/lib/query-keys";
+import type { Character } from "@shared/schema";
 import ImageCropEditor from "./image-crop-editor";
 
 interface PortraitUploadProps {
@@ -18,9 +21,9 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
   const [isDeleting, setIsDeleting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showCropEditor, setShowCropEditor] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -46,8 +49,7 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
       return;
     }
 
-    // Store file and create preview
-    setSelectedFile(file);
+    // Create a local preview for the crop editor.
     const reader = new FileReader();
     reader.onload = (e) => {
       setPreviewUrl(e.target?.result as string);
@@ -62,18 +64,15 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
       const formData = new FormData();
       formData.append('portrait', croppedImageBlob, 'portrait.jpg');
 
-      const response = await fetch(`/api/character/${characterId}/portrait`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
+      await requestJson<{ portraitUrl: string }>(
+        "POST",
+        `/api/character/${characterId}/portrait`,
+        formData,
+      );
 
       // Invalidate character queries to refresh the UI
-      await queryClient.invalidateQueries({ queryKey: ["/api/characters"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/character", characterId] });
+      await queryClient.invalidateQueries({ queryKey: characterKeys.all });
+      await queryClient.invalidateQueries({ queryKey: characterKeys.detail(characterId) });
 
       toast({
         title: "Portrait uploaded",
@@ -81,8 +80,7 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
       });
 
       handleClose();
-    } catch (error) {
-      console.error('Upload error:', error);
+    } catch {
       toast({
         title: "Upload failed",
         description: "Failed to upload portrait. Please try again.",
@@ -96,7 +94,6 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
   const handleCropCancel = () => {
     setShowCropEditor(false);
     setPreviewUrl(null);
-    setSelectedFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -107,17 +104,11 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/character/${characterId}/portrait`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Delete failed');
-      }
+      await requestJson<Character>("DELETE", `/api/character/${characterId}/portrait`);
 
       // Invalidate character queries to refresh the UI
-      await queryClient.invalidateQueries({ queryKey: ["/api/characters"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/character", characterId] });
+      await queryClient.invalidateQueries({ queryKey: characterKeys.all });
+      await queryClient.invalidateQueries({ queryKey: characterKeys.detail(characterId) });
 
       toast({
         title: "Portrait removed",
@@ -125,8 +116,7 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
       });
 
       onClose();
-    } catch (error) {
-      console.error('Delete error:', error);
+    } catch {
       toast({
         title: "Delete failed",
         description: "Failed to remove portrait. Please try again.",
@@ -139,7 +129,6 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
 
   const handleClose = () => {
     setPreviewUrl(null);
-    setSelectedFile(null);
     setShowCropEditor(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -150,7 +139,7 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
   const displayUrl = previewUrl || currentPortraitUrl;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className={showCropEditor ? "sm:max-w-lg" : "sm:max-w-md"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -195,7 +184,7 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/gif,image/webp"
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -236,7 +225,7 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
 
             {/* Help Text */}
             <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              Supported formats: JPG, PNG, GIF • Max size: 5MB
+              Supported formats: JPG, PNG, GIF, WebP · Max size: 5 MB
             </p>
           </div>
         )}

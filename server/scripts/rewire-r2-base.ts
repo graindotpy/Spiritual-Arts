@@ -1,23 +1,11 @@
-import "dotenv/config";
-import dotenv from "dotenv";
 import { sql } from "drizzle-orm";
-import { db } from "../db";
+import { databaseConnection, requireDatabase } from "../db";
 
-dotenv.config();
-dotenv.config({ path: ".env.local", override: true });
-
-const fromBase = process.env.R2_OLD_BASE_URL || "";
-const toBase = process.env.R2_PUBLIC_BASE_URL || "";
-
-if (!fromBase || !toBase) {
-  console.error("Missing R2_OLD_BASE_URL or R2_PUBLIC_BASE_URL.");
-  process.exit(1);
-}
-
-const from = fromBase.replace(/\/+$/, "");
-const to = toBase.replace(/\/+$/, "");
+const from = (process.env.R2_OLD_BASE_URL ?? "").trim().replace(/\/+$/, "");
+const to = (process.env.R2_PUBLIC_BASE_URL ?? "").trim().replace(/\/+$/, "");
 
 async function updatePortraitUrls() {
+  const db = requireDatabase();
   const result = await db.execute(sql`
     UPDATE characters
     SET portrait_url = replace(portrait_url, ${from}, ${to})
@@ -27,6 +15,7 @@ async function updatePortraitUrls() {
 }
 
 async function updateImageUrlsInText() {
+  const db = requireDatabase();
   let updated = 0;
   const tables = [
     { name: "glossary_terms", columns: ["definition", "expanded_content"] },
@@ -45,10 +34,23 @@ async function updateImageUrlsInText() {
       updated += result.rowCount || 0;
     }
   }
+
+  const cardStates = await db.execute(sql`
+    UPDATE card_game_states
+    SET state = replace(state::text, ${from}, ${to})::jsonb
+    WHERE state::text LIKE ${"%" + from + "%"}
+  `);
+  updated += cardStates.rowCount || 0;
+
   return updated;
 }
 
 async function main() {
+  if (!from || !to) {
+    throw new Error("R2_OLD_BASE_URL and R2_PUBLIC_BASE_URL are required");
+  }
+  requireDatabase();
+
   const portraitsUpdated = await updatePortraitUrls();
   const textUpdated = await updateImageUrlsInText();
   console.log(
@@ -60,7 +62,11 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error("Rewrite failed:", error);
-  process.exit(1);
-});
+void main()
+  .catch((error: unknown) => {
+    console.error("Rewrite failed:", error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await databaseConnection?.pool.end();
+  });

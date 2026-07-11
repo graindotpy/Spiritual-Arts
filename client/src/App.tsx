@@ -1,125 +1,112 @@
-import { Switch, Route, useLocation } from "wouter";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
+import { useQuery, QueryClientProvider } from "@tanstack/react-query";
+import { Route, Switch, useLocation } from "wouter";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThemeProvider } from "@/components/theme-provider";
-import { EnhancedTooltipProvider } from "@/contexts/tooltip-context";
-import CharacterSheet from "@/pages/character-sheet";
-import MainMenu from "@/pages/main-menu";
-import DmSpace from "@/pages/dm-space";
-import CardGame from "@/pages/card-game";
-import Factions from "@/pages/factions";
-import NotFound from "@/pages/not-found";
+import { characterKeys } from "@/lib/query-keys";
+import { queryClient } from "@/lib/queryClient";
 import type { Character } from "@shared/schema";
 
-function Router() {
-  const [, setLocation] = useLocation();
-  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+const CharacterSheet = lazy(() => import("@/pages/character-sheet"));
+const MainMenu = lazy(() => import("@/pages/main-menu"));
+const DmSpace = lazy(() => import("@/pages/dm-space"));
+const CardGame = lazy(() => import("@/pages/card-game"));
+const Factions = lazy(() => import("@/pages/factions"));
+const NotFound = lazy(() => import("@/pages/not-found"));
 
-  const handleCharacterSelect = (character: Character) => {
-    sessionStorage.setItem("returnTo", "/");
-    setSelectedCharacter(character);
-    setLocation(`/character/${character.id}`);
-  };
-
-  const handleReturnToMenu = () => {
-    setSelectedCharacter(null);
-    setLocation("/");
-  };
-
+function PageLoader() {
   return (
-    <Switch>
-      <Route path="/">
-        <MainMenu onCharacterSelect={handleCharacterSelect} />
-      </Route>
-      <Route path="/character/:id">
-        {(params) => (
-          <CharacterSheetWrapper 
-            characterId={params.id}
-          />
-        )}
-      </Route>
-      <Route path="/dm-space">
-        <DmSpace />
-      </Route>
-      <Route path="/card-game">
-        <CardGame />
-      </Route>
-      <Route path="/factions">
-        <Factions />
-      </Route>
-      <Route component={NotFound} />
-    </Switch>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <p className="text-gray-600 dark:text-gray-400" role="status">
+        Loading…
+      </p>
+    </div>
   );
 }
 
-// Wrapper component to fetch character data from URL parameter
+function Router() {
+  const [, setLocation] = useLocation();
+
+  const handleCharacterSelect = (character: Character) => {
+    sessionStorage.setItem("returnTo", "/");
+    setLocation(`/character/${character.id}`);
+  };
+
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/">
+          <MainMenu onCharacterSelect={handleCharacterSelect} />
+        </Route>
+        <Route path="/character/:id">
+          {(params) => <CharacterSheetWrapper characterId={params.id} />}
+        </Route>
+        <Route path="/dm-space">
+          <DmSpace />
+        </Route>
+        <Route path="/card-game">
+          <CardGame />
+        </Route>
+        <Route path="/factions">
+          <Factions />
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
+  );
+}
+
 function CharacterSheetWrapper({ characterId }: { characterId: string }) {
   const [, setLocation] = useLocation();
-  const search = typeof window !== "undefined" ? window.location.search : "";
-  const params = typeof window !== "undefined" ? new URLSearchParams(search) : new URLSearchParams();
-  const returnFrom = params.get("from");
-  const storedReturn = typeof window !== "undefined" ? sessionStorage.getItem("returnTo") : null;
+  const search = typeof window === "undefined" ? "" : window.location.search;
+  const returnFrom = new URLSearchParams(search).get("from");
+  const storedReturn =
+    typeof window === "undefined" ? null : sessionStorage.getItem("returnTo");
   const returnPath = returnFrom === "dm" ? "/dm-space" : storedReturn || "/";
-  const handleReturnToMenu = () => {
-    sessionStorage.removeItem("returnTo");
-    setLocation(returnPath);
-  };
-  const { data: character, isLoading, error } = useQuery<Character>({
-    queryKey: ["/api/character", characterId],
+  const characterQuery = useQuery<Character>({
+    queryKey: characterKeys.detail(characterId),
     retry: false,
   });
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600 dark:text-gray-400">Loading character...</p>
-        </div>
-      </div>
-    );
+  const handleReturn = () => {
+    sessionStorage.removeItem("returnTo");
+    setLocation(returnPath);
+  };
+
+  if (characterQuery.isLoading) {
+    return <PageLoader />;
   }
 
-  if (error || !character) {
+  if (characterQuery.isError || !characterQuery.data) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
-          <p className="text-gray-600 dark:text-gray-400 mb-4">Character not found</p>
-          <button 
-            onClick={handleReturnToMenu}
+          <p className="mb-4 text-gray-600 dark:text-gray-400">Character not found</p>
+          <button
+            type="button"
+            onClick={handleReturn}
             className="text-spiritual-600 hover:text-spiritual-700 dark:text-spiritual-400 dark:hover:text-spiritual-300"
           >
-            Return to Main Menu
+            Return to {returnPath === "/dm-space" ? "DM Space" : "Main Menu"}
           </button>
         </div>
       </div>
     );
   }
 
-  return (
-    <CharacterSheet 
-      character={character}
-      onReturnToMenu={handleReturnToMenu}
-    />
-  );
+  return <CharacterSheet character={characterQuery.data} onReturnToMenu={handleReturn} />;
 }
 
-function App() {
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <EnhancedTooltipProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </EnhancedTooltipProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
 }
-
-export default App;

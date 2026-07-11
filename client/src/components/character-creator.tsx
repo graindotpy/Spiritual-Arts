@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { requestJson } from "@/lib/api";
+import { characterKeys } from "@/lib/query-keys";
 import { useToast } from "@/hooks/use-toast";
 import type { Character } from "@shared/schema";
 
@@ -24,13 +25,15 @@ export default function CharacterCreator({ isOpen, onClose, onCharacterCreated, 
   const queryClient = useQueryClient();
 
   const createCharacter = useMutation({
-    mutationFn: async (data: { name: string; path: string; level: number }) => {
-      const response = await apiRequest("POST", createUrl, data);
-      return response.json();
-    },
+    mutationFn: (data: { name: string; path: string; level: number }) =>
+      requestJson<Character>("POST", createUrl, data),
     onSuccess: (character) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/character"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/characters"] });
+      if (createUrl === "/api/character") {
+        queryClient.setQueryData<Character[]>(characterKeys.all, (current = []) => [
+          ...current,
+          character,
+        ]);
+      }
       toast({
         title: "Success",
         description: "Character created successfully",
@@ -73,7 +76,7 @@ export default function CharacterCreator({ isOpen, onClose, onCharacterCreated, 
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-md bg-white dark:bg-[var(--dialog-bg)] border-gray-200 dark:border-[var(--dialog-border)]">
         <DialogHeader>
           <DialogTitle className="text-gray-900 dark:text-white">Create New Character</DialogTitle>
@@ -113,7 +116,7 @@ export default function CharacterCreator({ isOpen, onClose, onCharacterCreated, 
               Starting Level
             </Label>
             <Select value={level.toString()} onValueChange={(value) => setLevel(parseInt(value))}>
-              <SelectTrigger className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)]">
+              <SelectTrigger id="level" className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

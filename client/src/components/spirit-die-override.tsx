@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,7 +9,7 @@ interface SpiritDieOverrideProps {
   isOpen: boolean;
   onClose: () => void;
   currentDice: DieSize[];
-  onSave: (dice: DieSize[]) => void;
+  onSave: (dice: DieSize[]) => Promise<void>;
 }
 
 export default function SpiritDieOverride({ 
@@ -19,6 +19,13 @@ export default function SpiritDieOverride({
   onSave 
 }: SpiritDieOverrideProps) {
   const [overrideDice, setOverrideDice] = useState<DieSize[]>(currentDice);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setOverrideDice([...currentDice]);
+    }
+  }, [currentDice, isOpen]);
 
   const addDie = () => {
     setOverrideDice([...overrideDice, 'd4']);
@@ -34,13 +41,18 @@ export default function SpiritDieOverride({
     setOverrideDice(newDice);
   };
 
-  const handleSave = () => {
-    onSave(overrideDice);
-    onClose();
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave(overrideDice);
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Manual Spirit Die Override</DialogTitle>
@@ -71,6 +83,7 @@ export default function SpiritDieOverride({
                   size="sm"
                   variant="ghost"
                   onClick={() => removeDie(index)}
+                  aria-label={`Remove die ${index + 1}`}
                   className="text-red-600 hover:text-red-800 h-auto p-1"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -95,8 +108,12 @@ export default function SpiritDieOverride({
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave} className="bg-spiritual-600 hover:bg-spiritual-700">
-              Apply Override
+            <Button
+              onClick={handleSave}
+              disabled={isSaving || overrideDice.length === 0}
+              className="bg-spiritual-600 hover:bg-spiritual-700"
+            >
+              {isSaving ? "Applying…" : "Apply Override"}
             </Button>
           </div>
         </div>

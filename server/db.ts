@@ -1,30 +1,39 @@
 import dotenv from "dotenv";
-dotenv.config();
-if (process.env.NODE_ENV !== "production") {
-  dotenv.config({ path: ".env.local", override: true });
-}
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import ws from "ws";
+
 import * as schema from "@shared/schema";
+
+dotenv.config({ quiet: true });
+if (process.env.NODE_ENV !== "production") {
+  dotenv.config({ path: ".env.local", override: true, quiet: true });
+}
 
 neonConfig.webSocketConstructor = ws;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
+function createDatabaseConnection(connectionString: string) {
+  const pool = new Pool({ connectionString });
+  const db = drizzle({ client: pool, schema });
+
+  return { db, pool };
 }
 
-const safeDbUrl = (() => {
-  try {
-    const url = new URL(process.env.DATABASE_URL as string);
-    return `${url.protocol}//${url.host}${url.pathname}`;
-  } catch {
-    return "unknown";
-  }
-})();
-console.log(`[db] using DATABASE_URL ${safeDbUrl}`);
+export type Database = ReturnType<typeof createDatabaseConnection>["db"];
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+const databaseUrl = process.env.DATABASE_URL?.trim();
+
+if (!databaseUrl && process.env.NODE_ENV === "production") {
+  throw new Error("DATABASE_URL must be set when NODE_ENV=production");
+}
+
+export const databaseConnection = databaseUrl
+  ? createDatabaseConnection(databaseUrl)
+  : null;
+
+export function requireDatabase(): Database {
+  if (!databaseConnection) {
+    throw new Error("DATABASE_URL must be set for this operation");
+  }
+  return databaseConnection.db;
+}

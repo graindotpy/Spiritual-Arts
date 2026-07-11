@@ -1,212 +1,217 @@
-# Character Sheet Application
+# Spiritual Arts
 
 ## Overview
 
-This is a full-stack character sheet application designed for tabletop RPGs, specifically focused on managing "Spirit Dice" mechanics. The application features a React frontend with TypeScript, an Express.js backend, and PostgreSQL database with Drizzle ORM. It uses shadcn/ui components for a polished user interface with Tailwind CSS styling.
+Spiritual Arts is a full-stack tabletop character-sheet and card-game
+application focused on Spirit Die mechanics. It includes character and
+technique management, trackers, glossary tooltips with structured rich content,
+portrait uploads, live roll notifications, a separate DM workspace, faction
+management, and a shared card-game battlefield.
 
-## User Preferences
+The application is deliberately deployable as one Node process:
 
-Preferred communication style: Simple, everyday language.
+- React 18 + Vite render the single-page client.
+- Express exposes the REST API and serves the production client bundle.
+- Drizzle ORM talks to PostgreSQL when `DATABASE_URL` is configured.
+- A complete in-memory adapter supports local development without a database.
+- A WebSocket server broadcasts committed Spirit Die rolls.
 
-## System Architecture
+## Project layout
 
-### Frontend-Backend Separation
-The application follows a clear separation between frontend and backend:
-- **Frontend**: React SPA located in `/client` directory
-- **Backend**: Express.js API server in `/server` directory
-- **Shared**: Common schema definitions and types in `/shared` directory
+```text
+client/src/
+  components/               Shared application and shadcn UI components
+  features/character-sheet/ Character-sheet panels and controllers
+  features/card-game/       Card-game types, state normalization, and API logic
+  features/dm/              DM resource hooks, panels, cards, and dialogs
+  features/glossary/        Structured enhanced-content block UI
+  hooks/                    Cross-feature React hooks
+  lib/                      API client, query keys, identity, utilities
+  pages/                    Route-level composition components
 
-### Technology Stack
-- **Frontend**: React 18, TypeScript, Vite, TanStack Query, Wouter (routing)
-- **Backend**: Express.js, TypeScript
-- **Database**: PostgreSQL with Drizzle ORM
-- **UI**: shadcn/ui components with Tailwind CSS
-- **State Management**: TanStack Query for server state, React hooks for local state
+server/
+  http/                     Async route and normalized error helpers
+  routes/                   Domain-specific Express routers
+  storage/                  Contract plus PostgreSQL and memory adapters
+  uploads/                  Safe local/R2 raster-image persistence
+  scripts/                  One-off R2 migration and URL rewiring utilities
+  db.ts                     Optional database connection
+  routes.ts                 HTTP/WebSocket composition root
+  index.ts                  Process startup and client serving
 
-## Recent Changes (January 2025)
+shared/
+  schema.ts                 Drizzle tables, request schemas, shared DTO types
+  spirit-dice.ts            Pure Spirit Die domain rules
+  enhanced-content.ts       Validated rich glossary content model
+  realtime.ts               WebSocket message contract
+```
 
-### Fixed Routing and Persistence Issues (January 30, 2025)
-- **RESOLVED: Character Not Found on Refresh** - Fixed routing system to fetch character data from URL parameter instead of relying on in-memory state
-- **CharacterSheetWrapper Component** - Created wrapper component that fetches character data based on URL parameter for proper page refresh handling
-- **RESOLVED: Technique Preferences Persistence** - Fixed database schema and storage implementation for reliable minimize/expand state persistence
-- **Database Constraint Resolution** - Fixed foreign key constraints in technique preferences, now requires valid technique IDs from database
-- **Updated Storage Logic** - Implemented proper upsert mechanism using separate select/update/insert flow to handle database constraints  
-- **RESOLVED: Frontend API Integration** - Fixed API request parameter order in technique card component (method first, then URL)
-- **Complete End-to-End Functionality** - Technique minimize/expand states now persist correctly across page refreshes and browser sessions
-- **Improved Error Handling** - Added loading states and proper error messages for character not found scenarios
-- **URL-Based Navigation** - Character sheets now work correctly when accessed directly via URL or after page refresh
+## Spirit Die model
 
-### Enhanced Animated Die Rolling System (January 30, 2025)
-- **Complete Animated Die Rolling** - Smooth animated dice that roll for 0.75 seconds before showing results
-- **Custom Roll Animations** - CSS keyframes for realistic bouncing and spinning effects at 30% speed
-- **Success/Failure Notifications** - Bottom-right notification box appears after animation completes
-- **Auto-hiding Results** - Notification disappears after 1 second automatically
-- **Stable Layout Design** - Fixed container sizes prevent dice shifting when restore buttons appear
-- **Centered Interface** - "Current Spirit Die Pool" title centered above dice with cleaner layout
-- **Optimized Timing** - Animation, notification, and database refresh perfectly synchronized
-- **Visual Polish** - Enhanced with proper success/failure colors and smooth transitions
+Spirit pools use stable slots. A depleted die is stored as `null`; it is never
+removed from the array. For example, failing with the first die in
+`["d4", "d8"]` produces `[null, "d8"]`. This prevents the second die from
+shifting into the first die's UI position and inheriting the wrong maximum.
 
-### Compact Technique Card Design (January 30, 2025)
-- **Minimize/Expand Functionality** - Chevron button to collapse techniques showing only essential information
-- **Horizontal Button Layout** - Edit, delete, and expand buttons arranged in a single row for space efficiency
-- **Compact Padding** - Reduced card padding from 6 to 4 for better space utilization
-- **Always-Visible SP Badge** - SP investment level displayed next to action type badge
-- **Streamlined Interface** - Removed circular SP selection icons for cleaner, more compact design
-- **Enhanced Content Styling** - Fixed text area styling to match theme with proper gray backgrounds
+Rules and progression live in `shared/spirit-dice.ts`, where they can be used by
+both client and server and tested without React or a database. Shortened legacy
+arrays are treated as having depleted trailing slots when read by the client.
 
-## Recent Changes (January 2025)
+A character creation transaction also creates the initial level-based pool.
+Changing a level updates the character and reconciles its pool in one storage
+operation; overrides are cleared intentionally on a level change.
 
-### Enhanced Expandable Tooltip System (January 30, 2025)
-- **Complete Expandable Tooltip Implementation** - Two-tier tooltip system with basic hover and enhanced modal views
-- Database schema enhanced with `expandedContent` and `hasExpandedContent` fields for rich content storage
-- **ExpandedTooltipDialog Component** - Full-screen modal with rich content editing capabilities
-  - Support for text blocks, tables, and images in structured format
-  - Interactive content editor with add/remove functionality for content blocks
-  - Table editor with dynamic headers and rows
-  - **Local Image Upload Support** - Camera button for selecting and uploading local images
-  - Image support with URL, alt text, and caption fields
-- **Enhanced TooltipText Component** - Always shows expand button ("View Enhanced Details" or "Add Enhanced Content")
-- **Rich Content Editing Interface** - GUI-based editor for creating detailed tooltip content
-- **Event Handling Improvements** - Prevents technique rolling when tooltip dialogs are open
-- Accessibility improvements with proper dialog descriptions
-- Real-time preview and editing capabilities for all content types
+## Storage modes
 
-### Spirit Die Pool Enhancements (January 30, 2025)
-- **Fixed Missing Dice Restore Buttons** - Restore buttons now visible for completely removed dice
-- **Visual Placeholder for Missing Dice** - Dashed borders show where removed dice were originally
-- **Long Rest Button Added** - Always-visible button to restore all dice to original values
-- **Improved Layout Consistency** - All dice positions maintained regardless of current state
-- Enhanced user experience with clear visual feedback for dice reduction and restoration
+### Local memory mode
 
-### Portrait Upload System
-- Added `portraitUrl` field to characters schema for image storage
-- Implemented multer-based file upload with 5MB limit and image validation
-- Created portrait upload component with preview, upload, and delete functionality
-- Added camera icon overlay on character cards for easy portrait management
-- Portraits are stored in `/uploads/portraits/` directory and served statically
-- Automatic cleanup of old portrait files when updating or deleting
-- **Advanced Image Crop Editor** - Drag and zoom controls for perfect portrait positioning
-  - Interactive canvas-based editor with circular crop preview
-  - Zoom slider for precise image scaling (0.2x to 3x)
-  - Drag functionality to position image within crop area
-  - Reset button to center image
-  - Real-time preview of final circular portrait
+If `DATABASE_URL` is absent in development, the server starts with `MemStorage`.
+It synchronously loads the same default fixture used to seed an empty database.
+The memory adapter implements the full storage contract, including DM resources,
+preferences, trackers, users, and delete cascades.
 
-### Main Menu Navigation
-- Replaced character switching with dedicated main menu system
-- Main menu displays all characters in a card grid layout with portraits
-- Added theme toggle (light/dark mode) across the application
-- Character sheets now have "Main Menu" button instead of character selector
-- Proper routing between main menu (/) and character sheets (/character/:id)
+Memory data is lost when the process exits.
 
-### Level Management System
-- **Level Editor Component** - Edit character levels directly from character sheet
-- Small "Edit" button next to level display in character header
-- Dialog interface for updating character level (1-20) with validation
-- Current level display and input field for new level
-- **Automatic Spirit Die Pool Updates** - Spirit dice automatically update to match new level
-- Resets any custom dice overrides when level changes
-- Automatic character cache invalidation for real-time updates
-- Toast notifications for successful updates and error handling
+### PostgreSQL mode
 
-### Comprehensive Glossary System
-- **Basic Hover Tooltips** - Quick reference definitions appear on hover over keyword matches
-- **Expandable Enhanced Tooltips** - Modal dialogs with rich content including tables, images, and detailed text
-- **Smart Content Detection** - System automatically detects when enhanced content exists and shows expand button
-- **Rich Content Editor** - Full GUI for creating and editing enhanced tooltip content with multiple content types
-- **Keyword Matching** - Case-insensitive automatic detection of glossary terms in all text content
-- Sample enhanced content demonstrates table formatting for die sizes, SP investment levels, and strategic considerations
+When `DATABASE_URL` is present, `DatabaseStorage` receives a non-null injected
+Drizzle client. Startup initialization is awaited before the server listens and
+seeds an empty database transactionally.
 
-### Data Synchronization Fix (January 29, 2025)
-- **RESOLVED: Character Level Display Bug** - Fixed stale character data in character sheet
-- Implemented fresh character data fetching with separate API query
-- Character level now updates immediately in header after level changes
-- **RESOLVED: Restore Button Bug** - Fixed incorrect restore button appearance after level changes
-- Enhanced level editor to delete/recreate spirit die pools on level changes
-- Added DELETE route and storage methods for spirit die pools
-- Spirit dice now properly recognize new level-based dice as "original" dice
-- Restore buttons only appear when dice have been legitimately reduced by failed technique rolls
+Production startup fails clearly when `DATABASE_URL` is missing instead of
+silently switching to ephemeral data.
 
-## Key Components
+## HTTP API conventions
 
-### Database Schema (`shared/schema.ts`)
-Defines four main entities:
-- **Characters**: Basic character information (name, path, level, portrait)
-- **Spirit Die Pools**: Character-specific dice pools with configurable sizes
-- **Techniques**: Special abilities with SP (Spirit Point) effects
-- **Active Effects**: Temporary character modifiers
+- Request bodies are parsed with narrow Zod schemas from `shared/schema.ts`.
+- Immutable IDs, ownership keys, timestamps, and portrait paths cannot be mass
+  assigned through update endpoints.
+- Async errors flow through one safe JSON error handler.
+- Invalid JSON returns 400; unknown `/api` routes return 404.
+- Resource creation returns 201.
+- API logs contain request metadata, not response bodies.
 
-### Backend Architecture (`server/`)
-- **Storage Layer**: In-memory storage implementation (`MemStorage`) with interface for future database integration
-- **API Routes**: RESTful endpoints for CRUD operations on all entities
-- **Express Setup**: Middleware for logging, JSON parsing, and error handling
+Routers are grouped by character, Spirit Die, technique/effect, glossary,
+tracker, preference, upload, card-game, and DM domains under `server/routes/`.
 
-### Frontend Architecture (`client/src/`)
-- **Component Structure**: Modular UI components with clear separation of concerns
-- **State Management**: Custom hooks for character state management
-- **API Integration**: Centralized API client with TanStack Query
-- **Routing**: Simple page-based routing with Wouter
+## Production features
 
-## Data Flow
+- Normal and DM-only characters are stored separately. DM character sheets can
+  return directly to the DM workspace.
+- The factions screen manages the factions used by the card game.
+- The card-game screen persists one shared game state. Writes carry the version
+  last read by the client, so stale saves receive a conflict instead of silently
+  writing over a newer server version. Faction edits rebase their narrow changes
+  onto the returned state before retrying.
+- Successful and failed Spirit Die rolls can be posted to Discord when a webhook
+  is configured. Technique details are only attached after the server verifies
+  that the technique belongs to the rolling character.
 
-### Character Data Management
-1. Character data flows from the backend storage through REST APIs
-2. Frontend uses TanStack Query for caching and synchronization
-3. Mutations trigger optimistic updates and cache invalidation
-4. Toast notifications provide user feedback
+## Upload handling
 
-### Spirit Die Mechanics
-1. Characters have configurable spirit die pools (count and size)
-2. Techniques consume Spirit Points (SP) and trigger die rolls
-3. Failed rolls reduce die sizes, successful rolls maintain them
-4. Long rests restore all dice to original configuration
+Uploads are buffered with a 5 MB limit, checked by file signature, and accepted
+only as PNG, JPEG, GIF, or WebP. The server chooses a UUID filename and extension;
+it never trusts the client's filename, MIME type, extension, or stored path.
 
-### Real-time Updates
-- API calls include request/response logging
-- Optimistic updates provide immediate UI feedback
-- Cache invalidation ensures data consistency
+All local file resolution is constrained to the relevant upload directory.
+Static responses disable MIME sniffing. General character updates cannot write
+a `portraitUrl`; only the portrait endpoints can do that.
 
-## External Dependencies
+When every `R2_*` setting is present, `ImageStore` uses Cloudflare R2 and stores
+public object URLs. When every setting is absent, it uses local `./uploads`
+storage. A partial R2 configuration is rejected at startup so a deployment
+cannot silently start writing images to an ephemeral filesystem.
 
-### UI Framework
-- **Radix UI**: Accessible primitive components
-- **shadcn/ui**: Pre-built component library
-- **Tailwind CSS**: Utility-first styling
-- **Lucide React**: Icon library
+Card-game uploads use a separate `card-images` namespace. Automatic card cleanup
+only removes objects from that namespace; legacy card images in the shared
+`images` namespace are retained because other content may still reference them.
 
-### Data Management
-- **TanStack Query**: Server state management and caching
-- **Drizzle ORM**: Type-safe database queries
-- **Neon Database**: PostgreSQL hosting (configured but not actively used)
+## Client data flow
 
-### Development Tools
-- **Vite**: Fast build tool and dev server
-- **TypeScript**: Type safety across the stack
-- **ESBuild**: Production bundling for backend
+- `client/src/lib/api.ts` is the single HTTP boundary.
+- `client/src/lib/query-keys.ts` defines canonical TanStack Query keys.
+- Server state uses finite staleness and exact invalidation/cache updates.
+- Route pages are lazy-loaded into separate production chunks.
+- WebSocket reconnects use bounded exponential backoff and clean up on unmount.
+- Technique preferences are fetched once for the whole techniques panel.
+- Scratchpad autosaves preserve dirty local drafts during background refetches.
 
-## Deployment Strategy
+The DM page and character-sheet page are composition roots; feature state and UI
+live in their respective `features/` directories.
 
-### Development Environment
-- Vite dev server for frontend with HMR
-- Express server with TypeScript compilation
-- In-memory storage for rapid development
-- Replit-specific plugins for development experience
+## Commands
 
-### Production Build
-- Frontend: Vite builds to `dist/public`
-- Backend: ESBuild bundles server to `dist/index.js`
-- Single deployment target serving both frontend and API
+```bash
+npm run dev       # Cross-platform development server
+npm run check     # Strict TypeScript check, including unused-code checks
+npm test          # Domain, storage, API, and upload tests
+npm run build     # Production client and server bundles
+npm run verify    # check + test + build
+npm run db:push   # Push the Drizzle schema to the configured database
+npm run db:harden # Apply the idempotent post-0002 production hardening migration
+npm run migrate:r2 # Upload local files and rewrite stored URLs to R2
+npm run rewire:r2  # Rewrite URLs after changing the R2 public base URL
+npm start         # Serve the production build (DATABASE_URL required)
+```
 
-### Database Migration
-- Drizzle configured for PostgreSQL
-- Migration files generated to `/migrations`
-- Environment variable `DATABASE_URL` required for production
-- Current implementation uses in-memory storage as fallback
+Copy `.env.example` to `.env` for local configuration. `.env` files are ignored
+and must never be committed.
 
-### Key Configuration Files
-- **Vite Config**: Frontend build configuration with path aliases
-- **Drizzle Config**: Database schema and migration settings
-- **Tailwind Config**: UI theming and component styling
-- **TypeScript Config**: Shared configuration for all packages
+```dotenv
+DATABASE_URL=
+PORT=5000
+NODE_ENV=development
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_PUBLIC_BASE_URL=
+DISCORD_WEBHOOK_URL=
+APP_PUBLIC_BASE_URL=
+```
 
-The architecture supports easy transition from development (in-memory storage) to production (PostgreSQL) through the storage interface abstraction.
+`R2_OLD_BASE_URL` is needed only while running `npm run rewire:r2`. The R2
+migration scripts update character portraits, enhanced text content, and image
+URLs nested inside card-game JSON. Back up the production database and object
+storage before running either one-off script.
+
+Do not run `db:push` against production as part of this source merge. After a
+backup, `npm run db:harden` explicitly applies
+`migrations/0003_harden_schema_constraints.sql` in one transaction. It
+deduplicates legacy Spirit Die pools using the same canonical ordering as the
+application, backfills the two formerly nullable values, and installs missing
+constraints/indexes. Historical orphan rows are preserved; their foreign keys
+remain `NOT VALID` and emit a warning until those rows are reconciled. The
+checked-in historical migrations remain unchanged.
+
+## Verification coverage
+
+The Node test suite covers:
+
+- Spirit Die progression, depletion, restoration, legacy normalization, and
+  input validation.
+- Structured glossary-content parsing and round trips.
+- Complete memory-storage behavior, deterministic ordering, defensive copying,
+  relationship checks, cascades, and level reconciliation.
+- Real Express requests for creation, level changes, strict DTOs, malformed JSON,
+  DM-character isolation/deletion, card-state conflicts, and API 404s.
+- Upload signature detection, path-traversal prevention, and partial-R2-config
+  rejection.
+
+## Current limitations
+
+- There is no real authentication layer. The DM identity and technique preference
+  identity are local browser IDs, not security boundaries. Do not expose private
+  campaign data publicly without adding server-side authentication and ownership
+  checks.
+- The card game's DM access code and the main-menu admin toggle are convenience
+  UI gates, not authentication or authorization.
+- The main battlefield still resolves a concurrent whole-document conflict by
+  retrying its latest local state. Faction edits are field-aware, but simultaneous
+  battlefield edits can still be last-writer-wins until state is split into
+  smaller commands or given a full three-way merge.
+- Spirit Die pool updates are transactional for level changes, but simultaneous
+  roll requests do not yet use a database row lock or version column.
+- Image cleanup occurs when the owning record changes, but there is no general
+  orphan-reconciliation job for objects left behind by interrupted requests or
+  manual database edits.
