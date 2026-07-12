@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  BookOpen,
   EyeOff,
   ImagePlus,
   KeyRound,
@@ -81,9 +82,6 @@ export default function InstrumentVault() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expandedInstrument, setExpandedInstrument] =
     useState<SpiritualInstrumentWithAssignments | null>(null);
-  const [assigningInstrument, setAssigningInstrument] =
-    useState<SpiritualInstrumentWithAssignments | null>(null);
-  const [assignmentCharacterIds, setAssignmentCharacterIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const instrumentsQuery = useQuery<SpiritualInstrumentWithAssignments[]>({
@@ -166,22 +164,6 @@ export default function InstrumentVault() {
     onError: () => toast({ title: "Instrument could not be removed", variant: "destructive" }),
   });
 
-  const saveAssignments = useMutation({
-    mutationFn: () =>
-      requestJson<SpiritualInstrumentWithAssignments>(
-        "PUT",
-        `/api/instruments/${assigningInstrument!.id}/assignments`,
-        { characterIds: assignmentCharacterIds },
-      ),
-    onSuccess: async () => {
-      await refresh();
-      setAssigningInstrument(null);
-      toast({ title: "Instrument assignments updated" });
-    },
-    onError: () =>
-      toast({ title: "Instrument assignments could not be updated", variant: "destructive" }),
-  });
-
   const saveEnhancedContent = useMutation({
     mutationFn: ({
       instrumentId,
@@ -226,11 +208,6 @@ export default function InstrumentVault() {
     setDialogOpen(true);
   };
 
-  const openAssignments = (instrument: SpiritualInstrumentWithAssignments) => {
-    setAssigningInstrument(instrument);
-    setAssignmentCharacterIds(instrument.characterIds);
-  };
-
   const uploadImage = async (file: File) => {
     setUploading(true);
     try {
@@ -260,7 +237,9 @@ export default function InstrumentVault() {
       return;
     }
 
-    const code = window.prompt("Enter the DM Mode code:");
+    const code = typeof window !== "undefined" && typeof window.prompt === "function"
+      ? window.prompt("Enter the DM Mode code:")
+      : null;
     if (code === null) return;
     if (code.trim() !== "31428") {
       toast({
@@ -339,7 +318,7 @@ export default function InstrumentVault() {
                 Spiritual Instruments
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[#666a63] dark:text-[#b7a98c]">
-                Party-wide collection of Spiritual Instruments.
+                Party-wide collection and tracking of Spiritual Instruments.
               </p>
             </div>
             {isDmMode && (
@@ -396,7 +375,6 @@ export default function InstrumentVault() {
                         characters={characters}
                         isDmMode={isDmMode}
                         onOpenContent={() => setExpandedInstrument(instrument)}
-                        onAssign={() => openAssignments(instrument)}
                         onEdit={() => openEdit(instrument)}
                         onDelete={() => {
                           if (confirm(`Remove “${instrument.name}” from the vault?`)) {
@@ -496,48 +474,6 @@ export default function InstrumentVault() {
           </form>
         </CampaignDialogContent>
       </Dialog>
-      <Dialog
-        open={assigningInstrument !== null}
-        onOpenChange={(open) => !open && setAssigningInstrument(null)}
-      >
-        <CampaignDialogContent className="max-w-lg">
-          <div className="flex min-h-0 flex-1 flex-col">
-            <CampaignDialogHeader
-              icon={Users}
-              eyebrow="Instrument vault"
-              title={`Assign ${assigningInstrument?.name ?? "instrument"}`}
-              description="Choose which player characters carry this Spiritual Instrument."
-            />
-            <CampaignDialogBody>
-              <div className="wuxia-dialog-section grid gap-2 p-3 sm:grid-cols-2">
-                {characters.map((character) => (
-                  <label key={character.id} className="flex cursor-pointer items-center gap-2.5 rounded-[0.3rem] px-2 py-2 text-sm transition-colors hover:bg-white/40 dark:hover:bg-white/[0.04]">
-                    <Checkbox
-                      className="wuxia-checkbox"
-                      checked={assignmentCharacterIds.includes(character.id)}
-                      onCheckedChange={(checked) =>
-                        setAssignmentCharacterIds((current) =>
-                          checked === true
-                            ? [...new Set([...current, character.id])]
-                            : current.filter((id) => id !== character.id),
-                        )
-                      }
-                    />
-                    {character.name}
-                  </label>
-                ))}
-                {characters.length === 0 && <p className="text-sm text-muted-foreground">No player characters yet.</p>}
-              </div>
-            </CampaignDialogBody>
-            <CampaignDialogFooter>
-              <Button type="button" variant="outline" className="wuxia-secondary-action w-full sm:w-auto" onClick={() => setAssigningInstrument(null)}>Cancel</Button>
-              <Button type="button" className="wuxia-primary-action w-full sm:w-auto" disabled={saveAssignments.isPending} onClick={() => saveAssignments.mutate()}>
-                {saveAssignments.isPending ? "Savingâ€¦" : "Save assignments"}
-              </Button>
-            </CampaignDialogFooter>
-          </div>
-        </CampaignDialogContent>
-      </Dialog>
       {expandedInstrument && (
         <EnhancedContentDialog
           open
@@ -568,7 +504,6 @@ function InstrumentCard({
   characters,
   isDmMode,
   onOpenContent,
-  onAssign,
   onEdit,
   onDelete,
 }: {
@@ -576,25 +511,12 @@ function InstrumentCard({
   characters: Character[];
   isDmMode: boolean;
   onOpenContent: () => void;
-  onAssign: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const assigned = characters.filter((character) => instrument.characterIds.includes(character.id));
   return (
-    <article
-      className="wuxia-card cursor-pointer overflow-hidden"
-      role="button"
-      tabIndex={0}
-      aria-label={`Open details for ${instrument.name}`}
-      onClick={onOpenContent}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpenContent();
-        }
-      }}
-    >
+    <article className="wuxia-card overflow-hidden">
       {instrument.imageUrl ? (
         <img src={instrument.imageUrl} alt="" className="h-48 w-full object-cover" />
       ) : (
@@ -619,13 +541,18 @@ function InstrumentCard({
             </span>
           )) : <span className="text-xs italic text-muted-foreground">Unassigned</span>}
         </div>
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" className="wuxia-secondary-action" onClick={(event) => { event.stopPropagation(); onAssign(); }}>
-            <Users className="mr-2 h-3.5 w-3.5" /> Assign players
-          </Button>
-        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="wuxia-secondary-action mt-5"
+          onClick={onOpenContent}
+        >
+          <BookOpen className="mr-2 h-3.5 w-3.5" />
+          {instrument.hasExpandedContent ? "Open details" : isDmMode ? "Add enhanced content" : "View details"}
+        </Button>
         {isDmMode && (
-          <div className="mt-5 flex gap-2 border-t pt-4" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+          <div className="mt-5 flex gap-2 border-t pt-4">
             <Button size="sm" variant="outline" onClick={onEdit}><Pencil className="mr-2 h-3.5 w-3.5" /> Edit</Button>
             <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}><Trash2 className="mr-2 h-3.5 w-3.5" /> Remove</Button>
           </div>
