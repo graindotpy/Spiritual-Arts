@@ -2,8 +2,8 @@ import { Camera, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RichTextContent, RichTextEditor } from "@/features/enhanced-content/rich-text";
-import type { ContentBlock } from "@shared/enhanced-content";
+import { Textarea } from "@/components/ui/textarea";
+import { richTextContentToPlainText, type ContentBlock } from "@shared/enhanced-content";
 
 interface ContentBlockEditorProps {
   block: ContentBlock;
@@ -36,8 +36,14 @@ export function ContentBlockEditor({
   onImageUpload,
 }: ContentBlockEditorProps) {
   if (block.type === "text") {
+    const textValue = typeof block.content === "string" ? block.content : richTextContentToPlainText(block.content);
+
     if (!isEditing) {
-      return <RichTextContent content={block.content} />;
+      return (
+        <div className="whitespace-pre-line text-sm leading-7 text-[#55615b] dark:text-[#c7baa3]">
+          {textValue || "No text content yet."}
+        </div>
+      );
     }
 
     return (
@@ -48,11 +54,13 @@ export function ContentBlockEditor({
           </Label>
           <RemoveBlockButton onRemove={onRemove} />
         </div>
-        <RichTextEditor
-          value={block.content}
-          onChange={onChange}
+        <Textarea
+          value={textValue}
+          onChange={(event) => onChange(event.target.value)}
           placeholder="Enter detailed text content…"
-          label="Text content"
+          aria-label="Text content"
+          rows={6}
+          className="wuxia-dialog-control min-h-32"
         />
       </div>
     );

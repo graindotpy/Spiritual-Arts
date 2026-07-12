@@ -260,9 +260,17 @@ export function serializeEnhancedContent(blocks: readonly ContentBlock[]): strin
   return JSON.stringify(enhancedContentSchema.parse({ blocks }));
 }
 
+function createBlockId(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function createContentBlock(
   type: ContentBlockType,
-  id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+  id = createBlockId(),
 ): ContentBlock {
   switch (type) {
     case "text":

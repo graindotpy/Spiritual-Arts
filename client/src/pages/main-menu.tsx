@@ -217,7 +217,9 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
       return;
     }
 
-    const code = window.prompt("Enter the DM Mode code:");
+    const code = typeof window !== "undefined" && typeof window.prompt === "function"
+      ? window.prompt("Enter the DM Mode code:")
+      : null;
     if (code === null) return;
 
     if (code.trim() !== "31428") {

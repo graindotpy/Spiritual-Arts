@@ -15,8 +15,6 @@ import {
   type SpiritDieSlot,
 } from "@shared/spirit-dice";
 import { getTechniqueVariantLabel } from "@shared/technique-variants";
-import { isSerializedRichTextContent } from "@shared/enhanced-content";
-import { RichTextContent } from "@/features/enhanced-content/rich-text";
 
 interface TechniqueCardProps {
   technique: Technique;
@@ -56,10 +54,6 @@ function TechniqueText({
   entityId: string;
   className: string;
 }) {
-  if (isSerializedRichTextContent(text)) {
-    return <RichTextContent content={text} className={className} />;
-  }
-
   return (
     <TooltipText
       text={text}

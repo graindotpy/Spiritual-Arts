@@ -97,7 +97,9 @@ export function RichTextEditor({
   const iconButton = "rich-text-toolbar-button h-8 w-8";
   const setLink = () => {
     const previous = String(editor.getAttributes("link").href ?? "");
-    const entered = window.prompt("Enter a web or email address:", previous);
+    const entered = typeof window !== "undefined" && typeof window.prompt === "function"
+      ? window.prompt("Enter a web or email address:", previous)
+      : null;
     if (entered === null) return;
     if (!entered.trim()) {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
