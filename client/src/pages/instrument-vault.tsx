@@ -2,7 +2,6 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  BookOpen,
   EyeOff,
   ImagePlus,
   KeyRound,
@@ -516,7 +515,19 @@ function InstrumentCard({
 }) {
   const assigned = characters.filter((character) => instrument.characterIds.includes(character.id));
   return (
-    <article className="wuxia-card overflow-hidden">
+    <article
+      className="wuxia-card cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557d6f] focus-visible:ring-offset-2"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open details for ${instrument.name}`}
+      onClick={onOpenContent}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpenContent();
+        }
+      }}
+    >
       {instrument.imageUrl ? (
         <img src={instrument.imageUrl} alt="" className="h-48 w-full object-cover" />
       ) : (
@@ -541,18 +552,8 @@ function InstrumentCard({
             </span>
           )) : <span className="text-xs italic text-muted-foreground">Unassigned</span>}
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="wuxia-secondary-action mt-5"
-          onClick={onOpenContent}
-        >
-          <BookOpen className="mr-2 h-3.5 w-3.5" />
-          {instrument.hasExpandedContent ? "Open details" : isDmMode ? "Add enhanced content" : "View details"}
-        </Button>
         {isDmMode && (
-          <div className="mt-5 flex gap-2 border-t pt-4">
+          <div className="mt-5 flex gap-2 border-t pt-4" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
             <Button size="sm" variant="outline" onClick={onEdit}><Pencil className="mr-2 h-3.5 w-3.5" /> Edit</Button>
             <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}><Trash2 className="mr-2 h-3.5 w-3.5" /> Remove</Button>
           </div>
