@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { CampaignDialogBody, CampaignDialogFooter } from "@/components/campaign-dialog";
 
 interface ImageCropEditorProps {
   imageUrl: string;
@@ -89,9 +90,11 @@ export default function ImageCropEditor({ imageUrl, onSave, onCancel }: ImageCro
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     const bounds = event.currentTarget.getBoundingClientRect();
+    const pointerX = (event.clientX - bounds.left) * (CANVAS_SIZE / bounds.width);
+    const pointerY = (event.clientY - bounds.top) * (CANVAS_SIZE / bounds.height);
     dragOffset.current = {
-      x: event.clientX - bounds.left - imagePosition.x,
-      y: event.clientY - bounds.top - imagePosition.y,
+      x: pointerX - imagePosition.x,
+      y: pointerY - imagePosition.y,
     };
     setIsDragging(true);
   };
@@ -99,9 +102,11 @@ export default function ImageCropEditor({ imageUrl, onSave, onCancel }: ImageCro
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDragging) return;
     const bounds = event.currentTarget.getBoundingClientRect();
+    const pointerX = (event.clientX - bounds.left) * (CANVAS_SIZE / bounds.width);
+    const pointerY = (event.clientY - bounds.top) * (CANVAS_SIZE / bounds.height);
     setImagePosition({
-      x: event.clientX - bounds.left - dragOffset.current.x,
-      y: event.clientY - bounds.top - dragOffset.current.y,
+      x: pointerX - dragOffset.current.x,
+      y: pointerY - dragOffset.current.y,
     });
   };
 
@@ -142,63 +147,77 @@ export default function ImageCropEditor({ imageUrl, onSave, onCancel }: ImageCro
   };
 
   return (
-    <div className="space-y-4">
-      <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-        Drag to position the image and use the slider to zoom.
-      </p>
-      <div className="flex justify-center">
-        <div className="overflow-hidden rounded-lg border-2 border-gray-200 dark:border-gray-700">
-          <canvas
-            ref={canvasRef}
-            width={CANVAS_SIZE}
-            height={CANVAS_SIZE}
-            className="touch-none cursor-move bg-gray-100 dark:bg-gray-800"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={() => setIsDragging(false)}
-            onPointerCancel={() => setIsDragging(false)}
-            aria-label="Portrait crop preview"
-          />
-          <img ref={imageRef} src={imageUrl} alt="" className="hidden" onLoad={handleImageLoad} />
+    <>
+      <CampaignDialogBody className="space-y-5">
+        <p className="text-center text-sm text-[var(--wuxia-dialog-muted)]">
+          Drag to position the image and use the slider to zoom.
+        </p>
+        <div className="flex justify-center">
+          <div className="wuxia-dialog-section w-full max-w-[300px] overflow-hidden border-2">
+            <canvas
+              ref={canvasRef}
+              width={CANVAS_SIZE}
+              height={CANVAS_SIZE}
+              className="block h-auto w-full touch-none cursor-move bg-[var(--wuxia-dialog-field)]"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={() => setIsDragging(false)}
+              onPointerCancel={() => setIsDragging(false)}
+              aria-label="Portrait crop preview"
+            />
+            <img ref={imageRef} src={imageUrl} alt="" className="hidden" onLoad={handleImageLoad} />
+          </div>
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <ZoomOut className="h-4 w-4 text-gray-500" />
-          <Slider
-            value={[zoom]}
-            onValueChange={handleZoomChange}
-            min={1}
-            max={3}
-            step={0.05}
-            className="flex-1"
-            aria-label="Portrait zoom"
-          />
-          <ZoomIn className="h-4 w-4 text-gray-500" />
+        <div className="wuxia-dialog-section space-y-3 p-4">
+          <div className="flex items-center gap-3">
+            <ZoomOut className="h-4 w-4 text-[var(--wuxia-dialog-muted)]" />
+            <Slider
+              value={[zoom]}
+              onValueChange={handleZoomChange}
+              min={1}
+              max={3}
+              step={0.05}
+              className="flex-1"
+              aria-label="Portrait zoom"
+            />
+            <ZoomIn className="h-4 w-4 text-[var(--wuxia-dialog-muted)]" />
+          </div>
+          <div className="text-center">
+            <Button
+              type="button"
+              onClick={() => centerImage()}
+              variant="outline"
+              size="sm"
+              className="wuxia-secondary-action"
+            >
+              <RotateCcw className="mr-1 h-3 w-3" />
+              Reset Position
+            </Button>
+          </div>
         </div>
-        <div className="text-center">
-          <Button onClick={() => centerImage()} variant="outline" size="sm">
-            <RotateCcw className="mr-1 h-3 w-3" />
-            Reset Position
-          </Button>
-        </div>
-      </div>
+      </CampaignDialogBody>
 
-      <div className="flex gap-2">
+      <CampaignDialogFooter>
         <Button
+          type="button"
+          onClick={onCancel}
+          variant="outline"
+          className="wuxia-secondary-action w-full sm:w-auto"
+        >
+          <X className="mr-2 h-4 w-4" />
+          Cancel
+        </Button>
+        <Button
+          type="button"
           onClick={handleSave}
           disabled={!imageLoaded}
-          className="flex-1 bg-spiritual-600 hover:bg-spiritual-700"
+          className="wuxia-primary-action w-full sm:w-auto"
         >
           <Check className="mr-2 h-4 w-4" />
           Save Portrait
         </Button>
-        <Button onClick={onCancel} variant="outline" className="flex-1">
-          <X className="mr-2 h-4 w-4" />
-          Cancel
-        </Button>
-      </div>
-    </div>
+      </CampaignDialogFooter>
+    </>
   );
 }

@@ -51,23 +51,24 @@ export default function SpiritDiePoolComponent({
 }: SpiritDiePoolProps) {
   return (
     <div>
-      <div className="mb-5 text-center">
+      <div className="mb-5 text-center lg:text-left">
         <p className="wuxia-kicker mb-1.5">Spirit Die Tracking</p>
-        <h2 className="font-display text-2xl text-[#20352e] dark:text-[#f1eadc]">
+        <h2 className="font-display text-3xl text-[#20352e] dark:text-[#f1eadc]">
           Spirit Die Pool
         </h2>
       </div>
       
-      <div className="campaign-inner-surface mb-5 flex flex-wrap items-center justify-center gap-3 p-3">
+      <div className="character-dice-toolbar mb-5 flex flex-wrap items-center justify-center gap-3 border-y border-[#cdbfa7]/70 py-3 dark:border-[#806b48]/55">
         <div className="flex items-center gap-2" data-testid="manual-tracking-toggle">
-          <Settings className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-          <Label htmlFor="manual-tracking" className="text-sm text-gray-700 dark:text-gray-300">
+          <Settings className="h-4 w-4 text-[#67746d] dark:text-[#b09e7f]" />
+          <Label htmlFor="manual-tracking" className="text-sm text-[#565f59] dark:text-[#c6b89d]">
             Manual Tracking
           </Label>
           <Switch
             id="manual-tracking"
             checked={isManualTracking}
             onCheckedChange={onManualTrackingToggle}
+            className="data-[state=checked]:bg-[#3f6c5c] data-[state=unchecked]:bg-[#b7ad99] dark:data-[state=checked]:bg-[#8e593f] dark:data-[state=unchecked]:bg-[#665943]"
             data-testid="switch-manual-tracking"
           />
         </div>
@@ -82,13 +83,19 @@ export default function SpiritDiePoolComponent({
           Override Pool
         </Button>
         {isUsingOverride && (
-          <Button type="button" variant="ghost" size="sm" onClick={onResetToLevel}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onResetToLevel}
+            className="campaign-toolbar-button"
+          >
             Reset to Level
           </Button>
         )}
       </div>
       
-      <div className="mt-4 flex flex-wrap items-start justify-center gap-x-4 gap-y-2">
+      <div className="mx-auto mt-4 flex min-h-[7.5rem] w-full flex-wrap items-center justify-center gap-x-3 gap-y-2">
         {/* Show all dice positions based on original dice */}
         {originalDice.map((originalDie, index) => {
           const currentDie = currentDice[index];
@@ -96,8 +103,8 @@ export default function SpiritDiePoolComponent({
           const isRollingDie = isRolling && rollingDieIndex === index;
           
           return (
-            <div key={index} className="flex flex-col items-center w-20">
-              <div className="h-16 w-16 flex items-center justify-center">
+            <div key={index} className="flex w-20 flex-col items-center">
+              <div className="flex h-16 w-16 items-center justify-center">
                 {currentDie ? (
                   isRollingDie ? (
                     <AnimatedDie
@@ -119,46 +126,47 @@ export default function SpiritDiePoolComponent({
                     />
                   )
                 ) : (
-                  <div className="w-12 h-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center">
-                    <span className="text-xs text-gray-400">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-sm border-2 border-dashed border-[#aa9b80] bg-[#f4ecdc]/35 dark:border-[#806b48] dark:bg-[#4d3e29]/20">
+                    <span className="text-xs text-[#817d71] dark:text-[#a99c83]">
                       {originalDie}
                     </span>
                   </div>
                 )}
               </div>
-              {/* Restore button positioned below the die - fixed height container to prevent shifting */}
-              <div className="h-10 mt-2 flex items-start justify-center">
-                {!isManualTracking && canRestore && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onDieRestore(index)}
-                    className="h-6 px-2 text-xs text-gray-500 hover:text-spiritual-600 dark:text-gray-400 dark:hover:text-spiritual-400"
-                    title={!currentDie ? "Restore to d4" : "Increase die size by one step"}
-                  >
-                    <RotateCcw className="w-3 h-3 mr-1" />
-                    Restore
-                  </Button>
-                )}
-                {isManualTracking && (
-                  <div className="text-xs text-center text-gray-500 dark:text-gray-400">
-                    Click to change
-                  </div>
-                )}
-              </div>
+              {(canRestore || isManualTracking) && (
+                <div className="mt-2 flex h-10 items-start justify-center">
+                  {!isManualTracking && canRestore && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onDieRestore(index)}
+                      className="h-6 px-2 text-xs text-[#6a756e] hover:bg-[#e4eadf] hover:text-[#31594d] dark:text-[#a99c83] dark:hover:bg-[#594326]/30 dark:hover:text-[#ddc69c]"
+                      title={!currentDie ? "Restore to d4" : "Increase die size by one step"}
+                    >
+                      <RotateCcw className="mr-1 h-3 w-3" />
+                      Restore
+                    </Button>
+                  )}
+                  {isManualTracking && (
+                    <div className="text-center text-xs text-[#5f665f] dark:text-[#a99c83]">
+                      Click to change
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
         
         {currentDice.every((die) => die === null) && (
           <div className="text-center py-8 flex flex-col items-center">
-            <p className="text-gray-500 dark:text-gray-400 mb-4">No active dice remaining</p>
+            <p className="mb-4 text-[#5f665f] dark:text-[#a99c83]">No active dice remaining</p>
             {originalDice.length > 0 && (
               <Button
                 onClick={onRestoreAll}
                 variant="outline"
                 size="sm"
-                className="bg-spiritual-50 border-spiritual-200 text-spiritual-700 hover:bg-spiritual-100 dark:bg-spiritual-900 dark:border-spiritual-700 dark:text-spiritual-300 dark:hover:bg-spiritual-800"
+                className="wuxia-secondary-action"
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Restore All Dice ({originalDice.join(', ')})
@@ -167,21 +175,6 @@ export default function SpiritDiePoolComponent({
           </div>
         )}
 
-      </div>
-
-      {/* Long Rest Button */}
-      <div className="mt-4 border-t border-[#d1c5af]/70 pt-4 dark:border-white/10">
-        <div className="flex justify-end">
-          <Button
-            onClick={onRestoreAll}
-            variant="outline"
-            size="sm"
-            className="campaign-toolbar-button"
-          >
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Long Rest
-          </Button>
-        </div>
       </div>
     </div>
   );

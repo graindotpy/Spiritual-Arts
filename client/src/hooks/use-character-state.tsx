@@ -33,7 +33,9 @@ export function useCharacterState(characterId: string | undefined) {
   };
 
   const updateCharacter = useMutation({
-    mutationFn: (data: Pick<Partial<Character>, "name" | "path" | "level">) => {
+    mutationFn: (
+      data: Pick<Partial<Character>, "name" | "path" | "level" | "highestAbilityScore">,
+    ) => {
       const id = requireCharacterId(characterId);
       return requestJson<Character>("PUT", `/api/character/${id}`, data);
     },

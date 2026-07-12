@@ -53,18 +53,18 @@ export default function SpiritDie({
       <button
         type="button"
         className={cn(
-          "flex h-14 w-14 cursor-pointer select-none items-center justify-center rounded-lg border-2 text-lg font-bold shadow-lg transition-all duration-200",
+          "mx-auto flex h-16 w-16 cursor-pointer select-none items-center justify-center rounded-lg border-2 text-lg font-bold shadow-lg transition-all duration-200",
           isActive
             ? cn(
-                "border-spiritual-300 bg-gradient-to-br from-spiritual-600 to-spiritual-800 text-white",
-                "hover:scale-105 hover:shadow-xl dark:border-spiritual-400",
+                "border-[#b58a55] bg-gradient-to-br from-[#a75a43] to-[#663329] text-[#fff5df]",
+                "hover:scale-105 hover:shadow-xl dark:border-[#c09a62] dark:from-[#914b39] dark:to-[#4d2923]",
                 "[text-shadow:_0_1px_2px_rgb(0_0_0_/_0.8)]",
               )
-            : "border-gray-400 bg-gradient-to-br from-gray-300 to-gray-500 text-gray-100 dark:border-gray-500 dark:from-gray-600 dark:to-gray-800 dark:text-gray-300",
+            : "border-[#a99a81] bg-gradient-to-br from-[#c7bba4] to-[#8e806a] text-[#f7efe1] dark:border-[#766349] dark:from-[#5d5040] dark:to-[#342d24] dark:text-[#c7baa1]",
           isSelected &&
             (isManualMode
-              ? "scale-105 ring-4 ring-blue-400 ring-opacity-60"
-              : "scale-105 ring-4 ring-[#68a28a]/60"),
+              ? "scale-105 ring-4 ring-[#b77960]/60"
+              : "scale-105 ring-4 ring-[#c19a60]/55"),
         )}
         onClick={handleClick}
         aria-label={`${isManualMode ? "Change" : "Select"} ${size} spirit die`}
@@ -78,14 +78,14 @@ export default function SpiritDie({
         <span
           className={cn(
             "absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full shadow-lg",
-            isManualMode ? "bg-blue-500 dark:bg-blue-400" : "bg-emerald-500 dark:bg-emerald-400",
+            isManualMode ? "bg-[#9b5141]" : "bg-[#c29a58]",
           )}
           aria-hidden="true"
         >
           {isManualMode ? (
             <Settings className="h-3 w-3 text-white" />
           ) : (
-            <Check className="h-3 w-3 text-white" />
+            <Check className="h-3 w-3 text-[#2f271b]" />
           )}
         </span>
       )}
@@ -98,10 +98,13 @@ export default function SpiritDie({
             open
             onOpenChange={setShowDropdown}
           >
-            <SelectTrigger className="w-20" aria-label="Spirit die size">
+            <SelectTrigger
+              className="w-20 rounded-sm border-[#a89470] bg-[#fffaf0] text-[#344f45] shadow-lg focus:ring-[#557d6f] dark:border-[#8d744b] dark:bg-[#30281d] dark:text-[#e5d3b2] dark:focus:ring-[#b48b52]"
+              aria-label="Spirit die size"
+            >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="wuxia-select-content">
               {availableDice.map((dieValue) => (
                 <SelectItem key={dieValue} value={dieValue}>
                   {dieValue}

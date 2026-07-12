@@ -18,10 +18,12 @@ import type {
   InsertDmStack,
   InsertGlossaryTerm,
   InsertSpiritDiePool,
+  InsertSpiritualInstrument,
   InsertTechnique,
   InsertTechniquePreference,
   InsertTracker,
   SpiritDiePool,
+  SpiritualInstrumentWithAssignments,
   Technique,
   TechniquePreference,
   Tracker,
@@ -38,6 +40,7 @@ import type {
   GlossaryTermUpdate,
   IStorage,
   SpiritDiePoolUpdate,
+  SpiritualInstrumentUpdate,
   TechniqueUpdate,
   TrackerUpdate,
 } from "./contract";
@@ -78,6 +81,7 @@ export class MemStorage implements IStorage {
   private readonly users = new Map<string, User>();
   private readonly techniquePreferences = new Map<string, TechniquePreference>();
   private readonly trackers = new Map<string, Tracker>();
+  private readonly spiritualInstruments = new Map<string, SpiritualInstrumentWithAssignments>();
   private readonly dmStacks = new Map<string, DmStack>();
   private readonly dmGlossary = new Map<string, DmGlossaryTerm>();
   private readonly dmScratchpads = new Map<string, DmScratchpad>();
@@ -120,6 +124,7 @@ export class MemStorage implements IStorage {
       ...clone(character),
       id,
       level: character.level ?? 3,
+      highestAbilityScore: character.highestAbilityScore ?? null,
       portraitUrl: character.portraitUrl ?? null,
       isDmOnly: character.isDmOnly ?? false,
       dmOwnerId: character.dmOwnerId ?? null,
@@ -269,6 +274,14 @@ export class MemStorage implements IStorage {
     for (const [preferenceId, preference] of this.techniquePreferences) {
       if (techniqueIds.has(preference.techniqueId)) {
         this.techniquePreferences.delete(preferenceId);
+      }
+    }
+    for (const [instrumentId, instrument] of this.spiritualInstruments) {
+      if (instrument.characterIds.includes(id)) {
+        this.spiritualInstruments.set(instrumentId, {
+          ...instrument,
+          characterIds: instrument.characterIds.filter((characterId) => characterId !== id),
+        });
       }
     }
 
@@ -530,6 +543,59 @@ export class MemStorage implements IStorage {
 
   async deleteTracker(id: string): Promise<boolean> {
     return this.trackers.delete(id);
+  }
+
+  async getSpiritualInstruments(
+    includeHidden = false,
+  ): Promise<SpiritualInstrumentWithAssignments[]> {
+    return clone(
+      Array.from(this.spiritualInstruments.values())
+        .filter((instrument) => includeHidden || instrument.isRevealed)
+        .sort((left, right) =>
+          compareTextThenId(left.name, right.name, left.id, right.id),
+        ),
+    );
+  }
+
+  async createSpiritualInstrument(
+    instrument: InsertSpiritualInstrument,
+  ): Promise<SpiritualInstrumentWithAssignments> {
+    const created: SpiritualInstrumentWithAssignments = {
+      ...clone(instrument),
+      id: randomUUID(),
+      imageUrl: instrument.imageUrl ?? null,
+      expandedContent: instrument.expandedContent ?? null,
+      hasExpandedContent: instrument.hasExpandedContent ?? false,
+      isRevealed: instrument.isRevealed ?? true,
+      createdAt: new Date(),
+      characterIds: [],
+    };
+    this.spiritualInstruments.set(created.id, created);
+    return clone(created);
+  }
+
+  async updateSpiritualInstrument(
+    id: string,
+    instrument: SpiritualInstrumentUpdate,
+  ): Promise<SpiritualInstrumentWithAssignments | undefined> {
+    return this.updateRecord(this.spiritualInstruments, id, instrument);
+  }
+
+  async setSpiritualInstrumentAssignments(
+    id: string,
+    characterIds: string[],
+  ): Promise<SpiritualInstrumentWithAssignments | undefined> {
+    const existing = this.spiritualInstruments.get(id);
+    if (!existing) return undefined;
+    const uniqueIds = [...new Set(characterIds)];
+    uniqueIds.forEach((characterId) => this.assertCharacterExists(characterId));
+    const updated = { ...existing, characterIds: uniqueIds };
+    this.spiritualInstruments.set(id, updated);
+    return clone(updated);
+  }
+
+  async deleteSpiritualInstrument(id: string): Promise<boolean> {
+    return this.spiritualInstruments.delete(id);
   }
 
   async getDmStacks(userId: string): Promise<DmStack[]> {

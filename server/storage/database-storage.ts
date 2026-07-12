@@ -9,6 +9,8 @@ import {
   dmStacks,
   glossaryTerms,
   spiritDiePools,
+  spiritualInstrumentAssignments,
+  spiritualInstruments,
   techniquePreferences,
   techniques,
   trackers,
@@ -30,10 +32,12 @@ import {
   type InsertDmStack,
   type InsertGlossaryTerm,
   type InsertSpiritDiePool,
+  type InsertSpiritualInstrument,
   type InsertTechnique,
   type InsertTechniquePreference,
   type InsertTracker,
   type SpiritDiePool,
+  type SpiritualInstrumentWithAssignments,
   type Technique,
   type TechniquePreference,
   type Tracker,
@@ -50,6 +54,7 @@ import type {
   GlossaryTermUpdate,
   IStorage,
   SpiritDiePoolUpdate,
+  SpiritualInstrumentUpdate,
   TechniqueUpdate,
   TrackerUpdate,
 } from "./contract";
@@ -462,6 +467,87 @@ export class DatabaseStorage implements IStorage {
       .delete(trackers)
       .where(eq(trackers.id, id))
       .returning({ id: trackers.id });
+    return deleted.length > 0;
+  }
+
+  async getSpiritualInstruments(
+    includeHidden = false,
+  ): Promise<SpiritualInstrumentWithAssignments[]> {
+    const instruments = await this.database
+      .select()
+      .from(spiritualInstruments)
+      .where(includeHidden ? undefined : eq(spiritualInstruments.isRevealed, true))
+      .orderBy(asc(spiritualInstruments.name), asc(spiritualInstruments.id));
+    if (instruments.length === 0) return [];
+
+    const assignments = await this.database
+      .select()
+      .from(spiritualInstrumentAssignments)
+      .where(inArray(spiritualInstrumentAssignments.instrumentId, instruments.map(({ id }) => id)));
+    return instruments.map((instrument) => ({
+      ...instrument,
+      characterIds: assignments
+        .filter((assignment) => assignment.instrumentId === instrument.id)
+        .map((assignment) => assignment.characterId),
+    }));
+  }
+
+  async createSpiritualInstrument(
+    instrument: InsertSpiritualInstrument,
+  ): Promise<SpiritualInstrumentWithAssignments> {
+    const [created] = await this.database
+      .insert(spiritualInstruments)
+      .values(instrument)
+      .returning();
+    return { ...created, characterIds: [] };
+  }
+
+  async updateSpiritualInstrument(
+    id: string,
+    instrument: SpiritualInstrumentUpdate,
+  ): Promise<SpiritualInstrumentWithAssignments | undefined> {
+    const [updated] = await this.database
+      .update(spiritualInstruments)
+      .set(instrument)
+      .where(eq(spiritualInstruments.id, id))
+      .returning();
+    if (!updated) return undefined;
+    const assignments = await this.database
+      .select({ characterId: spiritualInstrumentAssignments.characterId })
+      .from(spiritualInstrumentAssignments)
+      .where(eq(spiritualInstrumentAssignments.instrumentId, id));
+    return { ...updated, characterIds: assignments.map(({ characterId }) => characterId) };
+  }
+
+  async setSpiritualInstrumentAssignments(
+    id: string,
+    characterIds: string[],
+  ): Promise<SpiritualInstrumentWithAssignments | undefined> {
+    return this.database.transaction(async (transaction) => {
+      const [instrument] = await transaction
+        .select()
+        .from(spiritualInstruments)
+        .where(eq(spiritualInstruments.id, id))
+        .limit(1);
+      if (!instrument) return undefined;
+      await transaction
+        .delete(spiritualInstrumentAssignments)
+        .where(eq(spiritualInstrumentAssignments.instrumentId, id));
+      const uniqueIds = [...new Set(characterIds)];
+      if (uniqueIds.length > 0) {
+        await transaction.insert(spiritualInstrumentAssignments).values(
+          uniqueIds.map((characterId) => ({ instrumentId: id, characterId })),
+        );
+      }
+      return { ...instrument, characterIds: uniqueIds };
+    });
+  }
+
+  async deleteSpiritualInstrument(id: string): Promise<boolean> {
+    const deleted = await this.database
+      .delete(spiritualInstruments)
+      .where(eq(spiritualInstruments.id, id))
+      .returning({ id: spiritualInstruments.id });
     return deleted.length > 0;
   }
 

@@ -1,9 +1,16 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  CampaignDialogBody,
+  CampaignDialogContent,
+  CampaignDialogFooter,
+  CampaignDialogHeader,
+} from "@/components/campaign-dialog";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ListPlus } from "lucide-react";
 import { requestJson } from "@/lib/api";
 import { characterKeys } from "@/lib/query-keys";
 import type { Tracker } from "@shared/schema";
@@ -52,27 +59,33 @@ export default function TrackerDialog({ isOpen, onClose, characterId }: TrackerD
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add New Tracker</DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
+      <CampaignDialogContent className="sm:max-w-md">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <CampaignDialogHeader
+            icon={ListPlus}
+            eyebrow="Character tracker"
+            title="Add New Tracker"
+            description="Track a goal, resource, condition, or other campaign milestone."
+          />
+
+          <CampaignDialogBody className="space-y-5">
             <div>
-              <Label htmlFor="tracker-name">Name</Label>
+              <Label htmlFor="tracker-name" className="wuxia-dialog-label">Name</Label>
               <Input
                 id="tracker-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Enter tracker name..."
                 data-testid="input-tracker-name"
+                className="wuxia-dialog-control"
                 required
               />
             </div>
             
             <div>
-              <Label htmlFor="tracker-target">Target (optional)</Label>
+              <Label htmlFor="tracker-target" className="wuxia-dialog-label">
+                Target (optional)
+              </Label>
               <Input
                 id="tracker-target"
                 type="text"
@@ -80,16 +93,18 @@ export default function TrackerDialog({ isOpen, onClose, characterId }: TrackerD
                 onChange={(e) => setTarget(e.target.value)}
                 placeholder="Enter target description..."
                 data-testid="input-tracker-target"
+                className="wuxia-dialog-control"
               />
             </div>
-          </div>
+          </CampaignDialogBody>
           
-          <DialogFooter className="mt-6">
+          <CampaignDialogFooter>
             <Button 
               type="button" 
               variant="outline" 
               onClick={handleClose}
               data-testid="button-cancel"
+              className="wuxia-secondary-action w-full sm:w-auto"
             >
               Cancel
             </Button>
@@ -97,12 +112,13 @@ export default function TrackerDialog({ isOpen, onClose, characterId }: TrackerD
               type="submit"
               disabled={!name.trim() || createMutation.isPending}
               data-testid="button-create-tracker"
+              className="wuxia-primary-action w-full sm:w-auto"
             >
               {createMutation.isPending ? "Creating..." : "Create Tracker"}
             </Button>
-          </DialogFooter>
+          </CampaignDialogFooter>
         </form>
-      </DialogContent>
+      </CampaignDialogContent>
     </Dialog>
   );
 }

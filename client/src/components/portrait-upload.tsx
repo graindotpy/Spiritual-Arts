@@ -1,6 +1,12 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
+import {
+  CampaignDialogBody,
+  CampaignDialogContent,
+  CampaignDialogFooter,
+  CampaignDialogHeader,
+} from "@/components/campaign-dialog";
 import { Camera, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -140,19 +146,17 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className={showCropEditor ? "sm:max-w-lg" : "sm:max-w-md"}>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Camera className="w-5 h-5" />
-            {showCropEditor ? "Crop Portrait" : "Character Portrait"}
-          </DialogTitle>
-          <DialogDescription>
-            {showCropEditor 
-              ? "Drag to position and zoom to fit your portrait perfectly"
-              : "Upload and manage your character's portrait image"
-            }
-          </DialogDescription>
-        </DialogHeader>
+      <CampaignDialogContent className={showCropEditor ? "sm:max-w-lg" : "sm:max-w-md"}>
+        <CampaignDialogHeader
+          icon={Camera}
+          eyebrow="Character portrait"
+          title={showCropEditor ? "Crop Portrait" : "Choose a Portrait"}
+          description={
+            showCropEditor
+              ? "Drag to position and zoom to fit your portrait perfectly."
+              : "Upload and manage your character's portrait image."
+          }
+        />
 
         {showCropEditor && previewUrl ? (
           <ImageCropEditor
@@ -161,75 +165,79 @@ export default function PortraitUpload({ characterId, currentPortraitUrl, isOpen
             onCancel={handleCropCancel}
           />
         ) : (
-          <div className="space-y-4">
-          {/* Current/Preview Portrait */}
-          <div className="flex justify-center">
-            <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700">
-              {displayUrl ? (
-                <img
-                  src={displayUrl}
-                  alt="Character portrait"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Camera className="w-8 h-8 text-gray-400" />
+          <>
+            <CampaignDialogBody className="space-y-5">
+              {/* Current/Preview Portrait */}
+              <div className="wuxia-dialog-section flex justify-center p-6">
+                <div className="wuxia-portrait-preview h-32 w-32 overflow-hidden rounded-full border-2">
+                  {displayUrl ? (
+                    <img
+                      src={displayUrl}
+                      alt="Character portrait"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Camera className="h-8 w-8 opacity-50" />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* File Input */}
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              variant="outline"
-              className="w-full"
-              disabled={isUploading || isDeleting}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Choose Image
-            </Button>
-          </div>
+              {/* File Input */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  variant="outline"
+                  className="wuxia-secondary-action w-full"
+                  disabled={isUploading || isDeleting}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Choose Image
+                </Button>
+              </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-2">
+              {/* Help Text */}
+              <p className="text-center text-xs text-[var(--wuxia-dialog-muted)]">
+                Supported formats: JPG, PNG, GIF, WebP · Max size: 5 MB
+              </p>
+            </CampaignDialogBody>
+
+            <CampaignDialogFooter className={currentPortraitUrl ? "sm:justify-between" : undefined}>
               {currentPortraitUrl && (
                 <Button
+                  type="button"
                   onClick={handleDelete}
                   disabled={isUploading || isDeleting}
                   variant="destructive"
-                  className="flex-1"
+                  className="wuxia-danger-action w-full sm:w-auto"
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
+                  <Trash2 className="mr-2 h-4 w-4" />
                   {isDeleting ? "Removing..." : "Remove Portrait"}
                 </Button>
               )}
 
               <Button
+                type="button"
                 onClick={handleClose}
                 variant="outline"
                 disabled={isUploading || isDeleting}
-                className={currentPortraitUrl ? "flex-1" : "w-full"}
+                className="wuxia-secondary-action w-full sm:w-auto"
               >
                 Close
               </Button>
-            </div>
-
-            {/* Help Text */}
-            <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              Supported formats: JPG, PNG, GIF, WebP · Max size: 5 MB
-            </p>
-          </div>
+            </CampaignDialogFooter>
+          </>
         )}
-      </DialogContent>
+      </CampaignDialogContent>
     </Dialog>
   );
 }

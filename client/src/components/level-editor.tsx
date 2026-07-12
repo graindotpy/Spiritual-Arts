@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TrendingUp, Save, X } from "lucide-react";
+import {
+  CampaignDialogBody,
+  CampaignDialogContent,
+  CampaignDialogFooter,
+  CampaignDialogHeader,
+} from "@/components/campaign-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useCharacterState } from "@/hooks/use-character-state";
 import type { Character } from "@shared/schema";
@@ -59,29 +65,26 @@ export default function LevelEditor({ character, isOpen, onClose }: LevelEditorP
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Update Character Level
-          </DialogTitle>
-          <DialogDescription>
-            Change {character.name}'s level (1-20)
-          </DialogDescription>
-        </DialogHeader>
+      <CampaignDialogContent className="sm:max-w-md">
+        <CampaignDialogHeader
+          icon={TrendingUp}
+          eyebrow="Character progress"
+          title="Update Character Level"
+          description={`Change ${character.name}'s level (1–20).`}
+        />
 
-        <div className="space-y-4">
+        <CampaignDialogBody className="space-y-5">
           {/* Current Level Display */}
-          <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <p className="text-sm text-gray-600 dark:text-gray-400">Current Level</p>
-            <p className="text-2xl font-bold text-spiritual-600 dark:text-spiritual-400">
+          <div className="wuxia-dialog-section wuxia-dialog-section-muted p-4 text-center">
+            <p className="wuxia-dialog-label mb-1">Current Level</p>
+            <p className="text-3xl font-semibold text-emerald-800 dark:text-amber-200">
               {character.level}
             </p>
           </div>
 
           {/* Level Input */}
-          <div className="space-y-2">
-            <Label htmlFor="level">New Level</Label>
+          <div>
+            <Label htmlFor="level" className="wuxia-dialog-label">New Level</Label>
             <Input
               id="level"
               type="number"
@@ -91,31 +94,33 @@ export default function LevelEditor({ character, isOpen, onClose }: LevelEditorP
               onChange={(e) => setLevel(e.target.value)}
               placeholder="Enter level (1-20)"
               disabled={isSaving}
+              className="wuxia-dialog-control"
             />
           </div>
+        </CampaignDialogBody>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex-1 bg-spiritual-600 hover:bg-spiritual-700"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {isSaving ? "Saving..." : "Save Level"}
-            </Button>
-            <Button
-              onClick={handleClose}
-              variant="outline"
-              disabled={isSaving}
-              className="flex-1"
-            >
-              <X className="w-4 h-4 mr-2" />
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
+        <CampaignDialogFooter>
+          <Button
+            type="button"
+            onClick={handleClose}
+            variant="outline"
+            disabled={isSaving}
+            className="wuxia-secondary-action w-full sm:w-auto"
+          >
+            <X className="mr-2 h-4 w-4" />
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="wuxia-primary-action w-full sm:w-auto"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {isSaving ? "Saving..." : "Save Level"}
+          </Button>
+        </CampaignDialogFooter>
+      </CampaignDialogContent>
     </Dialog>
   );
 }

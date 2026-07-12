@@ -1,11 +1,20 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, BookOpen } from "lucide-react";
+import { BookOpen, Check, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  CampaignDialogBody,
+  CampaignDialogContent,
+  CampaignDialogFooter,
+  CampaignDialogHeader,
+} from "@/components/campaign-dialog";
+import { CampaignConfirmDialog } from "@/components/campaign-confirm-dialog";
+import ExpandedTooltipDialog from "@/components/expanded-tooltip-dialog";
+import { characterGlossaryScope } from "@/hooks/use-glossary";
 import { requestJson } from "@/lib/api";
 import { characterKeys } from "@/lib/query-keys";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +32,8 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
   const [editingTerm, setEditingTerm] = useState<GlossaryTerm | null>(null);
   const [editKeyword, setEditKeyword] = useState("");
   const [editDefinition, setEditDefinition] = useState("");
+  const [termPendingDelete, setTermPendingDelete] = useState<GlossaryTerm | null>(null);
+  const [expandedTermId, setExpandedTermId] = useState<string | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -31,6 +42,7 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
     queryKey: characterKeys.glossary(characterId),
     enabled: open && !!characterId,
   });
+  const expandedTerm = glossaryTerms.find((term) => term.id === expandedTermId) ?? null;
 
   const createTerm = useMutation({
     mutationFn: (data: Omit<InsertGlossaryTerm, "characterId">) =>
@@ -83,6 +95,7 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterKeys.glossary(characterId) });
+      setTermPendingDelete(null);
       toast({
         title: "Success",
         description: "Glossary term deleted successfully",
@@ -126,158 +139,260 @@ export default function GlossaryDialog({ open, onClose, characterId }: GlossaryD
     });
   };
 
-  const handleDelete = async (id: string, keyword: string) => {
-    if (confirm(`Are you sure you want to delete the term "${keyword}"? This cannot be undone.`)) {
-      await deleteTerm.mutateAsync(id);
-    }
+  const handleClose = () => {
+    setTermPendingDelete(null);
+    setEditingTerm(null);
+    setEditKeyword("");
+    setEditDefinition("");
+    setExpandedTermId(null);
+    onClose();
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-[var(--dialog-background)] text-gray-900 dark:text-gray-100 border-gray-200 dark:border-gray-600">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BookOpen className="w-5 h-5" />
-            Glossary - Keyword Definitions
-          </DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-6">
-          {/* Add New Term */}
-          <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-[var(--dialog-section)]">
-            <h3 className="font-medium mb-4">Add New Term</h3>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+    <>
+      <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && handleClose()}>
+        <CampaignDialogContent className="max-w-4xl">
+          <CampaignDialogHeader
+            icon={BookOpen}
+            eyebrow="Character reference"
+            title="Glossary"
+            description="Define recurring terms so their meaning is always close at hand in the path manual."
+          />
+
+          <CampaignDialogBody className="space-y-7">
+            <section className="wuxia-dialog-section p-4 sm:p-5" aria-labelledby="add-term-heading">
+              <div className="mb-4 flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-sm border border-[#a89470] bg-[#e4eadc]/70 text-[#356454] dark:border-[#8d744b] dark:bg-[#594326]/45 dark:text-[#d1af73]">
+                  <Plus className="h-4 w-4" />
+                </span>
                 <div>
-                  <Label htmlFor="keyword">Keyword</Label>
+                  <p className="wuxia-dialog-kicker">New reference</p>
+                  <h3
+                    id="add-term-heading"
+                    className="font-display text-xl text-[#2b4138] dark:text-[#eadcc2]"
+                  >
+                    Add a glossary term
+                  </h3>
+                </div>
+              </div>
+
+              <form onSubmit={handleAdd} className="space-y-4">
+                <div>
+                  <Label htmlFor="keyword" className="wuxia-dialog-label">
+                    Keyword
+                  </Label>
                   <Input
                     id="keyword"
                     value={newKeyword}
-                    onChange={(e) => setNewKeyword(e.target.value)}
-                    placeholder="e.g., Technique Drain"
-                    className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)] text-gray-900 dark:text-gray-100"
+                    onChange={(event) => setNewKeyword(event.target.value)}
+                    placeholder="e.g. Technique Drain"
+                    className="wuxia-dialog-control"
                   />
                 </div>
-                <div className="flex items-end">
-                  <Button 
-                    type="submit" 
+                <div>
+                  <Label htmlFor="definition" className="wuxia-dialog-label">
+                    Definition
+                  </Label>
+                  <Textarea
+                    id="definition"
+                    value={newDefinition}
+                    onChange={(event) => setNewDefinition(event.target.value)}
+                    placeholder="Explain what this term means…"
+                    rows={3}
+                    className="wuxia-dialog-control"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
                     disabled={!newKeyword.trim() || !newDefinition.trim() || createTerm.isPending}
-                    className="bg-spiritual-600 hover:bg-spiritual-700"
+                    className="wuxia-primary-action w-full sm:w-auto"
                   >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Term
+                    <Plus className="mr-2 h-4 w-4" />
+                    {createTerm.isPending ? "Adding…" : "Add term"}
                   </Button>
                 </div>
-              </div>
-              <div>
-                <Label htmlFor="definition">Definition</Label>
-                <Textarea
-                  id="definition"
-                  value={newDefinition}
-                  onChange={(e) => setNewDefinition(e.target.value)}
-                  placeholder="Detailed explanation of this keyword..."
-                  rows={3}
-                  className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)] text-gray-900 dark:text-gray-100"
-                />
-              </div>
-            </form>
-          </div>
+              </form>
+            </section>
 
-          {/* Existing Terms */}
-          <div>
-            <h3 className="font-medium mb-4">Existing Terms ({glossaryTerms.length})</h3>
-            {isLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading glossary terms...</div>
-            ) : glossaryTerms.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No glossary terms defined yet. Add your first term above.
+            <section aria-labelledby="existing-terms-heading">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="wuxia-dialog-kicker">Recorded knowledge</p>
+                  <h3
+                    id="existing-terms-heading"
+                    className="font-display text-xl text-[#2b4138] dark:text-[#eadcc2]"
+                  >
+                    Existing terms
+                  </h3>
+                </div>
+                <span className="rounded-sm border border-[#b9aa8f] bg-[#fffaf0]/45 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.1em] text-[#667069] dark:border-[#806b48] dark:bg-[#4d3e29]/25 dark:text-[#c5b18d]">
+                  {glossaryTerms.length} {glossaryTerms.length === 1 ? "term" : "terms"}
+                </span>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {glossaryTerms.map((term: GlossaryTerm) => (
-                  <div key={term.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-800">
-                    {editingTerm?.id === term.id ? (
-                      <form onSubmit={handleUpdate} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+
+              {isLoading ? (
+                <div className="wuxia-dialog-section wuxia-dialog-section-muted p-8 text-center" role="status">
+                  <BookOpen className="mx-auto mb-3 h-6 w-6 animate-pulse text-[#567366] motion-reduce:animate-none dark:text-[#c2a36d]" />
+                  <p className="text-sm text-[#6d716a] dark:text-[#b7a98d]">Opening the glossary…</p>
+                </div>
+              ) : glossaryTerms.length === 0 ? (
+                <div className="wuxia-dialog-section wuxia-dialog-section-muted p-8 text-center">
+                  <BookOpen className="mx-auto mb-3 h-7 w-7 text-[#75867d] dark:text-[#aa936b]" />
+                  <p className="font-display text-lg text-[#3d554b] dark:text-[#decbaa]">No terms recorded yet</p>
+                  <p className="mt-1 text-sm text-[#74766e] dark:text-[#aa9d86]">
+                    Add the first definition above to begin this character&apos;s reference.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {glossaryTerms.map((term) => (
+                    <article key={term.id} className="wuxia-dialog-section p-4 sm:p-5">
+                      {editingTerm?.id === term.id ? (
+                        <form onSubmit={handleUpdate} className="space-y-4">
                           <div>
-                            <Label>Keyword</Label>
+                            <Label htmlFor={`edit-keyword-${term.id}`} className="wuxia-dialog-label">
+                              Keyword
+                            </Label>
                             <Input
+                              id={`edit-keyword-${term.id}`}
                               value={editKeyword}
-                              onChange={(e) => setEditKeyword(e.target.value)}
-                              className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)] text-gray-900 dark:text-gray-100"
+                              onChange={(event) => setEditKeyword(event.target.value)}
+                              className="wuxia-dialog-control"
                             />
                           </div>
-                          <div className="flex items-end gap-2">
-                            <Button 
-                              type="submit" 
+                          <div>
+                            <Label htmlFor={`edit-definition-${term.id}`} className="wuxia-dialog-label">
+                              Definition
+                            </Label>
+                            <Textarea
+                              id={`edit-definition-${term.id}`}
+                              value={editDefinition}
+                              onChange={(event) => setEditDefinition(event.target.value)}
+                              rows={3}
+                              className="wuxia-dialog-control"
+                            />
+                          </div>
+                          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
                               size="sm"
-                              disabled={!editKeyword.trim() || !editDefinition.trim() || updateTerm.isPending}
-                              className="bg-spiritual-600 hover:bg-spiritual-700"
-                            >
-                              Save
-                            </Button>
-                            <Button 
-                              type="button" 
-                              size="sm" 
-                              variant="secondary"
+                              className="wuxia-secondary-action"
                               onClick={() => {
                                 setEditingTerm(null);
                                 setEditKeyword("");
                                 setEditDefinition("");
                               }}
                             >
+                              <X className="mr-1.5 h-3.5 w-3.5" />
                               Cancel
+                            </Button>
+                            <Button
+                              type="submit"
+                              size="sm"
+                              disabled={
+                                !editKeyword.trim() ||
+                                !editDefinition.trim() ||
+                                updateTerm.isPending
+                              }
+                              className="wuxia-primary-action"
+                            >
+                              <Check className="mr-1.5 h-3.5 w-3.5" />
+                              {updateTerm.isPending ? "Saving…" : "Save term"}
+                            </Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-display break-words text-xl text-[#31594d] dark:text-[#e2ca9b]">
+                              {term.keyword}
+                            </h4>
+                            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#59635e] dark:text-[#c5b9a2]">
+                              {term.definition}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1 self-end sm:self-start">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setExpandedTermId(term.id)}
+                              className="wuxia-icon-action"
+                            >
+                              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                              Enhanced
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEdit(term)}
+                              className="wuxia-icon-action"
+                            >
+                              <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setTermPendingDelete(term)}
+                              aria-label={`Delete ${term.keyword}`}
+                              className="wuxia-icon-action wuxia-icon-danger h-9 w-9"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
-                        <div>
-                          <Label>Definition</Label>
-                          <Textarea
-                            value={editDefinition}
-                            onChange={(e) => setEditDefinition(e.target.value)}
-                            rows={3}
-                            className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)] text-gray-900 dark:text-gray-100"
-                          />
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-spiritual-700 dark:text-spiritual-300 mb-2">
-                            {term.keyword}
-                          </h4>
-                          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
-                            {term.definition}
-                          </p>
-                        </div>
-                        <div className="flex gap-2 ml-4">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEdit(term)}
-                            className="text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                             onClick={() => handleDelete(term.id, term.keyword)}
-                            aria-label={`Delete ${term.keyword}`}
-                            className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </CampaignDialogBody>
+
+          <CampaignDialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              className="wuxia-secondary-action w-full sm:w-auto"
+            >
+              Close glossary
+            </Button>
+          </CampaignDialogFooter>
+        </CampaignDialogContent>
+      </Dialog>
+
+      {expandedTerm && (
+        <ExpandedTooltipDialog
+          open
+          onClose={() => setExpandedTermId(null)}
+          term={expandedTerm}
+          entityId={characterId}
+          scope={characterGlossaryScope}
+        />
+      )}
+
+      <CampaignConfirmDialog
+        open={termPendingDelete !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setTermPendingDelete(null);
+        }}
+        title="Delete glossary term?"
+        description={
+          termPendingDelete
+            ? `Remove “${termPendingDelete.keyword}” from this character's glossary?`
+            : "Remove this term from the glossary?"
+        }
+        isPending={deleteTerm.isPending}
+        onConfirm={() => {
+          if (termPendingDelete) deleteTerm.mutate(termPendingDelete.id);
+        }}
+      />
+    </>
   );
 }

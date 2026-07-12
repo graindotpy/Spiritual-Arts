@@ -1,0 +1,249 @@
+import { useEffect, type ReactNode } from "react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import {
+  Bold,
+  Code2,
+  Italic,
+  Link2,
+  List,
+  ListOrdered,
+  Minus,
+  Quote,
+  Redo2,
+  Strikethrough,
+  Underline,
+  Undo2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  normalizeRichTextContent,
+  type RichTextDocument,
+} from "@shared/enhanced-content";
+
+function createExtensions(openOnClick: boolean) {
+  return [StarterKit.configure({
+    heading: { levels: [1, 2, 3, 4] },
+    link: {
+      openOnClick,
+      autolink: false,
+      linkOnPaste: false,
+      HTMLAttributes: {
+        rel: "noopener noreferrer",
+        target: "_blank",
+      },
+    },
+  })];
+}
+
+const editorExtensions = createExtensions(false);
+const viewerExtensions = createExtensions(true);
+
+interface RichTextEditorProps {
+  value: string | RichTextDocument;
+  onChange: (value: RichTextDocument) => void;
+  label: string;
+  placeholder?: string;
+  expanded?: boolean;
+  disabled?: boolean;
+}
+
+export function RichTextEditor({
+  value,
+  onChange,
+  label,
+  placeholder = "Write expanded content…",
+  expanded = false,
+  disabled = false,
+}: RichTextEditorProps) {
+  const normalized = normalizeRichTextContent(value);
+  const editor = useEditor({
+    extensions: editorExtensions,
+    content: normalized,
+    editable: !disabled,
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        class: cn(
+          "wuxia-rich-text px-4 py-3 focus:outline-none transition-[min-height]",
+          expanded ? "min-h-[28rem]" : "min-h-44",
+        ),
+        "aria-label": label,
+        "aria-placeholder": placeholder,
+        "data-placeholder": placeholder,
+      },
+    },
+    onUpdate: ({ editor: currentEditor }) => {
+      onChange(currentEditor.getJSON() as RichTextDocument);
+    },
+  }, [expanded]);
+
+  const serializedValue = JSON.stringify(normalized);
+  useEffect(() => {
+    if (!editor || JSON.stringify(editor.getJSON()) === serializedValue) return;
+    editor.commands.setContent(normalized, { emitUpdate: false });
+  }, [editor, serializedValue]);
+
+  useEffect(() => {
+    editor?.setEditable(!disabled);
+  }, [disabled, editor]);
+
+  if (!editor) {
+    return <div className="min-h-44 animate-pulse rounded-sm bg-black/5 dark:bg-white/[0.04]" />;
+  }
+
+  const buttonClass = "rich-text-toolbar-button h-8 min-w-8 px-2";
+  const iconButton = "rich-text-toolbar-button h-8 w-8";
+  const setLink = () => {
+    const previous = String(editor.getAttributes("link").href ?? "");
+    const entered = window.prompt("Enter a web or email address:", previous);
+    if (entered === null) return;
+    if (!entered.trim()) {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
+    }
+    const href = /^(https?:\/\/|mailto:)/i.test(entered.trim())
+      ? entered.trim()
+      : `https://${entered.trim()}`;
+    editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+  };
+  const insertHorizontalRule = () => {
+    const chain = editor.chain().focus();
+    if (editor.isActive("blockquote")) chain.toggleBlockquote();
+    if (editor.isActive("bulletList")) chain.toggleBulletList();
+    if (editor.isActive("orderedList")) chain.toggleOrderedList();
+    chain.setHorizontalRule().run();
+  };
+
+  return (
+    <div
+      className={cn(
+        "rich-text-editor overflow-hidden rounded-[0.4rem] border border-[var(--wuxia-dialog-line-strong)]",
+        disabled && "pointer-events-none opacity-55",
+      )}
+      aria-disabled={disabled || undefined}
+    >
+      <div
+        className="rich-text-toolbar flex flex-wrap items-center gap-1 border-b border-[var(--wuxia-dialog-line)] px-2 py-1.5"
+        role="toolbar"
+        aria-label="Text formatting"
+      >
+        {([1, 2, 3, 4] as const).map((level) => (
+          <Button
+            key={level}
+            type="button"
+            size="sm"
+            variant="ghost"
+            className={cn(buttonClass, "text-xs font-semibold", editor.isActive("heading", { level }) && "is-active")}
+            onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+            title={`Heading ${level}`}
+            aria-label={`Heading ${level}`}
+            aria-pressed={editor.isActive("heading", { level })}
+          >
+            H{level}
+          </Button>
+        ))}
+        <span className="rich-text-toolbar-divider" aria-hidden="true" />
+        <ToolbarButton label="Bold" active={editor.isActive("bold")} className={iconButton} onClick={() => editor.chain().focus().toggleBold().run()}>
+          <Bold className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label="Italic" active={editor.isActive("italic")} className={iconButton} onClick={() => editor.chain().focus().toggleItalic().run()}>
+          <Italic className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label="Underline" active={editor.isActive("underline")} className={iconButton} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+          <Underline className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label="Strikethrough" active={editor.isActive("strike")} className={iconButton} onClick={() => editor.chain().focus().toggleStrike().run()}>
+          <Strikethrough className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label="Inline code" active={editor.isActive("code")} className={iconButton} onClick={() => editor.chain().focus().toggleCode().run()}>
+          <Code2 className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label={editor.isActive("link") ? "Edit link" : "Add link"} active={editor.isActive("link")} className={iconButton} onClick={setLink}>
+          <Link2 className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <span className="rich-text-toolbar-divider" aria-hidden="true" />
+        <ToolbarButton label="Quote" active={editor.isActive("blockquote")} className={iconButton} onClick={() => editor.chain().focus().toggleBlockquote().run()}>
+          <Quote className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label="Bulleted list" active={editor.isActive("bulletList")} className={iconButton} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+          <List className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label="Numbered list" active={editor.isActive("orderedList")} className={iconButton} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+          <ListOrdered className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label="Horizontal rule" className={iconButton} onClick={insertHorizontalRule}>
+          <Minus className="h-4 w-4" />
+        </ToolbarButton>
+        <span className="rich-text-toolbar-divider" aria-hidden="true" />
+        <ToolbarButton label="Undo" className={iconButton} disabled={!editor.can().chain().focus().undo().run()} onClick={() => editor.chain().focus().undo().run()}>
+          <Undo2 className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton label="Redo" className={iconButton} disabled={!editor.can().chain().focus().redo().run()} onClick={() => editor.chain().focus().redo().run()}>
+          <Redo2 className="h-3.5 w-3.5" />
+        </ToolbarButton>
+      </div>
+      <EditorContent editor={editor} />
+    </div>
+  );
+}
+
+function ToolbarButton({
+  label,
+  active = false,
+  disabled = false,
+  className,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  className: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      size="icon"
+      variant="ghost"
+      className={cn(className, active && "is-active")}
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      aria-pressed={active || undefined}
+    >
+      {children}
+    </Button>
+  );
+}
+
+export function RichTextContent({
+  content,
+  className,
+}: {
+  content: string | RichTextDocument;
+  className?: string;
+}) {
+  const editor = useEditor({
+    extensions: viewerExtensions,
+    content: normalizeRichTextContent(content),
+    editable: false,
+    immediatelyRender: false,
+    editorProps: {
+      attributes: { class: cn("wuxia-rich-text", className) },
+    },
+  });
+
+  const normalized = normalizeRichTextContent(content);
+  const serializedContent = JSON.stringify(normalized);
+  useEffect(() => {
+    if (!editor || JSON.stringify(editor.getJSON()) === serializedContent) return;
+    editor.commands.setContent(normalized, { emitUpdate: false });
+  }, [editor, serializedContent]);
+
+  return editor ? <EditorContent editor={editor} /> : null;
+}

@@ -221,3 +221,85 @@ test("card uploads use their isolated image namespace", async () => {
   assert.match(body.url, /^\/uploads\/card-images\/image-[\w-]+\.png$/);
   assert.equal((await fetch(`${baseUrl}${body.url}`)).status, 200);
 });
+
+test("instrument vault hides drafts and supports many-character assignments", async () => {
+  const firstCharacter = await jsonRequest("/api/character", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Bearer One", path: "Path", level: 3 }),
+  });
+  const secondCharacter = await jsonRequest("/api/character", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Bearer Two", path: "Path", level: 3 }),
+  });
+  const created = await jsonRequest("/api/instruments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Ghost Lantern",
+      description: "Reveals spiritual traces.",
+      isRevealed: false,
+    }),
+  });
+  assert.equal(created.response.status, 201);
+  assert.equal(created.body.expandedContent, null);
+  assert.equal(created.body.hasExpandedContent, false);
+
+  const publicList = await jsonRequest("/api/instruments");
+  assert.deepEqual(publicList.body, []);
+  const dmList = await jsonRequest("/api/instruments?includeHidden=true");
+  assert.equal((dmList.body as unknown as unknown[]).length, 1);
+
+  const assigned = await jsonRequest(`/api/instruments/${String(created.body.id)}/assignments`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      characterIds: [String(firstCharacter.body.id), String(secondCharacter.body.id)],
+    }),
+  });
+  assert.deepEqual(assigned.body.characterIds, [firstCharacter.body.id, secondCharacter.body.id]);
+
+  const richContent = JSON.stringify({
+    blocks: [{
+      id: "instrument-notes",
+      type: "text",
+      content: {
+        type: "doc",
+        content: [
+          { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Resonance" }] },
+          { type: "blockquote", content: [{ type: "paragraph", content: [{ type: "text", text: "Listen for the bell." }] }] },
+          { type: "horizontalRule" },
+        ],
+      },
+    }],
+  });
+  const enhanced = await jsonRequest(`/api/instruments/${String(created.body.id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expandedContent: richContent, hasExpandedContent: true }),
+  });
+  assert.equal(enhanced.response.status, 200);
+  assert.equal(enhanced.body.expandedContent, richContent);
+  assert.equal(enhanced.body.hasExpandedContent, true);
+
+  const invalidEnhanced = await jsonRequest(`/api/instruments/${String(created.body.id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expandedContent: "not structured json" }),
+  });
+  assert.equal(invalidEnhanced.response.status, 400);
+
+  const revealed = await jsonRequest(`/api/instruments/${String(created.body.id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isRevealed: true }),
+  });
+  assert.equal(revealed.body.isRevealed, true);
+  const revealedList = await jsonRequest("/api/instruments");
+  assert.equal((revealedList.body as unknown as unknown[]).length, 1);
+  assert.equal(
+    (revealedList.body as unknown as Array<{ expandedContent: string }>)[0]?.expandedContent,
+    richContent,
+  );
+});

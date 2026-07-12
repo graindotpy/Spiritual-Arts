@@ -23,3 +23,7 @@ export const dmKeys = {
   scratchpads: (userId: string) => ["/api/dm", userId, "scratchpads"] as const,
   characters: (userId: string) => ["/api/dm", userId, "characters"] as const,
 };
+
+export const instrumentKeys = {
+  all: (includeHidden = false) => ["/api/instruments", { includeHidden }] as const,
+};

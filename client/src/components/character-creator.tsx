@@ -1,10 +1,17 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  CampaignDialogBody,
+  CampaignDialogContent,
+  CampaignDialogFooter,
+  CampaignDialogHeader,
+} from "@/components/campaign-dialog";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { UserPlus } from "lucide-react";
 import { requestJson } from "@/lib/api";
 import { characterKeys } from "@/lib/query-keys";
 import { useToast } from "@/hooks/use-toast";
@@ -77,77 +84,83 @@ export default function CharacterCreator({ isOpen, onClose, onCharacterCreated, 
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-md bg-white dark:bg-[var(--dialog-bg)] border-gray-200 dark:border-[var(--dialog-border)]">
-        <DialogHeader>
-          <DialogTitle className="text-gray-900 dark:text-white">Create New Character</DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="name" className="text-gray-700 dark:text-gray-300">
-              Character Name
-            </Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter character name"
-              className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)]"
-              required
-            />
-          </div>
-          
-          <div>
-            <Label htmlFor="path" className="text-gray-700 dark:text-gray-300">
-              Spiritual Path
-            </Label>
-            <Input
-              id="path"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              placeholder="e.g., Path of Gluttony, Path of Wrath"
-              className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)]"
-              required
-            />
-          </div>
-          
-          <div>
-            <Label htmlFor="level" className="text-gray-700 dark:text-gray-300">
-              Starting Level
-            </Label>
-            <Select value={level.toString()} onValueChange={(value) => setLevel(parseInt(value))}>
-              <SelectTrigger id="level" className="bg-white dark:bg-[var(--dialog-input)] border-gray-300 dark:border-[var(--dialog-input-border)]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.from({ length: 20 }, (_, i) => i + 1).map((levelOption) => (
-                  <SelectItem key={levelOption} value={levelOption.toString()}>
-                    Level {levelOption}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="flex justify-end space-x-2 pt-4">
+      <CampaignDialogContent className="sm:max-w-md">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <CampaignDialogHeader
+            icon={UserPlus}
+            eyebrow="New hero"
+            title="Create New Character"
+            description="Set the foundations of your character before entering the campaign."
+          />
+
+          <CampaignDialogBody className="space-y-5">
+            <div>
+              <Label htmlFor="name" className="wuxia-dialog-label">
+                Character Name
+              </Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter character name"
+                className="wuxia-dialog-control"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="path" className="wuxia-dialog-label">
+                Spiritual Path
+              </Label>
+              <Input
+                id="path"
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+                placeholder="e.g., Path of Gluttony, Path of Wrath"
+                className="wuxia-dialog-control"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="level" className="wuxia-dialog-label">
+                Starting Level
+              </Label>
+              <Select value={level.toString()} onValueChange={(value) => setLevel(parseInt(value))}>
+                <SelectTrigger id="level" className="wuxia-dialog-control">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="wuxia-select-content">
+                  {Array.from({ length: 20 }, (_, i) => i + 1).map((levelOption) => (
+                    <SelectItem key={levelOption} value={levelOption.toString()}>
+                      Level {levelOption}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CampaignDialogBody>
+
+          <CampaignDialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={handleClose}
               disabled={createCharacter.isPending}
+              className="wuxia-secondary-action w-full sm:w-auto"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={createCharacter.isPending}
-              className="bg-spiritual-600 hover:bg-spiritual-700 text-white"
+              className="wuxia-primary-action w-full sm:w-auto"
             >
               {createCharacter.isPending ? "Creating..." : "Create Character"}
             </Button>
-          </div>
+          </CampaignDialogFooter>
         </form>
-      </DialogContent>
+      </CampaignDialogContent>
     </Dialog>
   );
 }

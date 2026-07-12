@@ -62,7 +62,7 @@ export function CharacterCard({
         className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557d6f] focus-visible:ring-inset"
         aria-label={`Open ${character.name}'s character sheet`}
       >
-        <div className="relative h-48 overflow-hidden bg-[#dce0d3] text-[#31594d] dark:bg-[#22352f] dark:text-[#8eafa3]">
+        <div className="relative h-48 overflow-hidden bg-[#dce0d3] text-[#31594d] dark:bg-[#343026] dark:text-[#b09b71]">
           {character.portraitUrl && !portraitFailed ? (
             <img
               src={character.portraitUrl}
@@ -85,16 +85,16 @@ export function CharacterCard({
         </div>
 
         <div className="relative min-h-[146px] px-6 pb-5 pt-5">
-          <div className="flex items-center gap-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[#56756a] dark:text-[#8eaea2]">
+          <div className="flex items-center gap-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[#56756a] dark:text-[#b89a68]">
             <ScrollText className="h-3.5 w-3.5" />
             <span className="truncate">{character.path}</span>
           </div>
-          <h3 className="font-display mt-3 truncate text-[1.7rem] leading-tight text-[#20332c] dark:text-[#f0e8da]">
+          <h3 className="font-display mt-3 truncate text-[1.7rem] leading-tight text-[#20332c] dark:text-[#ead9b6]">
             {character.name}
           </h3>
-          <div className="mt-5 flex items-center justify-between border-t border-[#cfc3ad]/70 pt-4 text-sm font-semibold text-[#52635c] dark:border-white/10 dark:text-[#aeb8b2]">
+          <div className="mt-5 flex items-center justify-between border-t border-[#cfc3ad]/70 pt-4 text-sm font-semibold text-[#52635c] dark:border-[#806640]/50 dark:text-[#b7a98c]">
             <span>Open path manual</span>
-            <ArrowUpRight className="h-4 w-4 text-[#3f6d5d] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 dark:text-[#99bcaf]" />
+            <ArrowUpRight className="h-4 w-4 text-[#3f6d5d] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 dark:text-[#c4a56e]" />
           </div>
         </div>
       </button>

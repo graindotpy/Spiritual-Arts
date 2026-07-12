@@ -51,22 +51,18 @@ export default function TrackerComponent({ tracker, onDelete }: TrackerProps) {
   };
 
   return (
-    <div className="campaign-inner-surface p-3">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+    <div className="character-tracker-row flex items-center gap-3 py-3">
+      <div className="min-w-0 flex-1">
+        <h4 className="truncate text-sm font-semibold text-[#33473f] dark:text-[#e7dcc7]">
           {tracker.name}
         </h4>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => onDelete(tracker.id)}
-          aria-label={`Delete ${tracker.name} tracker`}
-          className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
-        >
-          <X className="w-4 h-4" />
-        </Button>
+        {tracker.target && (
+          <p className="mt-0.5 truncate text-xs text-[#77786f] dark:text-[#a99c83]">
+            Target {tracker.target}
+          </p>
+        )}
       </div>
-      
+
       <Input
         type="number"
         value={currentValue}
@@ -79,15 +75,20 @@ export default function TrackerComponent({ tracker, onDelete }: TrackerProps) {
             event.currentTarget.blur();
           }
         }}
-        className="w-full text-center font-medium"
+        aria-label={`${tracker.name} current value`}
+        className="h-9 w-20 shrink-0 rounded-sm border-[#b9aa8f] bg-[#fffaf0]/40 px-2 text-center font-semibold text-[#33473f] dark:border-[#806b48] dark:bg-[#211c15]/45 dark:text-[#eee3ce]"
         data-testid={`input-tracker-${tracker.name.toLowerCase().replace(/\s+/g, '-')}`}
       />
-      
-      {tracker.target && (
-        <div className="mt-1 text-center text-xs text-gray-500 dark:text-gray-400">
-          Target: {tracker.target}
-        </div>
-      )}
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => onDelete(tracker.id)}
+        aria-label={`Delete ${tracker.name} tracker`}
+        className="h-9 w-9 shrink-0 p-0 text-[#8a8478] hover:bg-[#f2ded8] hover:text-[#9b4437] dark:text-[#9d8f78] dark:hover:bg-[#712f27]/25 dark:hover:text-[#e5a89d]"
+      >
+        <X className="h-4 w-4" />
+      </Button>
     </div>
   );
 }

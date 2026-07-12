@@ -11,27 +11,30 @@ interface TrackersPanelProps {
 
 export function TrackersPanel({ trackers, onAdd, onDelete }: TrackersPanelProps) {
   return (
-    <section className="mt-6 border-t border-[#d1c5af]/70 pt-5 dark:border-white/10" aria-labelledby="trackers-heading">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 id="trackers-heading" className="font-display text-xl text-[#2b4139] dark:text-[#e9e2d5]">
-          Trackers
-        </h2>
+    <section className="mt-6 border-t border-[#cdbfa7]/70 pt-5 dark:border-[#806b48]/55" aria-labelledby="trackers-heading">
+      <div className="mb-2 flex items-end justify-between gap-3">
+        <div>
+          <p className="wuxia-kicker mb-1">Live notes</p>
+          <h2 id="trackers-heading" className="font-display text-2xl text-[#2b4139] dark:text-[#e9e2d5]">
+            Trackers
+          </h2>
+        </div>
         <Button
           size="sm"
           onClick={onAdd}
-          className="h-10 w-10 rounded-full bg-spiritual-600 text-white hover:bg-spiritual-700"
+          className="wuxia-primary-action h-9 w-9 rounded-sm p-0"
           aria-label="Add tracker"
           data-testid="button-add-tracker"
         >
           <Plus className="h-4 w-4" />
         </Button>
       </div>
-      <div className="space-y-2">
+      <div className="divide-y divide-[#cdbfa7]/65 border-t border-[#cdbfa7]/65 dark:divide-[#806b48]/45 dark:border-[#806b48]/45">
         {trackers.map((tracker) => (
           <TrackerComponent key={tracker.id} tracker={tracker} onDelete={onDelete} />
         ))}
         {trackers.length === 0 && (
-          <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          <p className="py-5 text-center text-sm text-[#5f665f] dark:text-[#a99c83]">
             No trackers yet. Use the add button to create one.
           </p>
         )}

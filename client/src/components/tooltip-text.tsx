@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 import { Maximize2 } from "lucide-react";
 import ExpandedTooltipDialog from "./expanded-tooltip-dialog";
 import { useGlossaryTerms, type GlossaryScope } from "@/hooks/use-glossary";
@@ -51,43 +50,37 @@ export default function TooltipText({ text, entityId, scope, className }: Toolti
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="cursor-help font-medium text-spiritual-600 underline decoration-dotted dark:text-spiritual-400"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setExpandedTerm(tooltip);
+                }}
+                className="wuxia-glossary-keyword cursor-help font-semibold underline decoration-dotted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#668678] focus-visible:ring-offset-2 dark:focus-visible:ring-[#b48b52]"
+                aria-haspopup="dialog"
+                aria-label={`Open glossary entry for ${tooltip.keyword}`}
               >
                 {match[0]}
               </button>
             </TooltipTrigger>
-            <TooltipContent 
-              className="max-w-xs bg-white dark:bg-gray-800 border border-spiritual-200 dark:border-spiritual-600 shadow-lg"
+            <TooltipContent
+              className="wuxia-glossary-tooltip max-w-sm overflow-hidden p-0"
               side="top"
+              sideOffset={8}
             >
-              <div className="space-y-2">
-                <h4 className="font-semibold text-spiritual-700 dark:text-spiritual-300">
+              <div className="px-4 py-3.5">
+                <p className="mb-1 text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[#738077] dark:text-[#b69a6a]">
+                  Glossary entry
+                </p>
+                <h4 className="font-display text-lg leading-tight text-[#31594d] dark:text-[#ead6ae]">
                   {tooltip.keyword}
                 </h4>
-                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
+                <p className="mt-2 whitespace-pre-line text-sm leading-5 text-[#56625c] dark:text-[#c8bba4]">
                   {tooltip.definition}
                 </p>
-
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.nativeEvent.stopImmediatePropagation();
-                    setExpandedTerm(tooltip);
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  className="h-6 px-2 text-xs w-full justify-start"
-                >
-                  <Maximize2 className="w-3 h-3 mr-1" />
-                  {(tooltip.hasExpandedContent || tooltip.expandedContent) 
-                    ? "View Enhanced Details" 
-                    : "Add Enhanced Content"}
-                </Button>
+              </div>
+              <div className="flex items-center gap-2 border-t border-[#c8b99f]/70 bg-[#e9e2d4]/45 px-4 py-2 text-xs font-semibold text-[#4d675d] dark:border-[#806b48]/70 dark:bg-[#191610]/25 dark:text-[#c8ad7c]">
+                <Maximize2 className="h-3.5 w-3.5" />
+                Select the term to open the full entry
               </div>
             </TooltipContent>
           </Tooltip>

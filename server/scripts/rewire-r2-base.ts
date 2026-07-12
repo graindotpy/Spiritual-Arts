@@ -22,6 +22,7 @@ async function updateImageUrlsInText() {
     { name: "dm_glossary", columns: ["definition", "expanded_content"] },
     { name: "dm_scratchpads", columns: ["content"] },
     { name: "dm_stacks", columns: ["target", "effect"] },
+    { name: "spiritual_instruments", columns: ["image_url", "expanded_content"] },
   ];
 
   for (const table of tables) {

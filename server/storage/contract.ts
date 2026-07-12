@@ -15,10 +15,12 @@ import type {
   InsertDmStack,
   InsertGlossaryTerm,
   InsertSpiritDiePool,
+  InsertSpiritualInstrument,
   InsertTechnique,
   InsertTechniquePreference,
   InsertTracker,
   SpiritDiePool,
+  SpiritualInstrumentWithAssignments,
   Technique,
   TechniquePreference,
   Tracker,
@@ -34,6 +36,9 @@ export type TechniqueUpdate = Partial<Omit<Technique, "id" | "characterId">>;
 export type ActiveEffectUpdate = Partial<Omit<ActiveEffect, "id" | "characterId">>;
 export type GlossaryTermUpdate = Partial<Omit<GlossaryTerm, "id" | "characterId">>;
 export type TrackerUpdate = Partial<Omit<Tracker, "id" | "characterId" | "createdAt">>;
+export type SpiritualInstrumentUpdate = Partial<
+  Omit<SpiritualInstrumentWithAssignments, "id" | "createdAt" | "characterIds">
+>;
 export type DmStackUpdate = Partial<Omit<DmStack, "id" | "userId" | "createdAt">>;
 export type DmGlossaryUpdate = Partial<Omit<DmGlossaryTerm, "id" | "userId">>;
 export type DmScratchpadUpdate = Partial<Omit<DmScratchpad, "id" | "userId" | "createdAt">>;
@@ -97,6 +102,12 @@ export interface IStorage {
   createTracker(tracker: InsertTracker): Promise<Tracker>;
   updateTracker(id: string, tracker: TrackerUpdate): Promise<Tracker | undefined>;
   deleteTracker(id: string): Promise<boolean>;
+
+  getSpiritualInstruments(includeHidden?: boolean): Promise<SpiritualInstrumentWithAssignments[]>;
+  createSpiritualInstrument(instrument: InsertSpiritualInstrument): Promise<SpiritualInstrumentWithAssignments>;
+  updateSpiritualInstrument(id: string, instrument: SpiritualInstrumentUpdate): Promise<SpiritualInstrumentWithAssignments | undefined>;
+  setSpiritualInstrumentAssignments(id: string, characterIds: string[]): Promise<SpiritualInstrumentWithAssignments | undefined>;
+  deleteSpiritualInstrument(id: string): Promise<boolean>;
 
   getDmStacks(userId: string): Promise<DmStack[]>;
   createDmStack(stack: InsertDmStack & { userId: string }): Promise<DmStack>;

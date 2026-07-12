@@ -3,6 +3,8 @@ import { ChevronDown, ChevronUp, Edit, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CampaignConfirmDialog } from "@/components/campaign-confirm-dialog";
 import { cn } from "@/lib/utils";
 import TooltipText from "./tooltip-text";
 import { characterGlossaryScope } from "@/hooks/use-glossary";
@@ -12,9 +14,14 @@ import {
   getDieMaximum,
   type SpiritDieSlot,
 } from "@shared/spirit-dice";
+import { getTechniqueVariantLabel } from "@shared/technique-variants";
+import { isSerializedRichTextContent } from "@shared/enhanced-content";
+import { RichTextContent } from "@/features/enhanced-content/rich-text";
 
 interface TechniqueCardProps {
   technique: Technique;
+  variants: Technique[];
+  familyName: string;
   isSelected: boolean;
   selectedSP?: number;
   selectedDie: SpiritDieSlot;
@@ -23,13 +30,14 @@ interface TechniqueCardProps {
   onSelect: (techniqueId: string, sp: number) => void;
   onEdit: (technique: Technique) => void;
   onDelete?: (techniqueId: string) => void;
+  onVariantChange: (technique: Technique) => void;
 }
 
 const TRIGGER_STYLES: Record<TriggerType, string> = {
-  action: "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200",
-  bonus: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200",
-  reaction: "bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200",
-  passive: "bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200",
+  action: "border-[#829e74]/45 bg-[#dce6c9]/75 text-[#324a2d] dark:border-[#8d9c6b]/35 dark:bg-[#5b6640]/30 dark:text-[#d4ddb6]",
+  bonus: "border-[#b79559]/45 bg-[#eee0bd]/75 text-[#654e26] dark:border-[#aa8a55]/35 dark:bg-[#755d34]/30 dark:text-[#e5cca0]",
+  reaction: "border-[#b77b6f]/45 bg-[#eddbd4]/80 text-[#713b33] dark:border-[#a86359]/35 dark:bg-[#713b33]/30 dark:text-[#e4b6ad]",
+  passive: "border-[#8c8271]/45 bg-[#e5dfd3]/80 text-[#514b43] dark:border-[#8c806a]/35 dark:bg-[#5b554a]/30 dark:text-[#d1c5af]",
 };
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
@@ -39,8 +47,33 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
   passive: "Passive",
 };
 
+function TechniqueText({
+  text,
+  entityId,
+  className,
+}: {
+  text: string;
+  entityId: string;
+  className: string;
+}) {
+  if (isSerializedRichTextContent(text)) {
+    return <RichTextContent content={text} className={className} />;
+  }
+
+  return (
+    <TooltipText
+      text={text}
+      entityId={entityId}
+      scope={characterGlossaryScope}
+      className={className}
+    />
+  );
+}
+
 export default function TechniqueCard({
   technique,
+  variants,
+  familyName,
   isSelected,
   selectedSP,
   selectedDie,
@@ -49,6 +82,7 @@ export default function TechniqueCard({
   onSelect,
   onEdit,
   onDelete,
+  onVariantChange,
 }: TechniqueCardProps) {
   const effects = technique.spEffects as SPEffect;
   const spOptions = useMemo(
@@ -56,6 +90,7 @@ export default function TechniqueCard({
     [effects],
   );
   const [currentSp, setCurrentSp] = useState(() => selectedSP ?? spOptions[0] ?? 0);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
 
   useEffect(() => {
     if (selectedSP && spOptions.includes(selectedSP)) {
@@ -80,7 +115,8 @@ export default function TechniqueCard({
   };
 
   return (
-    <Card
+    <>
+      <Card
       role="group"
       tabIndex={0}
       aria-current={isSelected ? "true" : undefined}
@@ -103,20 +139,43 @@ export default function TechniqueCard({
         }
       }}
       className={cn(
-        "campaign-technique-card cursor-pointer border-2 p-4 text-gray-900 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spiritual-500 focus-visible:ring-offset-2 dark:text-white",
+        "character-technique-entry cursor-pointer rounded-none border-0 bg-transparent px-5 py-5 text-[#2f3c37] shadow-none transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#668678] focus-visible:ring-inset sm:px-6 dark:text-[#e6dcc8]",
         isSelected
-          ? "campaign-technique-card-selected scale-[1.01]"
-          : "campaign-technique-card-idle",
+          ? "character-technique-entry-selected"
+          : "character-technique-entry-idle",
       )}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-display text-xl text-[#263a33] dark:text-[#eee7da]">
-              {effect?.alternateName || technique.name}
+              {effect?.alternateName || familyName}
             </h3>
+            {variants.length > 1 && (
+              <Select
+                value={technique.id}
+                onValueChange={(id) => {
+                  const variant = variants.find((candidate) => candidate.id === id);
+                  if (variant) onVariantChange(variant);
+                }}
+              >
+                <SelectTrigger
+                  className="h-8 w-auto min-w-28 rounded-sm border-[#b9aa8f] bg-[#fffaf0]/45 px-2.5 text-sm font-semibold text-[#6a5144] dark:border-[#806b48] dark:bg-[#4d3e29]/25 dark:text-[#d8c69f]"
+                  aria-label={`Select ${familyName} variant`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="wuxia-select-content">
+                  {variants.map((variant) => (
+                    <SelectItem key={variant.id} value={variant.id}>
+                      {getTechniqueVariantLabel(variant)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {effect && (
-              <Badge className={TRIGGER_STYLES[effect.actionType]}>
+              <Badge className={cn("rounded-sm border px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-[0.08em] shadow-none", TRIGGER_STYLES[effect.actionType])}>
                 {TRIGGER_LABELS[effect.actionType]}
               </Badge>
             )}
@@ -124,6 +183,7 @@ export default function TechniqueCard({
           <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="SP investment">
             {spOptions.map((sp) => {
               const isSupported = canSpiritDieMeetInvestment(selectedDie, sp);
+              const isActiveInvestment = isSelected && selectedSP === sp;
               const unavailableReason = selectedDie
                 ? `${selectedDie.toUpperCase()} supports techniques up to ${getDieMaximum(selectedDie)} SP`
                 : "Select an available Spirit Die first";
@@ -133,12 +193,19 @@ export default function TechniqueCard({
                   key={sp}
                   type="button"
                   size="sm"
-                  variant={currentSp === sp ? "default" : "outline"}
+                  variant="outline"
                   onClick={() => selectSp(sp)}
                   disabled={!isSupported}
                   title={isSupported ? undefined : unavailableReason}
                   aria-pressed={isSelected && selectedSP === sp}
-                  className={cn(currentSp === sp && "bg-spiritual-700 hover:bg-spiritual-800")}
+                  className={cn(
+                    "h-8 rounded-sm px-3 text-xs font-semibold",
+                    isActiveInvestment
+                      ? "border-[#496c5e] bg-[#496c5e] text-white hover:bg-[#3c5c50] dark:border-[#a27a4c] dark:bg-[#7d382f] dark:hover:bg-[#93473a]"
+                      : currentSp === sp
+                        ? "border-[#9e8962] bg-[#eee5d2]/70 text-[#4e5c55] hover:border-[#668678] hover:bg-[#e5eadf] hover:text-[#31594d] dark:!border-[#8d744b] dark:!bg-[#433923] dark:!text-[#d8c69f] dark:hover:!border-[#a88957] dark:hover:!bg-[#514229] dark:hover:!text-[#ead9b6]"
+                        : "border-[#b9aa8f] bg-transparent text-[#5b6861] hover:border-[#668678] hover:bg-[#edf0e8] hover:text-[#31594d] dark:border-[#806b48] dark:text-[#b9aa8c] dark:hover:border-[#a88957] dark:hover:bg-[#5c482b]/30 dark:hover:text-[#ead9b6]",
+                  )}
                 >
                   {sp} SP
                 </Button>
@@ -153,7 +220,7 @@ export default function TechniqueCard({
             size="icon"
             variant="ghost"
             onClick={() => onMinimizedChange(!isMinimized)}
-            className="h-10 w-10 text-gray-500 sm:h-8 sm:w-8"
+            className="wuxia-icon-action h-10 w-10 sm:h-8 sm:w-8"
             aria-label={isMinimized ? "Expand technique" : "Collapse technique"}
           >
             {isMinimized ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -163,7 +230,7 @@ export default function TechniqueCard({
             size="icon"
             variant="ghost"
             onClick={() => onEdit(technique)}
-            className="h-10 w-10 text-gray-500 sm:h-8 sm:w-8"
+            className="wuxia-icon-action h-10 w-10 sm:h-8 sm:w-8"
             aria-label={`Edit ${technique.name}`}
           >
             <Edit className="h-4 w-4" />
@@ -173,12 +240,8 @@ export default function TechniqueCard({
               type="button"
               size="icon"
               variant="ghost"
-              onClick={() => {
-                if (confirm(`Are you sure you want to delete "${technique.name}"? This cannot be undone.`)) {
-                  onDelete(technique.id);
-                }
-              }}
-              className="h-10 w-10 text-gray-500 hover:text-red-600 sm:h-8 sm:w-8"
+              onClick={() => setDeleteConfirmationOpen(true)}
+              className="wuxia-icon-action wuxia-icon-danger h-10 w-10 sm:h-8 sm:w-8"
               aria-label={`Delete ${technique.name}`}
             >
               <Trash2 className="h-4 w-4" />
@@ -188,28 +251,38 @@ export default function TechniqueCard({
       </div>
 
       {!isMinimized && (
-        <div className="mt-4 space-y-3">
-          <TooltipText
+        <div className="mt-4 space-y-4">
+          <TechniqueText
             text={technique.triggerDescription}
             entityId={technique.characterId}
-            scope={characterGlossaryScope}
-            className="text-sm text-gray-600 dark:text-gray-300"
+            className="technique-rich-text text-sm leading-6 text-[#626861] dark:text-[#b9ad96]"
           />
           {effect && (
-            <div className="campaign-effect-surface rounded-lg p-3">
-              <h4 className="mb-2 font-medium text-gray-900 dark:text-white">
+            <div className="character-technique-effect border-l-2 border-[#9b4437]/70 py-1 pl-4 dark:border-[#b36d58]/70">
+              <h4 className="mb-1.5 text-xs font-bold uppercase tracking-[0.1em] text-[#6a5144] dark:text-[#c5a982]">
                 Effect ({currentSp} SP investment)
               </h4>
-              <TooltipText
+              <TechniqueText
                 text={effect.effect}
                 entityId={technique.characterId}
-                scope={characterGlossaryScope}
-                className="text-sm text-gray-700 dark:text-gray-300"
+                className="technique-rich-text text-sm leading-6 text-[#454e49] dark:text-[#d2c6af]"
               />
             </div>
           )}
         </div>
       )}
-    </Card>
+      </Card>
+
+      <CampaignConfirmDialog
+        open={deleteConfirmationOpen}
+        onOpenChange={setDeleteConfirmationOpen}
+        title="Delete technique?"
+        description={`Remove “${technique.name}” from this path manual?`}
+        onConfirm={() => {
+          onDelete?.(technique.id);
+          setDeleteConfirmationOpen(false);
+        }}
+      />
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { createCardGameRouter } from "./routes/card-game";
 import { createCharacterRouter } from "./routes/characters";
 import { createDmRouter } from "./routes/dm";
 import { createGlossaryRouter } from "./routes/glossary";
+import { createInstrumentRouter } from "./routes/instruments";
 import { createPreferenceRouter } from "./routes/preferences";
 import { createSpiritDiceRouter } from "./routes/spirit-dice";
 import { createTechniqueRouter } from "./routes/techniques";
@@ -54,6 +55,7 @@ export async function registerRoutes(
   app.use(createGlossaryRouter(routeStorage));
   app.use(createPreferenceRouter(routeStorage));
   app.use(createTrackerRouter(routeStorage));
+  app.use(createInstrumentRouter(routeStorage));
   app.use(createCardGameRouter(routeStorage, images));
   app.use(createDmRouter(routeStorage));
 

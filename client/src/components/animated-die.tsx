@@ -83,7 +83,7 @@ export default function AnimatedDie({
         resolvedSuccess === undefined
           ? ""
           : resolvedSuccess
-            ? "ring-4 ring-emerald-200/90 shadow-[0_0_45px_rgba(80,255,190,0.95)] animate-pulse [animation-duration:1.5s]"
+            ? "ring-4 ring-amber-200/90 shadow-[0_0_45px_rgba(215,172,91,0.9)] animate-pulse [animation-duration:1.5s]"
             : "ring-4 ring-red-300/90 shadow-[0_0_45px_rgba(255,70,70,0.95)] animate-pulse [animation-duration:1.5s]"
       );
 
@@ -130,15 +130,15 @@ export default function AnimatedDie({
           pulseClass,
           isRolling 
             ? cn(
-                "bg-gradient-to-br from-spiritual-600 to-spiritual-800 text-white border-spiritual-300",
-                "dark:border-spiritual-400 dark:text-white",
+                "border-[#b58a55] bg-gradient-to-br from-[#a75a43] to-[#663329] text-[#fff5df]",
+                "dark:border-[#c09a62] dark:from-[#914b39] dark:to-[#4d2923]",
                 "shadow-xl scale-110",
                 "[text-shadow:_0_1px_2px_rgb(0_0_0_/_0.8)]",
                 animationClass
               )
             : cn(
-                "bg-gradient-to-br from-spiritual-600 to-spiritual-800 text-white border-spiritual-300",
-                "dark:border-spiritual-400 dark:text-white",
+                "border-[#b58a55] bg-gradient-to-br from-[#a75a43] to-[#663329] text-[#fff5df]",
+                "dark:border-[#c09a62] dark:from-[#914b39] dark:to-[#4d2923]",
                 "hover:scale-105 hover:shadow-xl",
                 "[text-shadow:_0_1px_2px_rgb(0_0_0_/_0.8)]"
               )

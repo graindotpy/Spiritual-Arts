@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { enhancedContentJsonSchema } from "./enhanced-content";
+import { enhancedContentJsonSchema, richTextContentToPlainText } from "./enhanced-content";
 import {
   dieSizeSchema,
   spiritDieSlotsSchema,
@@ -40,13 +40,17 @@ export type { DieSize, SpiritDieSlot, SpiritDieRoll } from "./spirit-dice";
 
 export const characterLevelSchema = z.number().int().min(1).max(20);
 export const nonEmptyTextSchema = z.string().trim().min(1).max(10_000);
+export const techniqueRichTextSchema = z
+  .string()
+  .max(100_000)
+  .refine((value) => richTextContentToPlainText(value).trim().length > 0, "Text is required");
 export const shortTextSchema = z.string().trim().min(1).max(255);
 
 export const triggerTypeSchema = z.enum(["action", "bonus", "reaction", "passive"]);
 export type TriggerType = z.infer<typeof triggerTypeSchema>;
 
 export const spEffectValueSchema = z.object({
-  effect: nonEmptyTextSchema,
+  effect: techniqueRichTextSchema,
   actionType: triggerTypeSchema,
   alternateName: z.string().trim().max(255).optional(),
 });
@@ -63,10 +67,38 @@ export const characters = pgTable("characters", {
   name: text("name").notNull(),
   path: text("path").notNull(),
   level: integer("level").notNull().default(3),
+  highestAbilityScore: integer("highest_ability_score"),
   portraitUrl: text("portrait_url"),
   isDmOnly: boolean("is_dm_only").notNull().default(false),
   dmOwnerId: varchar("dm_owner_id"),
 });
+
+export const spiritualInstruments = pgTable("spiritual_instruments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  imageUrl: text("image_url"),
+  expandedContent: text("expanded_content"),
+  hasExpandedContent: boolean("has_expanded_content").notNull().default(false),
+  isRevealed: boolean("is_revealed").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const spiritualInstrumentAssignments = pgTable(
+  "spiritual_instrument_assignments",
+  {
+    instrumentId: varchar("instrument_id")
+      .notNull()
+      .references(() => spiritualInstruments.id, { onDelete: "cascade" }),
+    characterId: varchar("character_id")
+      .notNull()
+      .references(() => characters.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("instrument_character_unique").on(table.instrumentId, table.characterId),
+    index("instrument_assignments_character_idx").on(table.characterId),
+  ],
+);
 
 export const spiritDiePools = pgTable(
   "spirit_die_pools",
@@ -129,6 +161,7 @@ export const insertCharacterSchema = createInsertSchema(characters, {
   name: shortTextSchema,
   path: shortTextSchema,
   level: characterLevelSchema,
+  highestAbilityScore: z.number().int().min(1).max(30).nullable().optional(),
   portraitUrl: z.string().max(2_048).nullable().optional(),
   isDmOnly: z.boolean().optional(),
   dmOwnerId: z.string().trim().min(1).max(255).nullable().optional(),
@@ -157,7 +190,7 @@ export const updateSpiritDiePoolSchema = insertSpiritDiePoolSchema
 
 export const insertTechniqueSchema = createInsertSchema(techniques, {
   name: shortTextSchema,
-  triggerDescription: nonEmptyTextSchema,
+  triggerDescription: techniqueRichTextSchema,
   spEffects: spEffectsSchema,
 }).omit({ id: true });
 
@@ -178,6 +211,26 @@ export const updateActiveEffectSchema = insertActiveEffectSchema
   .partial()
   .strict()
   .refine((update) => Object.keys(update).length > 0, "At least one field is required");
+
+export const insertSpiritualInstrumentSchema = createInsertSchema(spiritualInstruments, {
+  name: shortTextSchema,
+  description: nonEmptyTextSchema,
+  imageUrl: z.string().trim().max(2_048).nullable().optional(),
+  expandedContent: enhancedContentJsonSchema.nullable().optional(),
+  hasExpandedContent: z.boolean().optional(),
+  isRevealed: z.boolean().optional(),
+})
+  .omit({ id: true, createdAt: true })
+  .strict();
+
+export const updateSpiritualInstrumentSchema = insertSpiritualInstrumentSchema
+  .partial()
+  .strict()
+  .refine((update) => Object.keys(update).length > 0, "At least one field is required");
+
+export const instrumentAssignmentsSchema = z
+  .object({ characterIds: z.array(z.string().uuid()).max(100) })
+  .strict();
 
 export const insertGlossaryTermSchema = createInsertSchema(glossaryTerms, {
   keyword: shortTextSchema,
@@ -201,6 +254,9 @@ export type Technique = typeof techniques.$inferSelect;
 export type InsertTechnique = z.infer<typeof insertTechniqueSchema>;
 export type ActiveEffect = typeof activeEffects.$inferSelect;
 export type InsertActiveEffect = z.infer<typeof insertActiveEffectSchema>;
+export type SpiritualInstrument = typeof spiritualInstruments.$inferSelect;
+export type InsertSpiritualInstrument = z.infer<typeof insertSpiritualInstrumentSchema>;
+export type SpiritualInstrumentWithAssignments = SpiritualInstrument & { characterIds: string[] };
 export type GlossaryTerm = typeof glossaryTerms.$inferSelect;
 export type InsertGlossaryTerm = z.infer<typeof insertGlossaryTermSchema>;
 

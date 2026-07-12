@@ -5,11 +5,9 @@ import {
   Feather,
   Flag,
   KeyRound,
-  Moon,
   Plus,
   Shield,
   Sparkles,
-  Sun,
   Swords,
   User,
 } from "lucide-react";
@@ -23,9 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import CharacterCreator from "@/components/character-creator";
+import { CampaignMark } from "@/components/campaign-mark";
 import PortraitUpload from "@/components/portrait-upload";
 import SpiritRollNotification from "@/components/spirit-roll-notification";
-import { useTheme } from "@/components/theme-provider";
 import { CharacterCard } from "@/features/main-menu/character-card";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -37,7 +35,10 @@ interface MainMenuProps {
   onCharacterSelect: (character: Character) => void;
 }
 
-const pageOptions = [{ label: "Path Manuals", path: "/" }];
+const pageOptions = [
+  { label: "Path Manuals", path: "/" },
+  { label: "Instrument Vault", path: "/instrument-vault" },
+];
 
 const toolbarButtonClass =
   "border-[#b8aa90]/70 bg-[#fffaf0]/65 text-[#27352f] shadow-sm backdrop-blur transition-colors hover:border-[#557d6f] hover:bg-[#fffaf0] hover:text-[#204e42] dark:border-white/15 dark:bg-white/[0.06] dark:text-[#e9e2d3] dark:hover:border-[#82a99a]/60 dark:hover:bg-white/[0.1] dark:hover:text-white";
@@ -57,18 +58,6 @@ function formatSessionDate(value: string) {
     day: "numeric",
     year: "numeric",
   }).format(parsed);
-}
-
-function CampaignMark() {
-  return (
-    <span className="campaign-mark" aria-hidden="true">
-      <svg viewBox="0 0 48 48" role="img">
-        <circle cx="24" cy="24" r="18" className="campaign-mark-ring" />
-        <path d="M8 32 18.8 20l5.4 6.2L31 16l9 16" className="campaign-mark-mountain" />
-        <path d="M12 34c6-2.6 18-2.6 24 0" className="campaign-mark-ground" />
-      </svg>
-    </span>
-  );
 }
 
 function CampaignLandscape() {
@@ -155,7 +144,6 @@ function CampaignLandscape() {
 }
 
 export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
-  const { theme, toggleTheme } = useTheme();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -266,13 +254,13 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
               <Select value="/" onValueChange={setLocation}>
                 <SelectTrigger
                   id="page-selector"
-                  className="font-display h-auto w-[13.5rem] border-0 bg-transparent p-0 text-left text-2xl leading-none text-[#1f342d] shadow-none focus:ring-1 focus:ring-[#557d6f] dark:text-[#f1eadc] [&>svg]:ml-2 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:text-[#60786f] [&>span]:line-clamp-none"
+                  className="font-display h-auto w-[13.5rem] border-0 bg-transparent p-0 text-left text-2xl leading-none text-[#1f342d] shadow-none focus:ring-1 focus:ring-[#8d6b40] dark:text-[#ead9b6] [&>svg]:ml-2 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:text-[#8e7958] [&>span]:line-clamp-none"
                   aria-label="Select page"
                   data-testid="select-page"
                 >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-[#c9bca3] bg-[#fffaf0] text-[#24342e] dark:border-white/15 dark:bg-[#18231f] dark:text-[#eee6d8]">
+                <SelectContent className="border-[#c9bca3] bg-[#fffaf0] text-[#24342e] dark:border-[#846a45] dark:bg-[#2b251c] dark:text-[#ead9b6]">
                   {pageOptions.map((option) => (
                     <SelectItem key={option.path} value={option.path}>
                       {option.label}
@@ -349,17 +337,6 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
                 </Button>
               </>
             )}
-            <Button
-              type="button"
-              onClick={toggleTheme}
-              variant="outline"
-              size="icon"
-              className={toolbarButtonClass}
-              aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
-              data-testid="button-theme-toggle"
-            >
-              {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-            </Button>
           </nav>
         </div>
       </header>
@@ -372,12 +349,12 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
               campaign companion
             </p>
             <h1 className="font-display mt-5 text-5xl leading-[0.95] tracking-[-0.035em] text-[#1c3029] sm:text-6xl lg:text-7xl dark:text-[#f3ecde]">
-              Walk the path.
-              <span className="mt-2 block italic text-[#436f60] dark:text-[#9fc5b7]">
-                Write the legend.
+              Act 4
+              <span className="mt-2 block italic text-[#436f60] dark:text-[#c5a66f]">
+                Ketsu
               </span>
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-[#5f655e] sm:text-lg dark:text-[#b9bdb5]">
+            <p className="mt-6 max-w-xl text-base leading-7 text-[#5f655e] sm:text-lg dark:text-[#bfb092]">
               Kozan campaign companion app. Track Paths, Spirit Die, unique mechanics, and more.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -385,14 +362,14 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
                 type="button"
                 size="lg"
                 onClick={() => setCreatorOpen(true)}
-                className="h-12 rounded-full bg-[#285f50] px-6 text-[#fffaf0] shadow-[0_12px_30px_rgba(34,78,66,0.22)] transition-all hover:-translate-y-0.5 hover:bg-[#204e42] hover:shadow-[0_16px_36px_rgba(34,78,66,0.3)] dark:bg-[#8db9a9] dark:text-[#10241e] dark:hover:bg-[#a3cabb]"
+                className="wuxia-primary-action h-12 px-6"
               >
                 <Feather className="mr-2 h-4 w-4" />
                 Create a character
               </Button>
               <a
                 href="#characters"
-                className="inline-flex h-12 items-center justify-center rounded-full border border-[#b8aa90]/80 bg-[#fffaf0]/55 px-6 text-sm font-semibold text-[#34473f] shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-[#557d6f] hover:bg-[#fffaf0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557d6f] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/[0.05] dark:text-[#e7e1d4] dark:hover:bg-white/[0.09]"
+                className="wuxia-secondary-action inline-flex h-12 items-center justify-center px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9f7651] focus-visible:ring-offset-2"
               >
                 View the roster
                 <ArrowDown className="ml-2 h-4 w-4" />
@@ -400,9 +377,11 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
             </div>
           </div>
 
-          <div className="flex items-start justify-start lg:justify-start lg:pr-8">
-            <div className="w-full max-w-[18rem] -mt-2 lg:-mt-6">
-              <p className="font-display text-2xl leading-[0.95] tracking-[-0.035em] text-[#1c3029] sm:text-3xl dark:text-[#f3ecde]">
+          <div className="wuxia-hero-art relative mx-auto w-full max-w-[42rem] lg:pr-4">
+            <CampaignLandscape />
+            <div className="wuxia-session-note absolute -bottom-6 left-5 w-[calc(100%-2.5rem)] max-w-[20rem] px-5 py-4 sm:left-8">
+              <p className="wuxia-kicker">Session planner</p>
+              <p className="font-display mt-1 text-xl leading-none tracking-[-0.02em] sm:text-2xl">
                 Next Session Date
               </p>
               {isDmMode ? (
@@ -411,11 +390,11 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
                   value={nextSessionDate}
                   onChange={handleNextSessionDateChange}
                   placeholder="YYYY-MM-DD"
-                  className="mt-2 w-full border-none bg-transparent p-0 font-display text-3xl leading-[0.95] tracking-[-0.035em] text-[#436f60] outline-none placeholder:text-[#8a998f] focus:ring-0 dark:text-[#9fc5b7] sm:text-4xl"
+                  className="wuxia-session-date mt-2 w-full border-none bg-transparent p-0 font-display text-2xl leading-none outline-none focus:ring-0 sm:text-3xl"
                   aria-label="Next Session Date"
                 />
               ) : (
-                <p className="mt-2 font-display text-3xl leading-[0.95] tracking-[-0.035em] text-[#436f60] dark:text-[#9fc5b7] sm:text-4xl">
+                <p className="wuxia-session-date mt-2 font-display text-2xl leading-none sm:text-3xl">
                   {formatSessionDate(nextSessionDate)}
                 </p>
               )}
@@ -433,15 +412,15 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
                 <span className="h-px w-7 bg-current opacity-50" />
                 The party
               </p>
-              <h2 className="font-display mt-3 text-3xl text-[#20352e] sm:text-4xl dark:text-[#f1eadc]">
+              <h2 className="font-display mt-3 text-3xl text-[#20352e] sm:text-4xl dark:text-[#ead9b6]">
                 Choose your character
               </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#666a63] sm:text-base dark:text-[#aeb4ac]">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#666a63] sm:text-base dark:text-[#b7a98c]">
                 Open a path manual to continue the journey, or bind a new one for a fresh hero.
               </p>
             </div>
             {!charactersQuery.isLoading && (
-              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#c9bda7] bg-[#f9f3e8]/75 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.13em] text-[#607068] dark:border-white/10 dark:bg-white/[0.04] dark:text-[#aebbb4]">
+              <span className="inline-flex w-fit items-center gap-2 rounded-sm border border-[#c9bda7] bg-[#f9f3e8]/75 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.13em] text-[#607068] dark:border-[#806640] dark:bg-[#4d3e29]/30 dark:text-[#c7b28d]">
                 <User className="h-3.5 w-3.5" />
                 {characters.length} {characters.length === 1 ? "traveller" : "travellers"}
               </span>
@@ -498,13 +477,13 @@ export default function MainMenu({ onCharacterSelect }: MainMenuProps) {
                     <Plus className="h-7 w-7 transition-transform duration-300 group-hover:rotate-90" />
                   </span>
                   <span className="wuxia-kicker">An unbound manual</span>
-                  <span className="font-display mt-3 text-2xl text-[#263b34] dark:text-[#eee7da]">
+                  <span className="font-display mt-3 text-2xl text-[#263b34] dark:text-[#e8d7b4]">
                     Create a new character
                   </span>
-                  <span className="mt-3 max-w-[15rem] text-sm leading-6 text-[#6c6c64] dark:text-[#a9afa7]">
+                  <span className="mt-3 max-w-[15rem] text-sm leading-6 text-[#6c6c64] dark:text-[#b5a78b]">
                     Begin a new spiritual journey and shape the path ahead.
                   </span>
-                  <span className="mt-6 inline-flex items-center text-sm font-semibold text-[#356454] dark:text-[#9dc1b3]">
+                  <span className="mt-6 inline-flex items-center text-sm font-semibold text-[#356454] dark:text-[#c5a66f]">
                     Bind the first page
                     <Feather className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </span>
