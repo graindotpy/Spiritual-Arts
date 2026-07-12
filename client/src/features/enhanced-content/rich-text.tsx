@@ -1,4 +1,9 @@
-import { useEffect, type ReactNode } from "react";
+import {
+  Component,
+  useEffect,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
@@ -40,6 +45,41 @@ function createExtensions(openOnClick: boolean) {
 const editorExtensions = createExtensions(false);
 const viewerExtensions = createExtensions(true);
 
+interface RichTextErrorBoundaryProps {
+  children: ReactNode;
+  fallback: ReactNode;
+  resetKey: string;
+}
+
+interface RichTextErrorBoundaryState {
+  failed: boolean;
+}
+
+export class RichTextErrorBoundary extends Component<
+  RichTextErrorBoundaryProps,
+  RichTextErrorBoundaryState
+> {
+  state: RichTextErrorBoundaryState = { failed: false };
+
+  static getDerivedStateFromError(): RichTextErrorBoundaryState {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Rich text editor failed; using the plain-text fallback.", error, errorInfo);
+  }
+
+  componentDidUpdate(previousProps: RichTextErrorBoundaryProps) {
+    if (this.state.failed && previousProps.resetKey !== this.props.resetKey) {
+      this.setState({ failed: false });
+    }
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
 interface RichTextEditorProps {
   value: string | RichTextDocument;
   onChange: (value: RichTextDocument) => void;
@@ -75,7 +115,11 @@ export function RichTextEditor({
       },
     },
     onUpdate: ({ editor: currentEditor }) => {
-      onChange(currentEditor.getJSON() as RichTextDocument);
+      try {
+        onChange(currentEditor.getJSON() as RichTextDocument);
+      } catch (error) {
+        console.error("Rich text update could not be applied.", error);
+      }
     },
   }, [expanded]);
 

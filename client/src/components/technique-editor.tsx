@@ -15,7 +15,14 @@ import {
 import { useCharacterState } from "@/hooks/use-character-state";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
-import { richTextContentToPlainText } from "@shared/enhanced-content";
+import {
+  RichTextEditor,
+  RichTextErrorBoundary,
+} from "@/features/enhanced-content/rich-text";
+import {
+  richTextContentToPlainText,
+  serializeRichTextContent,
+} from "@shared/enhanced-content";
 import type { InsertTechnique, Technique, SPEffect, TriggerType } from "@shared/schema";
 import { getTechniqueVariantLabel, splitTechniqueName, techniqueFamilyKey } from "@shared/technique-variants";
 
@@ -329,15 +336,27 @@ export default function TechniqueEditor({
                   {expandedEditor === "trigger" ? "Collapse" : "Expand"}
                 </Button>
               </div>
-              <Textarea
-                value={richTextContentToPlainText(triggerDescription)}
-                onChange={(event) => setTriggerDescription(event.target.value)}
-                label="Trigger description"
-                placeholder="Describe when this technique can be used"
-                aria-label="Trigger description"
-                rows={6}
-                className="wuxia-dialog-control min-h-32"
-              />
+              <RichTextErrorBoundary
+                resetKey={`trigger:${technique?.id ?? "new"}:${expandedEditor === "trigger"}`}
+                fallback={
+                  <Textarea
+                    value={richTextContentToPlainText(triggerDescription)}
+                    onChange={(event) => setTriggerDescription(event.target.value)}
+                    placeholder="Describe when this technique can be used"
+                    aria-label="Trigger description (plain-text fallback)"
+                    rows={6}
+                    className="wuxia-dialog-control min-h-32"
+                  />
+                }
+              >
+                <RichTextEditor
+                  value={triggerDescription}
+                  onChange={(document) => setTriggerDescription(serializeRichTextContent(document))}
+                  label="Trigger description"
+                  placeholder="Describe when this technique can be used"
+                  expanded={expandedEditor === "trigger"}
+                />
+              </RichTextErrorBoundary>
             </div>
 
             <section aria-labelledby="investment-effects-heading">
@@ -475,17 +494,33 @@ export default function TechniqueEditor({
                               {expandedEditor === `effect-${index}` ? "Collapse" : "Expand"}
                             </Button>
                           </div>
-                          <Textarea
-                            value={richTextContentToPlainText(entry.effect)}
-                            onChange={(event) =>
-                              handleSPEffectChange(index, "effect", event.target.value)
+                          <RichTextErrorBoundary
+                            resetKey={`effect:${technique?.id ?? "new"}:${index}:${expandedEditor === `effect-${index}`}`}
+                            fallback={
+                              <Textarea
+                                value={richTextContentToPlainText(entry.effect)}
+                                onChange={(event) =>
+                                  handleSPEffectChange(index, "effect", event.target.value)
+                                }
+                                aria-label={`Effect for ${entry.sp} SP investment (plain-text fallback)`}
+                                placeholder="Describe the effect at this SP tier"
+                                rows={6}
+                                className="wuxia-dialog-control min-h-32"
+                                disabled={!entry.enabled}
+                              />
                             }
-                            aria-label={`Effect for ${entry.sp} SP investment`}
-                            placeholder="Describe the effect at this SP tier"
-                            rows={6}
-                            className="wuxia-dialog-control min-h-32"
-                            disabled={!entry.enabled}
-                          />
+                          >
+                            <RichTextEditor
+                              value={entry.effect}
+                              onChange={(document) =>
+                                handleSPEffectChange(index, "effect", serializeRichTextContent(document))
+                              }
+                              label={`Effect for ${entry.sp} SP investment`}
+                              placeholder="Describe the effect at this SP tier"
+                              expanded={expandedEditor === `effect-${index}`}
+                              disabled={!entry.enabled}
+                            />
+                          </RichTextErrorBoundary>
                         </div>
                       </div>
                     </div>

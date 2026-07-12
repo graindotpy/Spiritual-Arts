@@ -3,6 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  RichTextContent,
+  RichTextEditor,
+  RichTextErrorBoundary,
+} from "@/features/enhanced-content/rich-text";
 import { richTextContentToPlainText, type ContentBlock } from "@shared/enhanced-content";
 
 interface ContentBlockEditorProps {
@@ -40,9 +45,16 @@ export function ContentBlockEditor({
 
     if (!isEditing) {
       return (
-        <div className="whitespace-pre-line text-sm leading-7 text-[#55615b] dark:text-[#c7baa3]">
-          {textValue || "No text content yet."}
-        </div>
+        <RichTextErrorBoundary
+          resetKey={`${block.id}:view:${JSON.stringify(block.content)}`}
+          fallback={
+            <div className="whitespace-pre-line text-sm leading-7 text-[#55615b] dark:text-[#c7baa3]">
+              {textValue || "No text content yet."}
+            </div>
+          }
+        >
+          <RichTextContent content={block.content} />
+        </RichTextErrorBoundary>
       );
     }
 
@@ -54,14 +66,31 @@ export function ContentBlockEditor({
           </Label>
           <RemoveBlockButton onRemove={onRemove} />
         </div>
-        <Textarea
-          value={textValue}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="Enter detailed text content…"
-          aria-label="Text content"
-          rows={6}
-          className="wuxia-dialog-control min-h-32"
-        />
+        <RichTextErrorBoundary
+          resetKey={`${block.id}:edit`}
+          fallback={
+            <div className="space-y-2">
+              <p className="text-xs text-[#8a4338] dark:text-[#efc5a2]" role="status">
+                Rich text could not be loaded. You can continue editing as plain text.
+              </p>
+              <Textarea
+                value={textValue}
+                onChange={(event) => onChange(event.target.value)}
+                placeholder="Enter detailed text content…"
+                aria-label="Text content (plain-text fallback)"
+                rows={6}
+                className="wuxia-dialog-control min-h-32"
+              />
+            </div>
+          }
+        >
+          <RichTextEditor
+            value={block.content}
+            onChange={onChange}
+            placeholder="Enter detailed text content…"
+            label="Text content"
+          />
+        </RichTextErrorBoundary>
       </div>
     );
   }

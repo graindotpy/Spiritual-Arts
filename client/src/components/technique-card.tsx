@@ -15,6 +15,14 @@ import {
   type SpiritDieSlot,
 } from "@shared/spirit-dice";
 import { getTechniqueVariantLabel } from "@shared/technique-variants";
+import {
+  isSerializedRichTextContent,
+  richTextContentToPlainText,
+} from "@shared/enhanced-content";
+import {
+  RichTextContent,
+  RichTextErrorBoundary,
+} from "@/features/enhanced-content/rich-text";
 
 interface TechniqueCardProps {
   technique: Technique;
@@ -54,6 +62,24 @@ function TechniqueText({
   entityId: string;
   className: string;
 }) {
+  if (isSerializedRichTextContent(text)) {
+    return (
+      <RichTextErrorBoundary
+        resetKey={`${entityId}:${text}`}
+        fallback={
+          <TooltipText
+            text={richTextContentToPlainText(text)}
+            entityId={entityId}
+            scope={characterGlossaryScope}
+            className={className}
+          />
+        }
+      >
+        <RichTextContent content={text} className={className} />
+      </RichTextErrorBoundary>
+    );
+  }
+
   return (
     <TooltipText
       text={text}

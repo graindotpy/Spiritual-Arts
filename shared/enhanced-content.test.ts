@@ -21,6 +21,26 @@ test("enhanced content round-trips its discriminated blocks", () => {
   assert.deepEqual(parseEnhancedContent(serializeEnhancedContent(blocks)), blocks);
 });
 
+test("new content blocks still receive IDs when crypto.randomUUID is unavailable", () => {
+  const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+
+  try {
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      value: undefined,
+    });
+    const block = createContentBlock("text");
+    assert.ok(block.id.length > 0);
+    assert.equal(block.type, "text");
+  } finally {
+    if (cryptoDescriptor) {
+      Object.defineProperty(globalThis, "crypto", cryptoDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "crypto");
+    }
+  }
+});
+
 test("serialized rich text restores while legacy plain text remains supported", () => {
   const document = createRichTextDocument("Technique text");
   const serialized = serializeRichTextContent(document);
