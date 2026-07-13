@@ -95,7 +95,7 @@ export default function SpiritDiePoolComponent({
         )}
       </div>
       
-      <div className="mx-auto mt-4 flex min-h-[7.5rem] w-full flex-wrap items-center justify-center gap-x-3 gap-y-2">
+      <div className="mx-auto mt-4 flex min-h-32 w-full flex-wrap items-center justify-center gap-x-3 gap-y-8">
         {/* Show all dice positions based on original dice */}
         {originalDice.map((originalDie, index) => {
           const currentDie = currentDice[index];
@@ -103,7 +103,7 @@ export default function SpiritDiePoolComponent({
           const isRollingDie = isRolling && rollingDieIndex === index;
           
           return (
-            <div key={index} className="flex w-20 flex-col items-center">
+            <div key={index} className="relative flex h-16 w-20 items-center justify-center">
               <div className="flex h-16 w-16 items-center justify-center">
                 {currentDie ? (
                   isRollingDie ? (
@@ -133,27 +133,25 @@ export default function SpiritDiePoolComponent({
                   </div>
                 )}
               </div>
-              {(canRestore || isManualTracking) && (
-                <div className="mt-2 flex h-10 items-start justify-center">
-                  {!isManualTracking && canRestore && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onDieRestore(index)}
-                      className="h-6 px-2 text-xs text-[#6a756e] hover:bg-[#e4eadf] hover:text-[#31594d] dark:text-[#a99c83] dark:hover:bg-[#594326]/30 dark:hover:text-[#ddc69c]"
-                      title={!currentDie ? "Restore to d4" : "Increase die size by one step"}
-                    >
-                      <RotateCcw className="mr-1 h-3 w-3" />
-                      Restore
-                    </Button>
-                  )}
-                  {isManualTracking && (
-                    <div className="text-center text-xs text-[#5f665f] dark:text-[#a99c83]">
-                      Click to change
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className="absolute left-0 top-full mt-2 flex h-6 w-full items-start justify-center">
+                {!isManualTracking && canRestore && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onDieRestore(index)}
+                    className="h-6 px-2 text-xs text-[#6a756e] hover:bg-[#e4eadf] hover:text-[#31594d] dark:text-[#a99c83] dark:hover:bg-[#594326]/30 dark:hover:text-[#ddc69c]"
+                    title={!currentDie ? "Restore to d4" : "Increase die size by one step"}
+                  >
+                    <RotateCcw className="mr-1 h-3 w-3" />
+                    Restore
+                  </Button>
+                )}
+                {isManualTracking && (
+                  <div className="text-center text-xs text-[#5f665f] dark:text-[#a99c83]">
+                    Click to change
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}

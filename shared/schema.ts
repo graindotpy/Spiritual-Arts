@@ -13,6 +13,7 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { enhancedContentJsonSchema, richTextContentToPlainText } from "./enhanced-content";
+import { foundryMechanicsSchema } from "./mechanics";
 import {
   dieSizeSchema,
   spiritDieSlotsSchema,
@@ -37,6 +38,25 @@ export {
   spiritDieSlotsSchema,
 } from "./spirit-dice";
 export type { DieSize, SpiritDieSlot, SpiritDieRoll } from "./spirit-dice";
+export {
+  DAMAGE_TYPES,
+  FOUNDRY_MECHANICS_VERSION,
+  MAX_FOUNDRY_ACTIONS,
+  damageTypeSchema,
+  foundryActionSchema,
+  foundryFormulaSchema,
+  foundryMechanicsSchema,
+  rollDamageActionSchema,
+  rollHealingActionSchema,
+  validateFoundryFormula,
+} from "./mechanics";
+export type {
+  DamageType,
+  FoundryAction,
+  FoundryMechanics,
+  RollDamageAction,
+  RollHealingAction,
+} from "./mechanics";
 
 export const characterLevelSchema = z.number().int().min(1).max(20);
 export const nonEmptyTextSchema = z.string().trim().min(1).max(10_000);
@@ -49,11 +69,14 @@ export const shortTextSchema = z.string().trim().min(1).max(255);
 export const triggerTypeSchema = z.enum(["action", "bonus", "reaction", "passive"]);
 export type TriggerType = z.infer<typeof triggerTypeSchema>;
 
-export const spEffectValueSchema = z.object({
-  effect: techniqueRichTextSchema,
-  actionType: triggerTypeSchema,
-  alternateName: z.string().trim().max(255).optional(),
-});
+export const spEffectValueSchema = z
+  .object({
+    effect: techniqueRichTextSchema,
+    actionType: triggerTypeSchema,
+    alternateName: z.string().trim().max(255).optional(),
+    mechanics: foundryMechanicsSchema.optional(),
+  })
+  .strict();
 
 export const spEffectsSchema = z
   .record(z.string().regex(/^\d+$/), spEffectValueSchema)

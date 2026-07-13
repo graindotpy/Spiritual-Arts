@@ -303,3 +303,175 @@ test("instrument vault hides drafts and supports many-character assignments", as
     richContent,
   );
 });
+
+test("technique mechanics round trip while mechanics-free techniques remain valid", async () => {
+  const createdCharacter = await jsonRequest("/api/character", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Mechanist", path: "Foundry Path", level: 8 }),
+  });
+  const characterId = String(createdCharacter.body.id);
+  const actionId = "523240f5-7433-4e0b-876c-c209ad3b310a";
+
+  const created = await jsonRequest(`/api/character/${characterId}/techniques`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: " Devour Essence ",
+      triggerDescription: "Consume a target.",
+      spEffects: {
+        "2": {
+          effect: "Deal damage.",
+          actionType: "action",
+          mechanics: {
+            version: 1,
+            actions: [
+              {
+                id: actionId,
+                kind: "roll_damage",
+                formula: " 2d8 + 4 ",
+                damageType: "necrotic",
+                label: " Devour Essence ",
+              },
+            ],
+          },
+        },
+      },
+    }),
+  });
+  assert.equal(created.response.status, 201);
+  assert.equal(created.body.name, "Devour Essence");
+  const createdEffects = created.body.spEffects as Record<
+    string,
+    { mechanics?: { actions: Array<Record<string, unknown>> } }
+  >;
+  assert.deepEqual(createdEffects["2"].mechanics?.actions[0], {
+    id: actionId,
+    kind: "roll_damage",
+    formula: "2d8 + 4",
+    damageType: "necrotic",
+    label: "Devour Essence",
+  });
+
+  const listed = await jsonRequest(`/api/character/${characterId}/techniques`);
+  const techniques = listed.body as unknown as Array<{
+    id: string;
+    spEffects: typeof createdEffects;
+  }>;
+  assert.deepEqual(
+    techniques.find((technique) => technique.id === created.body.id)?.spEffects,
+    createdEffects,
+  );
+
+  const mechanicsFree = await jsonRequest(
+    `/api/character/${characterId}/techniques`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Legacy Technique",
+        triggerDescription: "Existing trigger.",
+        spEffects: {
+          "1": { effect: "Existing effect.", actionType: "reaction" },
+        },
+      }),
+    },
+  );
+  assert.equal(mechanicsFree.response.status, 201);
+  const mechanicsFreeEffects = mechanicsFree.body.spEffects as Record<
+    string,
+    Record<string, unknown>
+  >;
+  assert.equal("mechanics" in mechanicsFreeEffects["1"], false);
+});
+
+test("technique APIs reject malformed Foundry mechanics", async () => {
+  const createdCharacter = await jsonRequest("/api/character", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Validator", path: "Foundry Path", level: 8 }),
+  });
+  const characterId = String(createdCharacter.body.id);
+  const actionId = "523240f5-7433-4e0b-876c-c209ad3b310a";
+  const validAction = {
+    id: actionId,
+    kind: "roll_damage",
+    formula: "2d8 + 4",
+    damageType: "necrotic",
+  };
+  const invalidMechanics: unknown[] = [
+    { version: 2, actions: [] },
+    { version: 1, actions: [], future: true },
+    { version: 1, actions: [{ ...validAction, kind: "run_macro" }] },
+    { version: 1, actions: [{ ...validAction, script: "return 42" }] },
+    { version: 1, actions: [{ ...validAction, formula: "@mod + 1d6" }] },
+    {
+      version: 1,
+      actions: [{ id: actionId, kind: "roll_damage", formula: "1d6" }],
+    },
+    {
+      version: 1,
+      actions: [
+        {
+          id: actionId,
+          kind: "roll_healing",
+          formula: "1d6",
+          damageType: "radiant",
+        },
+      ],
+    },
+    {
+      version: 1,
+      actions: Array.from({ length: 11 }, (_, index) => ({
+        ...validAction,
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      })),
+    },
+    {
+      version: 1,
+      actions: [{ ...validAction, label: "x".repeat(256) }],
+    },
+  ];
+
+  for (const mechanics of invalidMechanics) {
+    const response = await jsonRequest(
+      `/api/character/${characterId}/techniques`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Invalid mechanics",
+          triggerDescription: "Trigger.",
+          spEffects: {
+            "2": {
+              effect: "Effect.",
+              actionType: "action",
+              mechanics,
+            },
+          },
+        }),
+      },
+    );
+    assert.equal(response.response.status, 400, JSON.stringify(mechanics));
+  }
+
+  const unknownTierField = await jsonRequest(
+    `/api/character/${characterId}/techniques`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Unknown tier field",
+        triggerDescription: "Trigger.",
+        spEffects: {
+          "2": {
+            effect: "Effect.",
+            actionType: "action",
+            macro: "not allowed",
+          },
+        },
+      }),
+    },
+  );
+  assert.equal(unknownTierField.response.status, 400);
+});

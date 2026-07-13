@@ -23,8 +23,19 @@ import {
   richTextContentToPlainText,
   serializeRichTextContent,
 } from "@shared/enhanced-content";
+import {
+  foundryMechanicsSchema,
+  type FoundryMechanics,
+} from "@shared/mechanics";
 import type { InsertTechnique, Technique, SPEffect, TriggerType } from "@shared/schema";
 import { getTechniqueVariantLabel, splitTechniqueName, techniqueFamilyKey } from "@shared/technique-variants";
+import FoundryMechanicsEditor from "@/components/foundry-mechanics-editor";
+import {
+  cloneFoundryMechanicsWithNewActionIds,
+  hasFoundryActionsWithoutEffect,
+  normalizeFoundryMechanics,
+  parseStoredFoundryMechanics,
+} from "@/lib/foundry-mechanics-draft";
 
 interface TechniqueEditorProps {
   technique: Technique | null;
@@ -42,6 +53,8 @@ interface SPEffectEntry {
   actionType: TriggerType;
   enabled: boolean;
   alternateName?: string;
+  mechanics?: FoundryMechanics;
+  storedMechanicsError?: string;
 }
 
 export default function TechniqueEditor({ 
@@ -78,19 +91,32 @@ export default function TechniqueEditor({
 
       
       const effects = currentTechnique.spEffects as SPEffect;
-      const entries: SPEffectEntry[] = Object.entries(effects).map(([sp, effectData]) => ({
-        sp: parseInt(sp),
-        effect: effectData.effect,
-        actionType: effectData.actionType,
-        enabled: true,
-        alternateName: effectData.alternateName || ""
-      }));
+      const entries: SPEffectEntry[] = Object.entries(effects).map(([sp, effectData]) => {
+        const storedMechanics = parseStoredFoundryMechanics(effectData.mechanics);
+        return {
+          sp: parseInt(sp),
+          effect: effectData.effect,
+          actionType: effectData.actionType,
+          enabled: true,
+          alternateName: effectData.alternateName || "",
+          mechanics: storedMechanics.mechanics,
+          storedMechanicsError: storedMechanics.error,
+        };
+      });
       setSPEffects(entries.sort((a, b) => a.sp - b.sp));
     } else {
       // Reset form for new technique
       setName("");
       setTriggerDescription("");
-      setSPEffects([{ sp: 1, effect: "", actionType: "action", enabled: true, alternateName: "" }]);
+      setSPEffects([{
+        sp: 1,
+        effect: "",
+        actionType: "action",
+        enabled: true,
+        alternateName: "",
+        mechanics: undefined,
+        storedMechanicsError: undefined,
+      }]);
     }
   }, [isOpen, currentTechnique]);
 
@@ -104,7 +130,15 @@ export default function TechniqueEditor({
 
   const handleAddSPLevel = () => {
     const maxSP = spEffects.length > 0 ? Math.max(...spEffects.map(e => e.sp)) : 0;
-    setSPEffects([...spEffects, { sp: maxSP + 1, effect: "", actionType: "action", enabled: true, alternateName: "" }]);
+    setSPEffects([...spEffects, {
+      sp: maxSP + 1,
+      effect: "",
+      actionType: "action",
+      enabled: true,
+      alternateName: "",
+      mechanics: undefined,
+      storedMechanicsError: undefined,
+    }]);
   };
 
   const handleRemoveSPLevel = (index: number) => {
@@ -122,6 +156,16 @@ export default function TechniqueEditor({
     setSPEffects(updated);
   };
 
+  const handleDiscardStoredMechanics = (index: number) => {
+    const updated = [...spEffects];
+    updated[index] = {
+      ...updated[index],
+      mechanics: undefined,
+      storedMechanicsError: undefined,
+    };
+    setSPEffects(updated);
+  };
+
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -131,6 +175,37 @@ export default function TechniqueEditor({
       toast({
         title: "Add a trigger description",
         description: "Describe when this technique can be used.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const unsupportedMechanicsTier = spEffects.find(
+      (entry) => entry.enabled && entry.storedMechanicsError,
+    );
+    if (unsupportedMechanicsTier) {
+      toast({
+        title: `Stored Foundry mechanics need attention at ${unsupportedMechanicsTier.sp} SP`,
+        description:
+          "Open that tier's Foundry mechanics and explicitly discard the unsupported block before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const mechanicsWithoutEffect = spEffects.find(
+      (entry) =>
+        entry.enabled &&
+        hasFoundryActionsWithoutEffect(
+          richTextContentToPlainText(entry.effect),
+          entry.mechanics,
+        ),
+    );
+    if (mechanicsWithoutEffect) {
+      toast({
+        title: `Add an effect for ${mechanicsWithoutEffect.sp} SP`,
+        description:
+          "This tier has Foundry rolls configured, so it needs an Effect before it can be saved.",
         variant: "destructive",
       });
       return;
@@ -155,13 +230,34 @@ export default function TechniqueEditor({
       });
       return;
     }
+
+    for (const entry of enabledEntries) {
+      const mechanics = normalizeFoundryMechanics(entry.mechanics);
+      if (!mechanics) continue;
+      const parsedMechanics = foundryMechanicsSchema.safeParse(mechanics);
+      if (!parsedMechanics.success) {
+        toast({
+          title: `Check Foundry mechanics for ${entry.sp} SP`,
+          description:
+            parsedMechanics.error.issues[0]?.message ??
+            "One of the configured Foundry rolls is invalid.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     
     const spEffectsObj: SPEffect = {};
     enabledEntries.forEach(entry => {
+        const normalizedMechanics = normalizeFoundryMechanics(entry.mechanics);
+        const mechanics = normalizedMechanics && isCreatingVariant
+          ? cloneFoundryMechanicsWithNewActionIds(normalizedMechanics)
+          : normalizedMechanics;
         spEffectsObj[entry.sp] = {
           effect: entry.effect,
           actionType: entry.actionType,
-          alternateName: entry.alternateName?.trim() || undefined
+          alternateName: entry.alternateName?.trim() || undefined,
+          ...(mechanics ? { mechanics } : {}),
         };
       });
 
@@ -522,6 +618,21 @@ export default function TechniqueEditor({
                             />
                           </RichTextErrorBoundary>
                         </div>
+                        {entry.enabled ? (
+                          <div className="sm:col-span-2">
+                            <FoundryMechanicsEditor
+                              mechanics={entry.mechanics}
+                              onChange={(mechanics) =>
+                                handleSPEffectChange(index, "mechanics", mechanics)
+                              }
+                              tierLabel={`${entry.sp} SP`}
+                              storedMechanicsError={entry.storedMechanicsError}
+                              onDiscardStoredMechanics={() =>
+                                handleDiscardStoredMechanics(index)
+                              }
+                            />
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   );

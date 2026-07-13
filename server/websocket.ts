@@ -2,12 +2,16 @@ import type { Server } from "http";
 import { randomUUID } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 import {
+  createFoundryActionRequestMessage,
   createSpiritDieRollMessage,
+  type FoundryActionRequestData,
+  type RealtimeMessage,
   type SpiritDieRollBroadcast,
 } from "@shared/realtime";
 
 export interface SpiritRollBroadcaster {
-  broadcastSpiritRoll(data: SpiritDieRollBroadcast): void;
+  broadcastSpiritRoll(data: SpiritDieRollBroadcast): string;
+  broadcastFoundryAction(data: FoundryActionRequestData): string | null;
 }
 
 export class SpiritRollWebSocket implements SpiritRollBroadcaster {
@@ -39,9 +43,27 @@ export class SpiritRollWebSocket implements SpiritRollBroadcaster {
     });
   }
 
-  broadcastSpiritRoll(data: SpiritDieRollBroadcast): void {
-    const message = JSON.stringify(createSpiritDieRollMessage(randomUUID(), data));
+  broadcastSpiritRoll(data: SpiritDieRollBroadcast): string {
+    const eventId = randomUUID();
+    this.broadcast(createSpiritDieRollMessage(eventId, data));
+    return eventId;
+  }
 
+  broadcastFoundryAction(data: FoundryActionRequestData): string | null {
+    const eventId = randomUUID();
+    let event: RealtimeMessage;
+    try {
+      event = createFoundryActionRequestMessage(eventId, data);
+    } catch (error) {
+      console.error("Skipped invalid Foundry action request:", error);
+      return null;
+    }
+    this.broadcast(event);
+    return eventId;
+  }
+
+  private broadcast(event: RealtimeMessage): void {
+    const message = JSON.stringify(event);
     this.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 1_000_000) {
         client.send(message, (error?: Error) => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { foundryActionSchema } from "./mechanics";
 import { dieSizeSchema } from "./spirit-dice";
 
 export const REALTIME_PROTOCOL_VERSION = 1 as const;
@@ -30,8 +31,53 @@ export const spiritDieRollMessageSchema = z.object({
   data: spiritDieRollBroadcastSchema,
 });
 
+export const foundryActionRequestDataSchema = z
+  .object({
+    requestedAt: z.string().datetime(),
+    sourceRollEventId: z.string().uuid(),
+    character: z
+      .object({
+        id: z.string().min(1).max(255),
+        name: z.string().trim().min(1).max(255),
+        path: z.string().trim().min(1).max(255),
+        level: z.number().int().min(1).max(20),
+        portraitUrl: z.string().min(1).max(2_048).nullable(),
+      })
+      .strict(),
+    technique: z
+      .object({
+        id: z.string().uuid(),
+        name: z.string().trim().min(1).max(255),
+      })
+      .strict(),
+    spInvestment: z.number().int().positive().max(100),
+    action: foundryActionSchema,
+  })
+  .strict();
+
+export const foundryActionRequestMessageSchema = z
+  .object({
+    protocolVersion: z.literal(REALTIME_PROTOCOL_VERSION),
+    eventId: z.string().uuid(),
+    type: z.literal("foundry_action_request"),
+    data: foundryActionRequestDataSchema,
+  })
+  .strict();
+
+export const realtimeMessageSchema = z.discriminatedUnion("type", [
+  spiritDieRollMessageSchema,
+  foundryActionRequestMessageSchema,
+]);
+
 export type SpiritDieRollBroadcast = z.infer<typeof spiritDieRollBroadcastSchema>;
 export type SpiritDieRollMessage = z.infer<typeof spiritDieRollMessageSchema>;
+export type FoundryActionRequestData = z.infer<
+  typeof foundryActionRequestDataSchema
+>;
+export type FoundryActionRequestMessage = z.infer<
+  typeof foundryActionRequestMessageSchema
+>;
+export type RealtimeMessage = z.infer<typeof realtimeMessageSchema>;
 
 export function createSpiritDieRollMessage(
   eventId: string,
@@ -43,4 +89,16 @@ export function createSpiritDieRollMessage(
     type: "spirit_die_roll",
     data,
   };
+}
+
+export function createFoundryActionRequestMessage(
+  eventId: string,
+  data: FoundryActionRequestData,
+): FoundryActionRequestMessage {
+  return foundryActionRequestMessageSchema.parse({
+    protocolVersion: REALTIME_PROTOCOL_VERSION,
+    eventId,
+    type: "foundry_action_request",
+    data,
+  });
 }

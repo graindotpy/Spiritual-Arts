@@ -1,10 +1,12 @@
 import { Router } from "express";
 import {
+  foundryMechanicsSchema,
   getSpiritDiceForLevel,
   insertSpiritDiePoolSchema,
   normalizeSpiritDieSlots,
   rollSpiritDie,
   rollSpiritDieRequestSchema,
+  type Technique,
   updateSpiritDiePoolSchema,
 } from "@shared/schema";
 import { canSpiritDieMeetInvestment } from "@shared/spirit-dice";
@@ -17,6 +19,10 @@ import { sendDiscordSpiritRoll } from "./discord";
 export function createSpiritDiceRouter(
   storage: IStorage,
   broadcaster: SpiritRollBroadcaster,
+  options: {
+    random?: () => number;
+    now?: () => Date;
+  } = {},
 ): Router {
   const router = Router();
 
@@ -99,7 +105,12 @@ export function createSpiritDiceRouter(
         );
       }
 
-      const roll = rollSpiritDie({ currentDice, dieIndex, spInvestment });
+      const roll = rollSpiritDie({
+        currentDice,
+        dieIndex,
+        spInvestment,
+        random: options.random,
+      });
 
       await storage.updateSpiritDiePool(req.params.id, {
         currentDice: roll.newDicePool,
@@ -108,9 +119,11 @@ export function createSpiritDiceRouter(
       if (character) {
         let techniqueName: string | null = null;
         let resolvedTechniqueId: string | null = null;
+        let resolvedTechnique: Technique | undefined;
         if (techniqueId) {
           const technique = await storage.getTechnique(techniqueId);
           if (technique?.characterId === character.id) {
+            resolvedTechnique = technique;
             resolvedTechniqueId = technique.id;
             techniqueName =
               technique.spEffects[String(spInvestment)]?.alternateName ??
@@ -118,14 +131,16 @@ export function createSpiritDiceRouter(
           }
         }
 
-        broadcaster.broadcastSpiritRoll({
-          character: {
-            id: character.id,
-            name: character.name,
-            path: character.path,
-            level: character.level,
-            portraitUrl: character.portraitUrl,
-          },
+        const timestamp = (options.now?.() ?? new Date()).toISOString();
+        const broadcastCharacter = {
+          id: character.id,
+          name: character.name,
+          path: character.path,
+          level: character.level,
+          portraitUrl: character.portraitUrl,
+        };
+        const sourceRollEventId = broadcaster.broadcastSpiritRoll({
+          character: broadcastCharacter,
           roll: {
             spInvestment,
             dieSize: roll.dieRolled,
@@ -134,9 +149,29 @@ export function createSpiritDiceRouter(
             success: roll.success,
             techniqueId: resolvedTechniqueId,
             techniqueName,
-            timestamp: new Date().toISOString(),
+            timestamp,
           },
         });
+
+        if (roll.success && resolvedTechnique) {
+          const tier = resolvedTechnique.spEffects[String(spInvestment)];
+          const mechanics = foundryMechanicsSchema.safeParse(tier?.mechanics);
+          if (mechanics.success) {
+            for (const action of mechanics.data.actions) {
+              broadcaster.broadcastFoundryAction({
+                requestedAt: timestamp,
+                sourceRollEventId,
+                character: broadcastCharacter,
+                technique: {
+                  id: resolvedTechnique.id,
+                  name: resolvedTechnique.name,
+                },
+                spInvestment,
+                action,
+              });
+            }
+          }
+        }
 
         void sendDiscordSpiritRoll({
           characterName: character.name,

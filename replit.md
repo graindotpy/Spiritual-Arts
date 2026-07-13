@@ -14,7 +14,8 @@ The application is deliberately deployable as one Node process:
 - Express exposes the REST API and serves the production client bundle.
 - Drizzle ORM talks to PostgreSQL when `DATABASE_URL` is configured.
 - A complete in-memory adapter supports local development without a database.
-- A WebSocket server broadcasts committed Spirit Die rolls.
+- A WebSocket server broadcasts committed Spirit Die rolls and live Foundry
+  action requests.
 
 ## Project layout
 
@@ -42,6 +43,7 @@ server/
 shared/
   schema.ts                 Drizzle tables, request schemas, shared DTO types
   spirit-dice.ts            Pure Spirit Die domain rules
+  mechanics.ts              Safe Foundry action model and dice grammar
   enhanced-content.ts       Validated rich glossary content model
   realtime.ts               WebSocket message contract
 ```
@@ -141,11 +143,69 @@ live in their respective `features/` directories.
 
 ## Realtime integrations
 
-`/ws` broadcasts committed Spirit Die rolls as live-only events. The server does
-not retain or replay a backlog, so external consumers receive only rolls made
-while they are connected. Each message has a top-level `protocolVersion`, UUID
-`eventId`, `type`, and validated `data` payload. Consumers should reject unknown
-protocol versions and use `eventId` for duplicate suppression.
+`/ws` broadcasts committed Spirit Die rolls as live-only `spirit_die_roll`
+events. After a successful technique roll, it also broadcasts one
+`foundry_action_request` for each action configured on the stored SP tier. The
+server resolves the technique from storage, verifies that it belongs to the
+rolling character, and never accepts mechanics in the roll request itself.
+Failed rolls, ownership mismatches, and tiers without mechanics produce no
+action requests. Spirit Die rolls remain authoritative on the website; the new
+damage and healing rolls are authoritative in Foundry and are not reported back.
+
+Each message has a top-level `protocolVersion`, UUID `eventId`, `type`, and
+validated `data` payload. A Foundry action request uses this version-one shape:
+
+```json
+{
+  "protocolVersion": 1,
+  "eventId": "0b793756-5e97-4bdf-952e-3c897ea31e42",
+  "type": "foundry_action_request",
+  "data": {
+    "requestedAt": "2026-07-13T12:00:01.000Z",
+    "sourceRollEventId": "5c13c52f-f89d-41f5-8816-7d5ac0ab132f",
+    "character": {
+      "id": "2167178a-df9f-4f08-8d94-05b342dfcef1",
+      "name": "R'aan Fames",
+      "path": "Path of Gluttony",
+      "level": 9,
+      "portraitUrl": null
+    },
+    "technique": {
+      "id": "6a4b7b9d-cbf7-4e41-8110-294a9036cfa0",
+      "name": "Devour Essence"
+    },
+    "spInvestment": 2,
+    "action": {
+      "id": "523240f5-7433-4e0b-876c-c209ad3b310a",
+      "kind": "roll_damage",
+      "formula": "2d8 + 4",
+      "damageType": "necrotic",
+      "label": "Devour Essence"
+    }
+  }
+}
+```
+
+Mechanics remain inside the existing JSONB `spEffects` value, so this feature
+does not need a database migration. Version 1 permits at most ten strict damage
+or healing actions per tier. Damage actions require one of the allowlisted
+damage types; healing actions reject a damage type. Action IDs are UUIDs and
+must be unique within the tier. Optional labels are trimmed and limited to 255
+characters. Version 1 damage types are acid, bludgeoning, cold, fire, force,
+lightning, necrotic, piercing, poison, psychic, radiant, slashing, and thunder.
+
+Formulas are raw-length limited to 200 characters and use only unsigned integer
+or `NdM` terms joined by `+` or `-`; unary signs, parentheses, functions,
+modifiers, `@` references, and macros are rejected. There may be at most 50
+terms and 100 total dice. A dice term permits 1-100 dice with 2-1,000 faces, and
+an integer constant may be 0-1,000,000.
+
+The server does not retain or replay a backlog, so consumers receive only events
+sent while they are connected. There are no acknowledgements: the website
+cannot distinguish an offline bridge from a delivered command, and delivery is
+not guaranteed. Consumers should reject unknown versions and use `eventId` for
+duplicate suppression. Website browser clients continue to parse only
+`spirit_die_roll` and silently ignore action events.
 
 ## Commands
 
@@ -202,7 +262,10 @@ The Node test suite covers:
 - Complete memory-storage behavior, deterministic ordering, defensive copying,
   relationship checks, cascades, and level reconciliation.
 - Real Express requests for creation, level changes, strict DTOs, malformed JSON,
-  DM-character isolation/deletion, card-state conflicts, and API 404s.
+  DM-character isolation/deletion, technique-mechanics round trips and
+  rejection, card-state conflicts, and API 404s.
+- Foundry formula/action bounds, strict realtime envelopes, successful stored
+  action broadcasting, failure gating, ownership checks, and distinct event IDs.
 - Upload signature detection, path-traversal prevention, and partial-R2-config
   rejection.
 
@@ -212,6 +275,9 @@ The Node test suite covers:
   identity are local browser IDs, not security boundaries. Do not expose private
   campaign data publicly without adding server-side authentication and ownership
   checks.
+- The WebSocket is a public server-to-client stream. Do not add automatic HP
+  changes or other state-changing Foundry actions until strong authentication
+  and authorization protect both the website commands and their recipients.
 - The card game's DM access code and the main-menu admin toggle are convenience
   UI gates, not authentication or authorization.
 - The main battlefield still resolves a concurrent whole-document conflict by
