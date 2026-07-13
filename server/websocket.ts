@@ -1,6 +1,10 @@
 import type { Server } from "http";
+import { randomUUID } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
-import type { SpiritDieRollBroadcast } from "@shared/realtime";
+import {
+  createSpiritDieRollMessage,
+  type SpiritDieRollBroadcast,
+} from "@shared/realtime";
 
 export interface SpiritRollBroadcaster {
   broadcastSpiritRoll(data: SpiritDieRollBroadcast): void;
@@ -36,10 +40,7 @@ export class SpiritRollWebSocket implements SpiritRollBroadcaster {
   }
 
   broadcastSpiritRoll(data: SpiritDieRollBroadcast): void {
-    const message = JSON.stringify({
-      type: "spirit_die_roll",
-      data,
-    });
+    const message = JSON.stringify(createSpiritDieRollMessage(randomUUID(), data));
 
     this.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 1_000_000) {

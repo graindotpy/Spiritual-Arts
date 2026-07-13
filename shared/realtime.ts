@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { dieSizeSchema } from "./spirit-dice";
 
-const spiritDieRollBroadcastSchema = z.object({
+export const REALTIME_PROTOCOL_VERSION = 1 as const;
+
+export const spiritDieRollBroadcastSchema = z.object({
   character: z.object({
     id: z.string(),
     name: z.string(),
@@ -22,8 +24,23 @@ const spiritDieRollBroadcastSchema = z.object({
 });
 
 export const spiritDieRollMessageSchema = z.object({
+  protocolVersion: z.literal(REALTIME_PROTOCOL_VERSION),
+  eventId: z.string().uuid(),
   type: z.literal("spirit_die_roll"),
   data: spiritDieRollBroadcastSchema,
 });
 
 export type SpiritDieRollBroadcast = z.infer<typeof spiritDieRollBroadcastSchema>;
+export type SpiritDieRollMessage = z.infer<typeof spiritDieRollMessageSchema>;
+
+export function createSpiritDieRollMessage(
+  eventId: string,
+  data: SpiritDieRollBroadcast,
+): SpiritDieRollMessage {
+  return {
+    protocolVersion: REALTIME_PROTOCOL_VERSION,
+    eventId,
+    type: "spirit_die_roll",
+    data,
+  };
+}

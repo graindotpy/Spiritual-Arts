@@ -139,6 +139,14 @@ only removes objects from that namespace; legacy card images in the shared
 The DM page and character-sheet page are composition roots; feature state and UI
 live in their respective `features/` directories.
 
+## Realtime integrations
+
+`/ws` broadcasts committed Spirit Die rolls as live-only events. The server does
+not retain or replay a backlog, so external consumers receive only rolls made
+while they are connected. Each message has a top-level `protocolVersion`, UUID
+`eventId`, `type`, and validated `data` payload. Consumers should reject unknown
+protocol versions and use `eventId` for duplicate suppression.
+
 ## Commands
 
 ```bash
