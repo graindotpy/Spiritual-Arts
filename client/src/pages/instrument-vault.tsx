@@ -79,6 +79,9 @@ export default function InstrumentVault() {
   const [editing, setEditing] = useState<SpiritualInstrumentWithAssignments | null>(null);
   const [draft, setDraft] = useState<InstrumentDraft>(emptyDraft);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [assigning, setAssigning] =
+    useState<SpiritualInstrumentWithAssignments | null>(null);
+  const [assignmentCharacterIds, setAssignmentCharacterIds] = useState<string[]>([]);
   const [expandedInstrument, setExpandedInstrument] =
     useState<SpiritualInstrumentWithAssignments | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -163,6 +166,28 @@ export default function InstrumentVault() {
     onError: () => toast({ title: "Instrument could not be removed", variant: "destructive" }),
   });
 
+  const saveAssignments = useMutation({
+    mutationFn: ({
+      instrumentId,
+      characterIds,
+    }: {
+      instrumentId: string;
+      characterIds: string[];
+    }) =>
+      requestJson<SpiritualInstrumentWithAssignments>(
+        "PUT",
+        `/api/instruments/${instrumentId}/assignments`,
+        { characterIds },
+      ),
+    onSuccess: async () => {
+      await refresh();
+      setAssigning(null);
+      toast({ title: "Instrument assignments updated" });
+    },
+    onError: () =>
+      toast({ title: "Instrument assignments could not be updated", variant: "destructive" }),
+  });
+
   const saveEnhancedContent = useMutation({
     mutationFn: ({
       instrumentId,
@@ -205,6 +230,11 @@ export default function InstrumentVault() {
       characterIds: instrument.characterIds,
     });
     setDialogOpen(true);
+  };
+
+  const openAssignments = (instrument: SpiritualInstrumentWithAssignments) => {
+    setAssigning(instrument);
+    setAssignmentCharacterIds(instrument.characterIds);
   };
 
   const uploadImage = async (file: File) => {
@@ -374,6 +404,7 @@ export default function InstrumentVault() {
                         characters={characters}
                         isDmMode={isDmMode}
                         onOpenContent={() => setExpandedInstrument(instrument)}
+                        onAssign={() => openAssignments(instrument)}
                         onEdit={() => openEdit(instrument)}
                         onDelete={() => {
                           if (confirm(`Remove “${instrument.name}” from the vault?`)) {
@@ -473,6 +504,77 @@ export default function InstrumentVault() {
           </form>
         </CampaignDialogContent>
       </Dialog>
+      <Dialog
+        open={assigning !== null}
+        onOpenChange={(open) => {
+          if (!open && !saveAssignments.isPending) setAssigning(null);
+        }}
+      >
+        <CampaignDialogContent className="max-w-lg">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!assigning) return;
+              saveAssignments.mutate({
+                instrumentId: assigning.id,
+                characterIds: assignmentCharacterIds,
+              });
+            }}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <CampaignDialogHeader
+              icon={Users}
+              eyebrow="Instrument assignment"
+              title={assigning ? `Assign ${assigning.name}` : "Assign instrument"}
+              description="Choose every character currently carrying or bound to this Spiritual Instrument."
+            />
+            <CampaignDialogBody>
+              <div className="wuxia-dialog-section grid gap-2 p-3 sm:grid-cols-2">
+                {characters.map((character) => (
+                  <label
+                    key={character.id}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-[0.3rem] px-2 py-2 text-sm transition-colors hover:bg-white/40 dark:hover:bg-white/[0.04]"
+                  >
+                    <Checkbox
+                      className="wuxia-checkbox"
+                      checked={assignmentCharacterIds.includes(character.id)}
+                      onCheckedChange={(checked) =>
+                        setAssignmentCharacterIds((current) =>
+                          checked === true
+                            ? [...new Set([...current, character.id])]
+                            : current.filter((id) => id !== character.id),
+                        )
+                      }
+                    />
+                    {character.name}
+                  </label>
+                ))}
+                {characters.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No player characters yet.</p>
+                )}
+              </div>
+            </CampaignDialogBody>
+            <CampaignDialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                className="wuxia-secondary-action w-full sm:w-auto"
+                disabled={saveAssignments.isPending}
+                onClick={() => setAssigning(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="wuxia-primary-action w-full sm:w-auto"
+                disabled={saveAssignments.isPending}
+              >
+                {saveAssignments.isPending ? "Saving…" : "Save assignments"}
+              </Button>
+            </CampaignDialogFooter>
+          </form>
+        </CampaignDialogContent>
+      </Dialog>
       {expandedInstrument && (
         <EnhancedContentDialog
           open
@@ -505,6 +607,7 @@ function InstrumentCard({
   characters,
   isDmMode,
   onOpenContent,
+  onAssign,
   onEdit,
   onDelete,
 }: {
@@ -512,6 +615,7 @@ function InstrumentCard({
   characters: Character[];
   isDmMode: boolean;
   onOpenContent: () => void;
+  onAssign: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -554,12 +658,15 @@ function InstrumentCard({
             </span>
           )) : <span className="text-xs italic text-muted-foreground">Unassigned</span>}
         </div>
-        {isDmMode && (
-          <div className="mt-5 flex gap-2 border-t pt-4" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+        <div className="mt-5 flex flex-wrap gap-2 border-t pt-4" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+          <Button size="sm" variant="outline" onClick={onAssign}><Users className="mr-2 h-3.5 w-3.5" /> Assign</Button>
+          {isDmMode && (
+            <>
             <Button size="sm" variant="outline" onClick={onEdit}><Pencil className="mr-2 h-3.5 w-3.5" /> Edit</Button>
             <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}><Trash2 className="mr-2 h-3.5 w-3.5" /> Remove</Button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </article>
   );
