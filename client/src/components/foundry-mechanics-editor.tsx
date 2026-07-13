@@ -102,7 +102,8 @@ export default function FoundryMechanicsEditor({
             Foundry mechanics
           </span>
           <span className="mt-1 block text-xs leading-5 text-[#68736d] dark:text-[#b8aa91]">
-            Runs in Foundry after a successful Spirit Die roll for this tier.
+            Runs in Foundry after a Spirit Die roll for this tier, whether it
+            succeeds or fails.
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">

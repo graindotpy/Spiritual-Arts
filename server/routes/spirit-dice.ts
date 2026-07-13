@@ -153,7 +153,7 @@ export function createSpiritDiceRouter(
           },
         });
 
-        if (roll.success && resolvedTechnique) {
+        if (resolvedTechnique) {
           const tier = resolvedTechnique.spEffects[String(spInvestment)];
           const mechanics = foundryMechanicsSchema.safeParse(tier?.mechanics);
           if (mechanics.success) {

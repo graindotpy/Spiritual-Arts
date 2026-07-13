@@ -144,7 +144,7 @@ live in their respective `features/` directories.
 ## Realtime integrations
 
 `/ws` broadcasts committed Spirit Die rolls as live-only `spirit_die_roll`
-events. After a successful technique roll, it also broadcasts one
+events. After a technique roll, whether it succeeds or fails, it also broadcasts one
 `foundry_action_request` for each action configured on the stored SP tier. The
 server resolves the technique from storage, verifies that it belongs to the
 rolling character, and never accepts mechanics in the roll request itself.

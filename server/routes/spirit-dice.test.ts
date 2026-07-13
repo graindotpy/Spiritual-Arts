@@ -122,7 +122,7 @@ async function roll(
   });
 }
 
-test("a successful technique roll broadcasts each stored action after the Spirit Die event", async () => {
+test("a technique roll broadcasts each stored action after the Spirit Die event", async () => {
   const storage = new MemStorage(null);
   const { character, technique } = await createCharacterWithTechnique(storage);
   const broadcaster = new RecordingBroadcaster();
@@ -152,7 +152,7 @@ test("a successful technique roll broadcasts each stored action after the Spirit
   assert.equal(damage.data.requestedAt, "2026-07-13T12:00:00.000Z");
 });
 
-test("a failed Spirit Die roll broadcasts no Foundry actions", async () => {
+test("a failed Spirit Die roll still broadcasts each stored Foundry action", async () => {
   const storage = new MemStorage(null);
   const { character, technique } = await createCharacterWithTechnique(storage);
   const broadcaster = new RecordingBroadcaster();
@@ -161,10 +161,18 @@ test("a failed Spirit Die roll broadcasts no Foundry actions", async () => {
   const response = await roll(baseUrl, character.id, technique.id);
   assert.equal(response.status, 200);
   assert.equal(broadcaster.spiritRolls[0].data.roll.success, false);
-  assert.deepEqual(broadcaster.foundryActions, []);
+  assert.equal(broadcaster.foundryActions.length, 2);
+  assert.equal(
+    broadcaster.foundryActions[0].data.sourceRollEventId,
+    broadcaster.spiritRolls[0].eventId,
+  );
+  assert.deepEqual(
+    broadcaster.foundryActions.map(({ data }) => data.action),
+    technique.spEffects["2"].mechanics?.actions,
+  );
 });
 
-test("a successful roll for a mechanics-free tier broadcasts no Foundry actions", async () => {
+test("a roll for a mechanics-free tier broadcasts no Foundry actions", async () => {
   const storage = new MemStorage(null);
   const character = await storage.createCharacterWithSpiritDice({
     name: "Legacy",
