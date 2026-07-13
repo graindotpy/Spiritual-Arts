@@ -484,6 +484,8 @@ export default function InstrumentVault() {
           summaryTitle="How it works"
           summary={expandedInstrument.description}
           expandedContent={expandedInstrument.expandedContent}
+          imageUrl={expandedInstrument.imageUrl}
+          imageAlt={expandedInstrument.name}
           icon={Sparkles}
           canEdit={isDmMode}
           onSave={(data) =>

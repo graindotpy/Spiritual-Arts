@@ -36,6 +36,8 @@ interface EnhancedContentDialogProps {
   summaryTitle: string;
   summary: string;
   expandedContent: string | null;
+  imageUrl?: string | null;
+  imageAlt?: string;
   icon?: LucideIcon;
   canEdit?: boolean;
   onSave?: (data: EnhancedContentSaveData) => Promise<unknown>;
@@ -51,6 +53,8 @@ export function EnhancedContentDialog({
   summaryTitle,
   summary,
   expandedContent,
+  imageUrl,
+  imageAlt = "",
   icon: Icon = BookOpen,
   canEdit = false,
   onSave,
@@ -195,6 +199,16 @@ export function EnhancedContentDialog({
         />
 
         <CampaignDialogBody className="space-y-7">
+          {imageUrl && (
+            <div className="wuxia-dialog-section mx-auto flex w-full max-w-2xl justify-center overflow-hidden p-2 sm:p-3">
+              <img
+                src={imageUrl}
+                alt={imageAlt}
+                className="block h-auto max-h-[min(36dvh,20rem)] max-w-full rounded-[0.3rem] object-contain"
+              />
+            </div>
+          )}
+
           <section className="wuxia-dialog-section p-4 sm:p-5" aria-labelledby={`summary-${recordKey}`}>
             <p className="wuxia-dialog-kicker">At a glance</p>
             <h3 id={`summary-${recordKey}`} className="font-display mb-3 text-xl text-[#31594d] dark:text-[#e2ca9b]">
