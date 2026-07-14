@@ -103,7 +103,7 @@ async function createCharacterWithTechnique(
         ),
         actionType: "action",
         mechanics: {
-          version: 3,
+          version: 4,
           actions: [
             {
               id: "523240f5-7433-4e0b-876c-c209ad3b310a",
@@ -125,6 +125,11 @@ async function createCharacterWithTechnique(
               label: "Resist the pull",
               savingThrow: { ability: "str" },
               template: { type: "cone", distance: 15, angle: 53.13 },
+            },
+            {
+              id: "34109839-d482-4ef7-bde4-98ce40d330f2",
+              kind: "roll_attack",
+              label: "Essence strike",
             },
           ],
         },
@@ -160,9 +165,9 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
     broadcaster.spiritRolls[0].data.roll.investmentEffect,
     "Deal damage and restore vitality.",
   );
-  assert.equal(broadcaster.foundryActions.length, 3);
+  assert.equal(broadcaster.foundryActions.length, 4);
 
-  const [damage, healing, savingThrow] = broadcaster.foundryActions;
+  const [damage, healing, savingThrow, attack] = broadcaster.foundryActions;
   assert.equal(
     damage.data.sourceRollEventId,
     broadcaster.spiritRolls[0].eventId,
@@ -175,6 +180,10 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
     savingThrow.data.sourceRollEventId,
     broadcaster.spiritRolls[0].eventId,
   );
+  assert.equal(
+    attack.data.sourceRollEventId,
+    broadcaster.spiritRolls[0].eventId,
+  );
   assert.equal(damage.data.technique.id, technique.id);
   assert.equal(damage.data.character.id, character.id);
   assert.equal(damage.data.character.spiritualArtsDc, 15);
@@ -183,6 +192,8 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
     false,
   );
   assert.equal(savingThrow.data.character.spiritualArtsDc, 15);
+  assert.equal(attack.data.character.spiritualArtsAttackModifier, 7);
+  assert.equal(Object.hasOwn(attack.data.character, "spiritualArtsDc"), false);
   assert.equal(damage.data.spInvestment, 2);
   assert.deepEqual(damage.data.action, technique.spEffects["2"].mechanics?.actions[0]);
   assert.deepEqual(healing.data.action, technique.spEffects["2"].mechanics?.actions[1]);
@@ -190,6 +201,7 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
     savingThrow.data.action,
     technique.spEffects["2"].mechanics?.actions[2],
   );
+  assert.deepEqual(attack.data.action, technique.spEffects["2"].mechanics?.actions[3]);
   assert.notEqual(damage.eventId, healing.eventId);
   assert.equal(damage.data.requestedAt, "2026-07-13T12:00:00.000Z");
 });
@@ -207,7 +219,7 @@ test("a failed Spirit Die roll still broadcasts each stored Foundry action", asy
     broadcaster.spiritRolls[0].data.roll.investmentEffect,
     "Deal damage and restore vitality.",
   );
-  assert.equal(broadcaster.foundryActions.length, 3);
+  assert.equal(broadcaster.foundryActions.length, 4);
   assert.equal(
     broadcaster.foundryActions[0].data.sourceRollEventId,
     broadcaster.spiritRolls[0].eventId,
@@ -218,7 +230,7 @@ test("a failed Spirit Die roll still broadcasts each stored Foundry action", asy
   );
 });
 
-test("Foundry actions report an unavailable DC when the character has not configured it", async () => {
+test("Foundry actions report unavailable derived values when the ability score is missing", async () => {
   const storage = new MemStorage(null);
   const { character, technique } = await createCharacterWithTechnique(storage, null);
   const broadcaster = new RecordingBroadcaster();
@@ -226,9 +238,13 @@ test("Foundry actions report an unavailable DC when the character has not config
 
   const response = await roll(baseUrl, character.id, technique.id);
   assert.equal(response.status, 200);
-  assert.equal(broadcaster.foundryActions.length, 3);
+  assert.equal(broadcaster.foundryActions.length, 4);
   assert.equal(broadcaster.foundryActions[0].data.character.spiritualArtsDc, null);
   assert.equal(broadcaster.foundryActions[2].data.character.spiritualArtsDc, null);
+  assert.equal(
+    broadcaster.foundryActions[3].data.character.spiritualArtsAttackModifier,
+    null,
+  );
 });
 
 test("a roll for a mechanics-free tier broadcasts no Foundry actions", async () => {

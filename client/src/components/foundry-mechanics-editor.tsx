@@ -2,6 +2,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronDown,
+  Crosshair,
   Dice6,
   HeartPulse,
   Plus,
@@ -74,6 +75,8 @@ function actionTitle(action: FoundryAction): string {
       return "Healing roll";
     case "saving_throw":
       return "Saving throw";
+    case "roll_attack":
+      return "Attack roll";
   }
 }
 
@@ -101,6 +104,8 @@ function setSavingThrow(
   action: FoundryAction,
   ability: SavingThrowAbility | undefined,
 ): FoundryAction {
+  if (action.kind === "roll_attack") return action;
+
   if (action.kind === "saving_throw") {
     return {
       ...action,
@@ -135,6 +140,8 @@ function setMeasuredTemplate(
   action: FoundryAction,
   type: FoundryMeasuredTemplate["type"] | undefined,
 ): FoundryAction {
+  if (action.kind === "roll_attack") return action;
+
   const nextAction = { ...action };
   if (type) {
     nextAction.template = createMeasuredTemplate(type);
@@ -148,6 +155,7 @@ function setTemplateDistance(
   action: FoundryAction,
   distance: number,
 ): FoundryAction {
+  if (action.kind === "roll_attack") return action;
   if (!action.template) return action;
   return {
     ...action,
@@ -156,6 +164,7 @@ function setTemplateDistance(
 }
 
 function setConeAngle(action: FoundryAction, angle: number): FoundryAction {
+  if (action.kind === "roll_attack") return action;
   if (action.template?.type !== "cone") return action;
   return {
     ...action,
@@ -164,6 +173,7 @@ function setConeAngle(action: FoundryAction, angle: number): FoundryAction {
 }
 
 function setRayWidth(action: FoundryAction, width: number): FoundryAction {
+  if (action.kind === "roll_attack") return action;
   if (action.template?.type !== "ray") return action;
   return {
     ...action,
@@ -201,7 +211,9 @@ export default function FoundryMechanicsEditor({
 
   const replaceAction = (actionId: string, action: FoundryAction) => {
     setActions(
-      actions.map((candidate) => (candidate.id === actionId ? action : candidate)),
+      actions.map((candidate) =>
+        candidate.id === actionId ? action : candidate,
+      ),
     );
   };
 
@@ -245,8 +257,8 @@ export default function FoundryMechanicsEditor({
               Stored mechanics cannot be edited
             </p>
             <p className="mt-1 text-xs leading-5 text-[#68736d] dark:text-[#b8aa91]">
-              {storedMechanicsError} Saving is blocked until you deliberately discard
-              this unsupported mechanics block.
+              {storedMechanicsError} Saving is blocked until you deliberately
+              discard this unsupported mechanics block.
             </p>
             <Button
               type="button"
@@ -290,8 +302,10 @@ export default function FoundryMechanicsEditor({
                       <Dice6 className="h-4 w-4" />
                     ) : action.kind === "roll_healing" ? (
                       <HeartPulse className="h-4 w-4" />
-                    ) : (
+                    ) : action.kind === "saving_throw" ? (
                       <ShieldCheck className="h-4 w-4" />
+                    ) : (
+                      <Crosshair className="h-4 w-4" />
                     )}
                     {actionTitle(action)} {index + 1}
                   </div>
@@ -332,7 +346,8 @@ export default function FoundryMechanicsEditor({
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {action.kind !== "saving_throw" ? (
+                  {action.kind === "roll_damage" ||
+                  action.kind === "roll_healing" ? (
                     <div>
                       <Label htmlFor={formulaId} className="wuxia-dialog-label">
                         Formula
@@ -350,7 +365,9 @@ export default function FoundryMechanicsEditor({
                         maxLength={200}
                         aria-required="true"
                         aria-invalid={hasErrorAt("formula") || undefined}
-                        aria-describedby={hasErrorAt("formula") ? errorId : undefined}
+                        aria-describedby={
+                          hasErrorAt("formula") ? errorId : undefined
+                        }
                         className="wuxia-dialog-control font-mono"
                       />
                     </div>
@@ -358,7 +375,10 @@ export default function FoundryMechanicsEditor({
 
                   {action.kind === "roll_damage" ? (
                     <div>
-                      <Label htmlFor={damageTypeId} className="wuxia-dialog-label">
+                      <Label
+                        htmlFor={damageTypeId}
+                        className="wuxia-dialog-label"
+                      >
                         Damage type
                       </Label>
                       <Select
@@ -367,7 +387,10 @@ export default function FoundryMechanicsEditor({
                           replaceAction(action.id, { ...action, damageType })
                         }
                       >
-                        <SelectTrigger id={damageTypeId} className="wuxia-dialog-control w-full">
+                        <SelectTrigger
+                          id={damageTypeId}
+                          className="wuxia-dialog-control w-full"
+                        >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="wuxia-select-content">
@@ -383,105 +406,144 @@ export default function FoundryMechanicsEditor({
 
                   <div className="sm:col-span-2">
                     <Label htmlFor={labelId} className="wuxia-dialog-label">
-                      Label <span className="normal-case tracking-normal">(optional)</span>
+                      Label{" "}
+                      <span className="normal-case tracking-normal">
+                        (optional)
+                      </span>
                     </Label>
                     <Input
                       id={labelId}
                       value={action.label ?? ""}
                       onChange={(event) =>
-                        replaceAction(action.id, { ...action, label: event.target.value })
+                        replaceAction(action.id, {
+                          ...action,
+                          label: event.target.value,
+                        })
                       }
                       placeholder="e.g. Devour Essence"
                       maxLength={255}
                       className="wuxia-dialog-control"
                     />
+                    {action.kind === "roll_attack" ? (
+                      <p className="mt-1 text-xs leading-5 text-[#68736d] dark:text-[#b8aa91]">
+                        Rolls 1d20 using the character&apos;s Spiritual Arts attack
+                        modifier in Foundry.
+                      </p>
+                    ) : null}
                   </div>
 
-                  <div>
-                    <Label htmlFor={savingThrowId} className="wuxia-dialog-label">
-                      Saving throw{" "}
-                      {action.kind !== "saving_throw" ? (
-                        <span className="normal-case tracking-normal">(optional)</span>
-                      ) : null}
-                    </Label>
-                    <Select
-                      value={action.savingThrow?.ability ?? "none"}
-                      onValueChange={(value) =>
-                        replaceAction(
-                          action.id,
-                          setSavingThrow(
-                            action,
-                            value === "none"
-                              ? undefined
-                              : (value as SavingThrowAbility),
-                          ),
-                        )
-                      }
-                    >
-                      <SelectTrigger
-                        id={savingThrowId}
-                        aria-required={action.kind === "saving_throw" || undefined}
-                        aria-invalid={hasErrorAt("savingThrow") || undefined}
-                        aria-describedby={hasErrorAt("savingThrow") ? errorId : undefined}
-                        className="wuxia-dialog-control w-full"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="wuxia-select-content">
-                        {action.kind !== "saving_throw" ? (
-                          <SelectItem value="none">None</SelectItem>
-                        ) : null}
-                        {SAVING_THROW_ABILITIES.map((ability) => (
-                          <SelectItem key={ability} value={ability}>
-                            {SAVING_THROW_LABELS[ability]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="mt-1 text-xs leading-5 text-[#68736d] dark:text-[#b8aa91]">
-                      Uses the character&apos;s Spiritual Arts DC in Foundry.
-                    </p>
-                  </div>
+                  {action.kind !== "roll_attack" ? (
+                    <>
+                      <div>
+                        <Label
+                          htmlFor={savingThrowId}
+                          className="wuxia-dialog-label"
+                        >
+                          Saving throw{" "}
+                          {action.kind !== "saving_throw" ? (
+                            <span className="normal-case tracking-normal">
+                              (optional)
+                            </span>
+                          ) : null}
+                        </Label>
+                        <Select
+                          value={action.savingThrow?.ability ?? "none"}
+                          onValueChange={(value) =>
+                            replaceAction(
+                              action.id,
+                              setSavingThrow(
+                                action,
+                                value === "none"
+                                  ? undefined
+                                  : (value as SavingThrowAbility),
+                              ),
+                            )
+                          }
+                        >
+                          <SelectTrigger
+                            id={savingThrowId}
+                            aria-required={
+                              action.kind === "saving_throw" || undefined
+                            }
+                            aria-invalid={
+                              hasErrorAt("savingThrow") || undefined
+                            }
+                            aria-describedby={
+                              hasErrorAt("savingThrow") ? errorId : undefined
+                            }
+                            className="wuxia-dialog-control w-full"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="wuxia-select-content">
+                            {action.kind !== "saving_throw" ? (
+                              <SelectItem value="none">None</SelectItem>
+                            ) : null}
+                            {SAVING_THROW_ABILITIES.map((ability) => (
+                              <SelectItem key={ability} value={ability}>
+                                {SAVING_THROW_LABELS[ability]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="mt-1 text-xs leading-5 text-[#68736d] dark:text-[#b8aa91]">
+                          Uses the character&apos;s Spiritual Arts DC in
+                          Foundry.
+                        </p>
+                      </div>
 
-                  <div>
-                    <Label htmlFor={templateTypeId} className="wuxia-dialog-label">
-                      Measured template{" "}
-                      <span className="normal-case tracking-normal">(optional)</span>
-                    </Label>
-                    <Select
-                      value={action.template?.type ?? "none"}
-                      onValueChange={(value) =>
-                        replaceAction(
-                          action.id,
-                          setMeasuredTemplate(
-                            action,
-                            value === "none"
-                              ? undefined
-                              : (value as FoundryMeasuredTemplate["type"]),
-                          ),
-                        )
-                      }
-                    >
-                      <SelectTrigger
-                        id={templateTypeId}
-                        aria-invalid={hasErrorAt("template", "type") || undefined}
-                        aria-describedby={hasErrorAt("template", "type") ? errorId : undefined}
-                        className="wuxia-dialog-control w-full"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="wuxia-select-content">
-                        <SelectItem value="none">None</SelectItem>
-                        {FOUNDRY_TEMPLATE_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {TEMPLATE_TYPE_LABELS[type]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      <div>
+                        <Label
+                          htmlFor={templateTypeId}
+                          className="wuxia-dialog-label"
+                        >
+                          Measured template{" "}
+                          <span className="normal-case tracking-normal">
+                            (optional)
+                          </span>
+                        </Label>
+                        <Select
+                          value={action.template?.type ?? "none"}
+                          onValueChange={(value) =>
+                            replaceAction(
+                              action.id,
+                              setMeasuredTemplate(
+                                action,
+                                value === "none"
+                                  ? undefined
+                                  : (value as FoundryMeasuredTemplate["type"]),
+                              ),
+                            )
+                          }
+                        >
+                          <SelectTrigger
+                            id={templateTypeId}
+                            aria-invalid={
+                              hasErrorAt("template", "type") || undefined
+                            }
+                            aria-describedby={
+                              hasErrorAt("template", "type")
+                                ? errorId
+                                : undefined
+                            }
+                            className="wuxia-dialog-control w-full"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="wuxia-select-content">
+                            <SelectItem value="none">None</SelectItem>
+                            {FOUNDRY_TEMPLATE_TYPES.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {TEMPLATE_TYPE_LABELS[type]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  ) : null}
 
-                  {action.template ? (
+                  {action.kind !== "roll_attack" && action.template ? (
                     <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
                       <div>
                         <Label
@@ -497,14 +559,21 @@ export default function FoundryMechanicsEditor({
                           max={MAX_FOUNDRY_TEMPLATE_DISTANCE}
                           step="any"
                           value={action.template.distance || ""}
-                          aria-invalid={hasErrorAt("template", "distance") || undefined}
+                          aria-invalid={
+                            hasErrorAt("template", "distance") || undefined
+                          }
                           aria-describedby={
-                            hasErrorAt("template", "distance") ? errorId : undefined
+                            hasErrorAt("template", "distance")
+                              ? errorId
+                              : undefined
                           }
                           onChange={(event) =>
                             replaceAction(
                               action.id,
-                              setTemplateDistance(action, Number(event.target.value)),
+                              setTemplateDistance(
+                                action,
+                                Number(event.target.value),
+                              ),
                             )
                           }
                           className="wuxia-dialog-control"
@@ -526,14 +595,21 @@ export default function FoundryMechanicsEditor({
                             max={MAX_FOUNDRY_TEMPLATE_ANGLE}
                             step="any"
                             value={action.template.angle || ""}
-                            aria-invalid={hasErrorAt("template", "angle") || undefined}
+                            aria-invalid={
+                              hasErrorAt("template", "angle") || undefined
+                            }
                             aria-describedby={
-                              hasErrorAt("template", "angle") ? errorId : undefined
+                              hasErrorAt("template", "angle")
+                                ? errorId
+                                : undefined
                             }
                             onChange={(event) =>
                               replaceAction(
                                 action.id,
-                                setConeAngle(action, Number(event.target.value)),
+                                setConeAngle(
+                                  action,
+                                  Number(event.target.value),
+                                ),
                               )
                             }
                             className="wuxia-dialog-control"
@@ -556,9 +632,13 @@ export default function FoundryMechanicsEditor({
                             max={MAX_FOUNDRY_TEMPLATE_DISTANCE}
                             step="any"
                             value={action.template.width || ""}
-                            aria-invalid={hasErrorAt("template", "width") || undefined}
+                            aria-invalid={
+                              hasErrorAt("template", "width") || undefined
+                            }
                             aria-describedby={
-                              hasErrorAt("template", "width") ? errorId : undefined
+                              hasErrorAt("template", "width")
+                                ? errorId
+                                : undefined
                             }
                             onChange={(event) =>
                               replaceAction(
@@ -589,7 +669,7 @@ export default function FoundryMechanicsEditor({
         )}
 
         {!storedMechanicsError ? (
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <Button
               type="button"
               variant="outline"
@@ -619,6 +699,16 @@ export default function FoundryMechanicsEditor({
             >
               <Plus className="mr-2 h-4 w-4" />
               Add saving throw
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="wuxia-add-row h-10"
+              onClick={() => addAction("roll_attack")}
+              disabled={actions.length >= MAX_FOUNDRY_ACTIONS}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add attack roll
             </Button>
           </div>
         ) : null}

@@ -2,7 +2,8 @@ import { z } from "zod";
 
 export const LEGACY_FOUNDRY_MECHANICS_VERSION = 1 as const;
 export const PREVIOUS_FOUNDRY_MECHANICS_VERSION = 2 as const;
-export const FOUNDRY_MECHANICS_VERSION = 3 as const;
+export const SAVE_ONLY_FOUNDRY_MECHANICS_VERSION = 3 as const;
+export const FOUNDRY_MECHANICS_VERSION = 4 as const;
 export const MAX_FOUNDRY_ACTIONS = 10;
 export const MAX_FOUNDRY_FORMULA_LENGTH = 200;
 export const MAX_FOUNDRY_FORMULA_TERMS = 50;
@@ -174,9 +175,13 @@ const legacyActionBaseShape = {
   label: optionalActionLabelSchema,
 };
 
-const commonActionBaseShape = {
+const actionIdentityShape = {
   id: z.string().uuid(),
   label: optionalActionLabelSchema,
+};
+
+const commonActionBaseShape = {
+  ...actionIdentityShape,
   template: foundryMeasuredTemplateSchema.optional(),
 };
 
@@ -214,10 +219,24 @@ export const savingThrowActionSchema = z
   })
   .strict();
 
+export const rollAttackActionSchema = z
+  .object({
+    ...actionIdentityShape,
+    kind: z.literal("roll_attack"),
+  })
+  .strict();
+
+const preAttackFoundryActionSchema = z.discriminatedUnion("kind", [
+  rollDamageActionSchema,
+  rollHealingActionSchema,
+  savingThrowActionSchema,
+]);
+
 export const foundryActionSchema = z.discriminatedUnion("kind", [
   rollDamageActionSchema,
   rollHealingActionSchema,
   savingThrowActionSchema,
+  rollAttackActionSchema,
 ]);
 
 const legacyFoundryActionSchema = z.discriminatedUnion("kind", [
@@ -269,6 +288,14 @@ const previousFoundryMechanicsSchema = z
   .strict()
   .superRefine(enforceUniqueActionIds);
 
+const saveOnlyFoundryMechanicsSchema = z
+  .object({
+    version: z.literal(SAVE_ONLY_FOUNDRY_MECHANICS_VERSION),
+    actions: z.array(preAttackFoundryActionSchema).max(MAX_FOUNDRY_ACTIONS),
+  })
+  .strict()
+  .superRefine(enforceUniqueActionIds);
+
 const currentFoundryMechanicsSchema = z
   .object({
     version: z.literal(FOUNDRY_MECHANICS_VERSION),
@@ -282,6 +309,7 @@ type CurrentFoundryMechanics = z.infer<typeof currentFoundryMechanicsSchema>;
 export const foundryMechanicsSchema = z
   .union([
     currentFoundryMechanicsSchema,
+    saveOnlyFoundryMechanicsSchema,
     previousFoundryMechanicsSchema,
     legacyFoundryMechanicsSchema,
   ])
@@ -294,6 +322,7 @@ export const foundryMechanicsSchema = z
 
 export type RollDamageAction = z.infer<typeof rollDamageActionSchema>;
 export type RollHealingAction = z.infer<typeof rollHealingActionSchema>;
+export type RollAttackAction = z.infer<typeof rollAttackActionSchema>;
 export type FoundryAction = z.infer<typeof foundryActionSchema>;
 export type SavingThrowAction = z.infer<typeof savingThrowActionSchema>;
 export type FoundryMechanics = z.infer<typeof foundryMechanicsSchema>;

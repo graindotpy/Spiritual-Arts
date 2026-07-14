@@ -138,11 +138,14 @@ test("the realtime server broadcasts each valid Foundry action with a unique eve
     const firstEventId = realtime.broadcastFoundryAction(actionRequest);
     const secondEventId = realtime.broadcastFoundryAction({
       ...actionRequest,
+      character: {
+        ...roll.character,
+        spiritualArtsAttackModifier: 7,
+      },
       action: {
         id: "af51a725-e3a2-40ea-b016-cc7040df091c",
-        kind: "saving_throw",
-        label: "Resist the pull",
-        savingThrow: { ability: "str" },
+        kind: "roll_attack",
+        label: "Essence strike",
       },
     });
 
@@ -151,7 +154,8 @@ test("the realtime server broadcasts each valid Foundry action with a unique eve
     assert.equal(second.eventId, secondEventId);
     assert.notEqual(first.eventId, second.eventId);
     assert.equal(first.data.sourceRollEventId, actionRequest.sourceRollEventId);
-    assert.equal(second.data.action.kind, "saving_throw");
+    assert.equal(second.data.action.kind, "roll_attack");
+    assert.equal(second.data.character.spiritualArtsAttackModifier, 7);
     assert.equal(
       realtime.broadcastFoundryAction({
         ...actionRequest,

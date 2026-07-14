@@ -4,6 +4,8 @@ import { dieSizeSchema } from "./spirit-dice";
 
 export const REALTIME_PROTOCOL_VERSION = 1 as const;
 export const MAX_INVESTMENT_EFFECT_LENGTH = 8_000;
+export const MIN_SPIRITUAL_ARTS_ATTACK_MODIFIER = -3;
+export const MAX_SPIRITUAL_ARTS_ATTACK_MODIFIER = 16;
 
 export const spiritDieRollBroadcastSchema = z.object({
   character: z.object({
@@ -51,6 +53,13 @@ export const foundryActionRequestDataSchema = z
         level: z.number().int().min(1).max(20),
         portraitUrl: z.string().min(1).max(2_048).nullable(),
         spiritualArtsDc: z.number().int().min(1).max(100).nullable().optional(),
+        spiritualArtsAttackModifier: z
+          .number()
+          .int()
+          .min(MIN_SPIRITUAL_ARTS_ATTACK_MODIFIER)
+          .max(MAX_SPIRITUAL_ARTS_ATTACK_MODIFIER)
+          .nullable()
+          .optional(),
       })
       .strict(),
     technique: z
@@ -62,7 +71,26 @@ export const foundryActionRequestDataSchema = z
     spInvestment: z.number().int().positive().max(100),
     action: foundryActionSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((data, context) => {
+    const attackModifier = data.character.spiritualArtsAttackModifier;
+    if (data.action.kind === "roll_attack" && attackModifier === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Attack actions require the derived Spiritual Arts attack modifier",
+        path: ["character", "spiritualArtsAttackModifier"],
+      });
+    } else if (
+      data.action.kind !== "roll_attack" &&
+      attackModifier !== undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only attack actions may include a Spiritual Arts attack modifier",
+        path: ["character", "spiritualArtsAttackModifier"],
+      });
+    }
+  });
 
 export const foundryActionRequestMessageSchema = z
   .object({

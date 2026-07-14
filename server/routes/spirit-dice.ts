@@ -10,7 +10,10 @@ import {
   updateSpiritDiePoolSchema,
 } from "@shared/schema";
 import { canSpiritDieMeetInvestment } from "@shared/spirit-dice";
-import { calculateSpiritualArtsDc } from "@shared/spiritual-arts-dc";
+import {
+  calculateSpiritualArtsAttackModifier,
+  calculateSpiritualArtsDc,
+} from "@shared/spiritual-arts-dc";
 import { richTextContentToPlainText } from "@shared/enhanced-content";
 import { MAX_INVESTMENT_EFFECT_LENGTH } from "@shared/realtime";
 import type { IStorage } from "../storage";
@@ -157,6 +160,11 @@ export function createSpiritDiceRouter(
           character.level,
           character.highestAbilityScore,
         );
+        const spiritualArtsAttackModifier =
+          calculateSpiritualArtsAttackModifier(
+            character.level,
+            character.highestAbilityScore,
+          );
         const sourceRollEventId = broadcaster.broadcastSpiritRoll({
           character: broadcastCharacter,
           roll: {
@@ -182,7 +190,11 @@ export function createSpiritDiceRouter(
                 sourceRollEventId,
                 character: {
                   ...broadcastCharacter,
-                  ...(action.savingThrow ? { spiritualArtsDc } : {}),
+                  ...(action.kind === "roll_attack"
+                    ? { spiritualArtsAttackModifier }
+                    : action.savingThrow
+                      ? { spiritualArtsDc }
+                      : {}),
                 },
                 technique: {
                   id: resolvedTechnique.id,

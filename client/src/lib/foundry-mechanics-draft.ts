@@ -2,6 +2,7 @@ import {
   FOUNDRY_MECHANICS_VERSION,
   foundryMechanicsSchema,
   type FoundryAction,
+  type FoundryMeasuredTemplate,
   type FoundryMechanics,
 } from "@shared/mechanics";
 
@@ -42,12 +43,14 @@ export function createFoundryAction(
       return { id, kind, formula: "1d6" };
     case "saving_throw":
       return { id, kind, savingThrow: { ability: "dex" } };
+    case "roll_attack":
+      return { id, kind };
   }
 }
 
 function cloneFoundryTemplate(
-  template: NonNullable<FoundryAction["template"]>,
-): NonNullable<FoundryAction["template"]> {
+  template: FoundryMeasuredTemplate,
+): FoundryMeasuredTemplate {
   switch (template.type) {
     case "circle":
     case "rectangle":
@@ -68,12 +71,14 @@ function cloneFoundryTemplate(
 }
 
 function cloneFoundryAction(action: FoundryAction): FoundryAction {
+  if (action.kind === "roll_attack") {
+    return { ...action };
+  }
+
   const { savingThrow, template, ...base } = action;
   return {
     ...base,
-    ...(savingThrow
-      ? { savingThrow: { ability: savingThrow.ability } }
-      : {}),
+    ...(savingThrow ? { savingThrow: { ability: savingThrow.ability } } : {}),
     ...(template ? { template: cloneFoundryTemplate(template) } : {}),
   } as FoundryAction;
 }
@@ -91,7 +96,9 @@ export function cloneFoundryMechanicsWithNewActionIds(
   };
 }
 
-export function parseStoredFoundryMechanics(value: unknown): StoredMechanicsDraft {
+export function parseStoredFoundryMechanics(
+  value: unknown,
+): StoredMechanicsDraft {
   if (value === undefined) return {};
   const parsed = foundryMechanicsSchema.safeParse(value);
   if (!parsed.success) {
@@ -118,7 +125,10 @@ export function normalizeFoundryMechanics(
     version: FOUNDRY_MECHANICS_VERSION,
     actions: mechanics.actions.map((action) => {
       const normalized = cloneFoundryAction(action);
-      if (normalized.kind === "saving_throw") {
+      if (
+        normalized.kind === "saving_throw" ||
+        normalized.kind === "roll_attack"
+      ) {
         return {
           ...normalized,
           label: normalized.label?.trim() || undefined,

@@ -150,15 +150,15 @@ server resolves the technique from storage, verifies that it belongs to the
 rolling character, and never accepts mechanics in the roll request itself.
 Ownership mismatches and tiers without mechanics produce no action requests.
 Spirit Die rolls remain authoritative on the website; Foundry remains
-authoritative for configured damage/healing rolls and renders save-only actions
-without making an additional dice roll.
+authoritative for configured attack, damage, and healing rolls and renders
+save-only actions without making an additional dice roll.
 When the roll names a valid character-owned technique, its `spirit_die_roll`
 also carries the selected tier's investment effect as bounded plain text so
 Foundry can show it once in an initially collapsed, expandable section. This
 also applies to tiers without configured Foundry actions.
-Roll out this additive field module-first: the updated Foundry parser accepts
-older website events that omit it, while a pre-update module's strict
-allowlist rejects events containing the new field.
+Roll out realtime additions module-first: the updated Foundry parser accepts
+older website events, while a pre-update module's strict allowlist rejects the
+`investmentEffect` field and the `roll_attack` action kind.
 
 Each message has a top-level `protocolVersion`, UUID `eventId`, `type`, and
 validated `data` payload. A Foundry action request uses this version-one shape:
@@ -198,17 +198,21 @@ validated `data` payload. A Foundry action request uses this version-one shape:
 ```
 
 Mechanics remain inside the existing JSONB `spEffects` value, so this feature
-does not need a database migration. Version 3 permits at most ten strict damage,
-healing, or save-only actions per tier. Damage actions require one of the allowlisted
-damage types; healing actions reject a damage type. Save-only actions require a
-saving throw and reject formula and damage-type fields. Action IDs are UUIDs and
-must be unique within the tier. Optional labels are trimmed and limited to 255
+does not need a database migration. Version 4 permits at most ten strict attack,
+damage, healing, or save-only actions per tier. Damage actions require one of
+the allowlisted damage types; healing actions reject a damage type. Save-only
+actions require a saving throw and reject formula and damage-type fields.
+Attack actions contain only their ID and optional label because their roll is
+always derived as `1d20 + Spiritual Arts attack modifier`; they reject custom
+formulas, saves, damage types, and templates. Action IDs are UUIDs and must be
+unique within the tier. Optional labels are trimmed and limited to 255
 characters. Supported damage types are acid, bludgeoning, cold, fire, force,
 lightning, necrotic, piercing, poison, psychic, radiant, slashing, and thunder.
-Legacy version 1 and 2 blocks remain readable and are normalized to version 3.
-Version 2 introduced saving throws and measured templates on dice rolls; version
-3 adds save-only actions. This means every action contains a dice formula, a
-saving throw, or both; a template alone is not a valid action.
+Legacy version 1, 2, and 3 blocks remain readable and are normalized to version
+4. Version 2 introduced saving throws and measured templates on dice rolls;
+version 3 added save-only actions; version 4 adds Spiritual Arts attack rolls.
+Every action therefore contains a dice formula, a saving throw, or an implicit
+attack d20; a template alone is not a valid action.
 Actions may optionally name a Strength, Dexterity, Constitution, Intelligence,
 Wisdom, or Charisma saving throw and attach one measured template. The server
 derives `spiritualArtsDc` from the rolling character's level and saved highest
@@ -218,6 +222,12 @@ support circles, cones, rectangles, and rays with bounded distances in feet;
 cones also define an angle and rays define a width. These fields inform the
 Foundry chat card and template placement only—they do not select targets,
 resolve saves, or apply damage or healing automatically.
+For attack actions the server derives `spiritualArtsAttackModifier` from the
+same saved ability-score modifier plus the character's level-based proficiency
+bonus. Foundry constructs the d20 formula from that bounded server value rather
+than accepting a client-authored attack formula. A missing saved ability score
+produces an informational unavailable-modifier card instead of an incorrect
+unmodified attack roll.
 
 Formulas are raw-length limited to 200 characters and use only unsigned integer
 or `NdM` terms joined by `+` or `-`; unary signs, parentheses, functions,

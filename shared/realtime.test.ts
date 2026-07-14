@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   createFoundryActionRequestMessage,
   createSpiritDieRollMessage,
+  foundryActionRequestDataSchema,
   foundryActionRequestMessageSchema,
   MAX_INVESTMENT_EFFECT_LENGTH,
   realtimeMessageSchema,
@@ -132,6 +133,60 @@ test("Foundry action requests use a strict version-one envelope", () => {
     }).success,
     true,
   );
+});
+
+test("attack requests require only the derived Spiritual Arts attack modifier", () => {
+  const attackRequest: FoundryActionRequestData = {
+    ...actionRequest,
+    character: {
+      ...roll.character,
+      spiritualArtsAttackModifier: 7,
+    },
+    action: {
+      id: "34109839-d482-4ef7-bde4-98ce40d330f2",
+      kind: "roll_attack",
+      label: "Essence strike",
+    },
+  };
+
+  for (const spiritualArtsAttackModifier of [7, null]) {
+    assert.equal(
+      foundryActionRequestDataSchema.safeParse({
+        ...attackRequest,
+        character: {
+          ...attackRequest.character,
+          spiritualArtsAttackModifier,
+        },
+      }).success,
+      true,
+    );
+  }
+
+  const withoutModifier = structuredClone(attackRequest);
+  delete withoutModifier.character.spiritualArtsAttackModifier;
+  assert.equal(foundryActionRequestDataSchema.safeParse(withoutModifier).success, false);
+  assert.equal(
+    foundryActionRequestDataSchema.safeParse({
+      ...actionRequest,
+      character: {
+        ...actionRequest.character,
+        spiritualArtsAttackModifier: 7,
+      },
+    }).success,
+    false,
+  );
+  for (const spiritualArtsAttackModifier of [-4, 17, 7.5]) {
+    assert.equal(
+      foundryActionRequestDataSchema.safeParse({
+        ...attackRequest,
+        character: {
+          ...attackRequest.character,
+          spiritualArtsAttackModifier,
+        },
+      }).success,
+      false,
+    );
+  }
 });
 
 test("Foundry action requests reject malformed and future envelopes", () => {

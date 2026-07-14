@@ -6,6 +6,17 @@ export function calculateSpiritualArtsDc(
   level: number,
   highestAbilityScore: number | null | undefined,
 ): number | null {
+  const attackModifier = calculateSpiritualArtsAttackModifier(
+    level,
+    highestAbilityScore,
+  );
+  return attackModifier === null ? null : 8 + attackModifier;
+}
+
+export function calculateSpiritualArtsAttackModifier(
+  level: number,
+  highestAbilityScore: number | null | undefined,
+): number | null {
   if (
     !Number.isInteger(level) ||
     level < 1 ||
@@ -19,5 +30,5 @@ export function calculateSpiritualArtsDc(
   }
 
   const abilityModifier = Math.floor((highestAbilityScore - 10) / 2);
-  return 8 + getProficiencyBonusForLevel(level) + abilityModifier;
+  return getProficiencyBonusForLevel(level) + abilityModifier;
 }

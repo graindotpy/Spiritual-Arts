@@ -196,6 +196,37 @@ test("save-only actions require a save and reject dice fields", () => {
   }
 });
 
+test("attack actions use an implicit d20 and reject configurable mechanics", () => {
+  assert.deepEqual(
+    foundryActionSchema.parse({
+      id: ACTION_ID,
+      kind: "roll_attack",
+      label: " Spiritual Arts strike ",
+    }),
+    {
+      id: ACTION_ID,
+      kind: "roll_attack",
+      label: "Spiritual Arts strike",
+    },
+  );
+
+  for (const extra of [
+    { formula: "1d20 + 7" },
+    { damageType: "force" },
+    { savingThrow: { ability: "dex" } },
+    { template: { type: "circle", distance: 5 } },
+  ]) {
+    assert.equal(
+      foundryActionSchema.safeParse({
+        id: ACTION_ID,
+        kind: "roll_attack",
+        ...extra,
+      }).success,
+      false,
+    );
+  }
+});
+
 test("mechanics enforce their version, action count, damage types, and string bounds", () => {
   const actions = Array.from({ length: MAX_FOUNDRY_ACTIONS }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
@@ -228,8 +259,19 @@ test("mechanics enforce their version, action count, damage types, and string bo
   assert.equal(migratedLegacy.version, FOUNDRY_MECHANICS_VERSION);
   const migratedPrevious = foundryMechanicsSchema.parse({ version: 2, actions });
   assert.equal(migratedPrevious.version, FOUNDRY_MECHANICS_VERSION);
+  const migratedSaveOnly = foundryMechanicsSchema.parse({
+    version: 3,
+    actions: [
+      {
+        id: ACTION_ID,
+        kind: "saving_throw",
+        savingThrow: { ability: "dex" },
+      },
+    ],
+  });
+  assert.equal(migratedSaveOnly.version, FOUNDRY_MECHANICS_VERSION);
   assert.equal(
-    foundryMechanicsSchema.safeParse({ version: 4, actions: [] }).success,
+    foundryMechanicsSchema.safeParse({ version: 5, actions: [] }).success,
     false,
   );
   assert.equal(
@@ -257,6 +299,13 @@ test("mechanics enforce their version, action count, damage types, and string bo
           savingThrow: { ability: "dex" },
         },
       ],
+    }).success,
+    false,
+  );
+  assert.equal(
+    foundryMechanicsSchema.safeParse({
+      version: 3,
+      actions: [{ id: ACTION_ID, kind: "roll_attack" }],
     }).success,
     false,
   );
