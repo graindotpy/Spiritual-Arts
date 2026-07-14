@@ -9,6 +9,7 @@ import {
   ListOrdered,
   Plus,
   Settings2,
+  Shapes,
   ShieldCheck,
   Trash2,
 } from "lucide-react";
@@ -89,6 +90,8 @@ function actionTitle(action: FoundryAction): string {
       return "Saving throw";
     case "roll_attack":
       return "Attack roll";
+    case "place_template":
+      return "Measured template";
   }
 }
 
@@ -116,7 +119,9 @@ function setSavingThrow(
   action: FoundryAction,
   ability: SavingThrowAbility | undefined,
 ): FoundryAction {
-  if (action.kind === "roll_attack") return action;
+  if (action.kind === "roll_attack" || action.kind === "place_template") {
+    return action;
+  }
 
   if (action.kind === "saving_throw") {
     return {
@@ -153,6 +158,7 @@ function setMeasuredTemplate(
   type: FoundryMeasuredTemplate["type"] | undefined,
 ): FoundryAction {
   if (action.kind === "roll_attack") return action;
+  if (action.kind === "place_template" && !type) return action;
 
   const nextAction = { ...action };
   if (type) {
@@ -209,6 +215,7 @@ function FoundryActionIcon({
   if (kind === "roll_damage") return <Dice6 className={className} />;
   if (kind === "roll_healing") return <HeartPulse className={className} />;
   if (kind === "saving_throw") return <ShieldCheck className={className} />;
+  if (kind === "place_template") return <Shapes className={className} />;
   return <Crosshair className={className} />;
 }
 
@@ -534,6 +541,9 @@ export default function FoundryMechanicsEditor({
                       <SelectItem value="roll_healing">Healing roll</SelectItem>
                       <SelectItem value="saving_throw">Saving throw</SelectItem>
                       <SelectItem value="roll_attack">Attack roll</SelectItem>
+                      <SelectItem value="place_template">
+                        Measured template
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   {actions.length >= MAX_FOUNDRY_ACTIONS ? (
@@ -739,71 +749,76 @@ export default function FoundryMechanicsEditor({
                       {selectedAction.kind !== "roll_attack" ? (
                         <section className="border-t border-[var(--wuxia-dialog-line)] pt-5">
                           <p className="wuxia-dialog-kicker mb-3">
-                            Save &amp; area
+                            {selectedAction.kind === "place_template"
+                              ? "Template details"
+                              : "Save & area"}
                           </p>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <div>
-                              <Label
-                                htmlFor={savingThrowId}
-                                className="wuxia-dialog-label"
-                              >
-                                Saving throw{" "}
-                                {selectedAction.kind !== "saving_throw" ? (
-                                  <span className="normal-case tracking-normal">
-                                    (optional)
-                                  </span>
-                                ) : null}
-                              </Label>
-                              <Select
-                                value={
-                                  selectedAction.savingThrow?.ability ?? "none"
-                                }
-                                onValueChange={(value) =>
-                                  replaceAction(
-                                    selectedAction.id,
-                                    setSavingThrow(
-                                      selectedAction,
-                                      value === "none"
-                                        ? undefined
-                                        : (value as SavingThrowAbility),
-                                    ),
-                                  )
-                                }
-                              >
-                                <SelectTrigger
-                                  id={savingThrowId}
-                                  aria-required={
-                                    selectedAction.kind === "saving_throw" ||
-                                    undefined
-                                  }
-                                  aria-invalid={
-                                    hasErrorAt("savingThrow") || undefined
-                                  }
-                                  aria-describedby={
-                                    hasErrorAt("savingThrow")
-                                      ? errorId
-                                      : undefined
-                                  }
-                                  className="wuxia-dialog-control w-full"
+                            {selectedAction.kind !== "place_template" ? (
+                              <div>
+                                <Label
+                                  htmlFor={savingThrowId}
+                                  className="wuxia-dialog-label"
                                 >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="wuxia-select-content">
+                                  Saving throw{" "}
                                   {selectedAction.kind !== "saving_throw" ? (
-                                    <SelectItem value="none">None</SelectItem>
+                                    <span className="normal-case tracking-normal">
+                                      (optional)
+                                    </span>
                                   ) : null}
-                                  {SAVING_THROW_ABILITIES.map((ability) => (
-                                    <SelectItem key={ability} value={ability}>
-                                      {SAVING_THROW_LABELS[ability]}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <p className="mt-1 text-xs leading-5 text-[var(--wuxia-dialog-muted)]">
-                                Uses the character&apos;s Spiritual Arts DC in
-                                Foundry.
-                              </p>
-                            </div>
+                                </Label>
+                                <Select
+                                  value={
+                                    selectedAction.savingThrow?.ability ??
+                                    "none"
+                                  }
+                                  onValueChange={(value) =>
+                                    replaceAction(
+                                      selectedAction.id,
+                                      setSavingThrow(
+                                        selectedAction,
+                                        value === "none"
+                                          ? undefined
+                                          : (value as SavingThrowAbility),
+                                      ),
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger
+                                    id={savingThrowId}
+                                    aria-required={
+                                      selectedAction.kind === "saving_throw" ||
+                                      undefined
+                                    }
+                                    aria-invalid={
+                                      hasErrorAt("savingThrow") || undefined
+                                    }
+                                    aria-describedby={
+                                      hasErrorAt("savingThrow")
+                                        ? errorId
+                                        : undefined
+                                    }
+                                    className="wuxia-dialog-control w-full"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="wuxia-select-content">
+                                    {selectedAction.kind !== "saving_throw" ? (
+                                      <SelectItem value="none">None</SelectItem>
+                                    ) : null}
+                                    {SAVING_THROW_ABILITIES.map((ability) => (
+                                      <SelectItem key={ability} value={ability}>
+                                        {SAVING_THROW_LABELS[ability]}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="mt-1 text-xs leading-5 text-[var(--wuxia-dialog-muted)]">
+                                  Uses the character&apos;s Spiritual Arts DC in
+                                  Foundry.
+                                </p>
+                              </div>
+                            ) : null}
 
                             <div>
                               <Label
@@ -811,9 +826,11 @@ export default function FoundryMechanicsEditor({
                                 className="wuxia-dialog-label"
                               >
                                 Measured template{" "}
-                                <span className="normal-case tracking-normal">
-                                  (optional)
-                                </span>
+                                {selectedAction.kind !== "place_template" ? (
+                                  <span className="normal-case tracking-normal">
+                                    (optional)
+                                  </span>
+                                ) : null}
                               </Label>
                               <Select
                                 value={selectedAction.template?.type ?? "none"}
@@ -831,6 +848,10 @@ export default function FoundryMechanicsEditor({
                               >
                                 <SelectTrigger
                                   id={templateTypeId}
+                                  aria-required={
+                                    selectedAction.kind === "place_template" ||
+                                    undefined
+                                  }
                                   aria-invalid={
                                     hasErrorAt("template", "type") || undefined
                                   }
@@ -844,7 +865,9 @@ export default function FoundryMechanicsEditor({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="wuxia-select-content">
-                                  <SelectItem value="none">None</SelectItem>
+                                  {selectedAction.kind !== "place_template" ? (
+                                    <SelectItem value="none">None</SelectItem>
+                                  ) : null}
                                   {FOUNDRY_TEMPLATE_TYPES.map((type) => (
                                     <SelectItem key={type} value={type}>
                                       {TEMPLATE_TYPE_LABELS[type]}
@@ -992,7 +1015,7 @@ export default function FoundryMechanicsEditor({
                     </h3>
                     <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--wuxia-dialog-muted)]">
                       Use the Add action menu to choose a damage, healing,
-                      saving throw, or attack roll.
+                      saving throw, attack roll, or measured template.
                     </p>
                   </div>
                 )}

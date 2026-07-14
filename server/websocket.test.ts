@@ -130,7 +130,7 @@ test("the realtime server broadcasts each valid Foundry action with a unique eve
           return;
         }
         messages.push(parsed.data);
-        if (messages.length === 2) resolve(messages);
+        if (messages.length === 3) resolve(messages);
       });
       client.once("error", reject);
     });
@@ -148,14 +148,28 @@ test("the realtime server broadcasts each valid Foundry action with a unique eve
         label: "Essence strike",
       },
     });
+    const thirdEventId = realtime.broadcastFoundryAction({
+      ...actionRequest,
+      character: { ...roll.character },
+      action: {
+        id: "75ca2097-da4f-4875-98d2-15863caa83b3",
+        kind: "place_template",
+        label: "Difficult terrain",
+        template: { type: "rectangle", distance: 20 },
+      },
+    });
 
-    const [first, second] = await received;
+    const [first, second, third] = await received;
     assert.equal(first.eventId, firstEventId);
     assert.equal(second.eventId, secondEventId);
+    assert.equal(third.eventId, thirdEventId);
     assert.notEqual(first.eventId, second.eventId);
+    assert.notEqual(second.eventId, third.eventId);
     assert.equal(first.data.sourceRollEventId, actionRequest.sourceRollEventId);
     assert.equal(second.data.action.kind, "roll_attack");
     assert.equal(second.data.character.spiritualArtsAttackModifier, 7);
+    assert.equal(third.data.action.kind, "place_template");
+    assert.equal(Object.hasOwn(third.data.character, "spiritualArtsDc"), false);
     assert.equal(
       realtime.broadcastFoundryAction({
         ...actionRequest,

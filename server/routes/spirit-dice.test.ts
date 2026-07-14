@@ -103,7 +103,7 @@ async function createCharacterWithTechnique(
         ),
         actionType: "action",
         mechanics: {
-          version: 4,
+          version: 5,
           actions: [
             {
               id: "523240f5-7433-4e0b-876c-c209ad3b310a",
@@ -130,6 +130,12 @@ async function createCharacterWithTechnique(
               id: "34109839-d482-4ef7-bde4-98ce40d330f2",
               kind: "roll_attack",
               label: "Essence strike",
+            },
+            {
+              id: "75ca2097-da4f-4875-98d2-15863caa83b3",
+              kind: "place_template",
+              label: "Difficult terrain",
+              template: { type: "rectangle", distance: 20 },
             },
           ],
         },
@@ -165,9 +171,10 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
     broadcaster.spiritRolls[0].data.roll.investmentEffect,
     "Deal damage and restore vitality.",
   );
-  assert.equal(broadcaster.foundryActions.length, 4);
+  assert.equal(broadcaster.foundryActions.length, 5);
 
-  const [damage, healing, savingThrow, attack] = broadcaster.foundryActions;
+  const [damage, healing, savingThrow, attack, template] =
+    broadcaster.foundryActions;
   assert.equal(
     damage.data.sourceRollEventId,
     broadcaster.spiritRolls[0].eventId,
@@ -184,6 +191,10 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
     attack.data.sourceRollEventId,
     broadcaster.spiritRolls[0].eventId,
   );
+  assert.equal(
+    template.data.sourceRollEventId,
+    broadcaster.spiritRolls[0].eventId,
+  );
   assert.equal(damage.data.technique.id, technique.id);
   assert.equal(damage.data.character.id, character.id);
   assert.equal(damage.data.character.spiritualArtsDc, 15);
@@ -194,6 +205,11 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
   assert.equal(savingThrow.data.character.spiritualArtsDc, 15);
   assert.equal(attack.data.character.spiritualArtsAttackModifier, 7);
   assert.equal(Object.hasOwn(attack.data.character, "spiritualArtsDc"), false);
+  assert.equal(Object.hasOwn(template.data.character, "spiritualArtsDc"), false);
+  assert.equal(
+    Object.hasOwn(template.data.character, "spiritualArtsAttackModifier"),
+    false,
+  );
   assert.equal(damage.data.spInvestment, 2);
   assert.deepEqual(damage.data.action, technique.spEffects["2"].mechanics?.actions[0]);
   assert.deepEqual(healing.data.action, technique.spEffects["2"].mechanics?.actions[1]);
@@ -202,6 +218,10 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
     technique.spEffects["2"].mechanics?.actions[2],
   );
   assert.deepEqual(attack.data.action, technique.spEffects["2"].mechanics?.actions[3]);
+  assert.deepEqual(
+    template.data.action,
+    technique.spEffects["2"].mechanics?.actions[4],
+  );
   assert.notEqual(damage.eventId, healing.eventId);
   assert.equal(damage.data.requestedAt, "2026-07-13T12:00:00.000Z");
 });
@@ -219,7 +239,7 @@ test("a failed Spirit Die roll still broadcasts each stored Foundry action", asy
     broadcaster.spiritRolls[0].data.roll.investmentEffect,
     "Deal damage and restore vitality.",
   );
-  assert.equal(broadcaster.foundryActions.length, 4);
+  assert.equal(broadcaster.foundryActions.length, 5);
   assert.equal(
     broadcaster.foundryActions[0].data.sourceRollEventId,
     broadcaster.spiritRolls[0].eventId,
@@ -238,7 +258,7 @@ test("Foundry actions report unavailable derived values when the ability score i
 
   const response = await roll(baseUrl, character.id, technique.id);
   assert.equal(response.status, 200);
-  assert.equal(broadcaster.foundryActions.length, 4);
+  assert.equal(broadcaster.foundryActions.length, 5);
   assert.equal(broadcaster.foundryActions[0].data.character.spiritualArtsDc, null);
   assert.equal(broadcaster.foundryActions[2].data.character.spiritualArtsDc, null);
   assert.equal(

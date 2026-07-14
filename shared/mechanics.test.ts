@@ -227,6 +227,47 @@ test("attack actions use an implicit d20 and reject configurable mechanics", () 
   }
 });
 
+test("template-only actions require geometry and reject rolls and saves", () => {
+  assert.deepEqual(
+    foundryActionSchema.parse({
+      id: ACTION_ID,
+      kind: "place_template",
+      label: " Difficult terrain ",
+      template: { type: "rectangle", distance: 20 },
+    }),
+    {
+      id: ACTION_ID,
+      kind: "place_template",
+      label: "Difficult terrain",
+      template: { type: "rectangle", distance: 20 },
+    },
+  );
+
+  for (const invalidAction of [
+    { id: ACTION_ID, kind: "place_template" },
+    {
+      id: ACTION_ID,
+      kind: "place_template",
+      template: { type: "circle", distance: 15 },
+      formula: "1d6",
+    },
+    {
+      id: ACTION_ID,
+      kind: "place_template",
+      template: { type: "circle", distance: 15 },
+      savingThrow: { ability: "dex" },
+    },
+    {
+      id: ACTION_ID,
+      kind: "place_template",
+      template: { type: "circle", distance: 15 },
+      damageType: "force",
+    },
+  ]) {
+    assert.equal(foundryActionSchema.safeParse(invalidAction).success, false);
+  }
+});
+
 test("mechanics enforce their version, action count, damage types, and string bounds", () => {
   const actions = Array.from({ length: MAX_FOUNDRY_ACTIONS }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
@@ -270,8 +311,13 @@ test("mechanics enforce their version, action count, damage types, and string bo
     ],
   });
   assert.equal(migratedSaveOnly.version, FOUNDRY_MECHANICS_VERSION);
+  const migratedAttack = foundryMechanicsSchema.parse({
+    version: 4,
+    actions: [{ id: ACTION_ID, kind: "roll_attack" }],
+  });
+  assert.equal(migratedAttack.version, FOUNDRY_MECHANICS_VERSION);
   assert.equal(
-    foundryMechanicsSchema.safeParse({ version: 5, actions: [] }).success,
+    foundryMechanicsSchema.safeParse({ version: 6, actions: [] }).success,
     false,
   );
   assert.equal(
@@ -306,6 +352,19 @@ test("mechanics enforce their version, action count, damage types, and string bo
     foundryMechanicsSchema.safeParse({
       version: 3,
       actions: [{ id: ACTION_ID, kind: "roll_attack" }],
+    }).success,
+    false,
+  );
+  assert.equal(
+    foundryMechanicsSchema.safeParse({
+      version: 4,
+      actions: [
+        {
+          id: ACTION_ID,
+          kind: "place_template",
+          template: { type: "circle", distance: 15 },
+        },
+      ],
     }).success,
     false,
   );

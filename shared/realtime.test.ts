@@ -189,6 +189,27 @@ test("attack requests require only the derived Spiritual Arts attack modifier", 
   }
 });
 
+test("template-only requests carry geometry without derived roll values", () => {
+  const templateRequest: FoundryActionRequestData = {
+    ...actionRequest,
+    character: { ...roll.character },
+    action: {
+      id: "75ca2097-da4f-4875-98d2-15863caa83b3",
+      kind: "place_template",
+      label: "Difficult terrain",
+      template: { type: "rectangle", distance: 20 },
+    },
+  };
+
+  const parsed = foundryActionRequestDataSchema.parse(templateRequest);
+  assert.deepEqual(parsed.action, templateRequest.action);
+  assert.equal(Object.hasOwn(parsed.character, "spiritualArtsDc"), false);
+  assert.equal(
+    Object.hasOwn(parsed.character, "spiritualArtsAttackModifier"),
+    false,
+  );
+});
+
 test("Foundry action requests reject malformed and future envelopes", () => {
   const valid = createFoundryActionRequestMessage(
     "0b793756-5e97-4bdf-952e-3c897ea31e42",

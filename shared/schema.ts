@@ -40,6 +40,7 @@ export {
 export type { DieSize, SpiritDieSlot, SpiritDieRoll } from "./spirit-dice";
 export {
   DAMAGE_TYPES,
+  ATTACK_FOUNDRY_MECHANICS_VERSION,
   FOUNDRY_TEMPLATE_TYPES,
   FOUNDRY_MECHANICS_VERSION,
   LEGACY_FOUNDRY_MECHANICS_VERSION,
@@ -58,6 +59,7 @@ export {
   rollDamageActionSchema,
   rollHealingActionSchema,
   rollAttackActionSchema,
+  placeTemplateActionSchema,
   savingThrowActionSchema,
   validateFoundryFormula,
 } from "./mechanics";
@@ -70,6 +72,7 @@ export type {
   RollDamageAction,
   RollHealingAction,
   RollAttackAction,
+  PlaceTemplateAction,
   SavingThrowAction,
   SavingThrowAbility,
 } from "./mechanics";

@@ -45,6 +45,8 @@ export function createFoundryAction(
       return { id, kind, savingThrow: { ability: "dex" } };
     case "roll_attack":
       return { id, kind };
+    case "place_template":
+      return { id, kind, template: { type: "circle", distance: 5 } };
   }
 }
 
@@ -73,6 +75,10 @@ function cloneFoundryTemplate(
 function cloneFoundryAction(action: FoundryAction): FoundryAction {
   if (action.kind === "roll_attack") {
     return { ...action };
+  }
+
+  if (action.kind === "place_template") {
+    return { ...action, template: cloneFoundryTemplate(action.template) };
   }
 
   const { savingThrow, template, ...base } = action;
@@ -127,7 +133,8 @@ export function normalizeFoundryMechanics(
       const normalized = cloneFoundryAction(action);
       if (
         normalized.kind === "saving_throw" ||
-        normalized.kind === "roll_attack"
+        normalized.kind === "roll_attack" ||
+        normalized.kind === "place_template"
       ) {
         return {
           ...normalized,

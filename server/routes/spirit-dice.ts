@@ -192,7 +192,7 @@ export function createSpiritDiceRouter(
                   ...broadcastCharacter,
                   ...(action.kind === "roll_attack"
                     ? { spiritualArtsAttackModifier }
-                    : action.savingThrow
+                    : "savingThrow" in action && action.savingThrow
                       ? { spiritualArtsDc }
                       : {}),
                 },
