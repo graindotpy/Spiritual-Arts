@@ -140,8 +140,9 @@ test("the realtime server broadcasts each valid Foundry action with a unique eve
       ...actionRequest,
       action: {
         id: "af51a725-e3a2-40ea-b016-cc7040df091c",
-        kind: "roll_healing",
-        formula: "1d8 + 3",
+        kind: "saving_throw",
+        label: "Resist the pull",
+        savingThrow: { ability: "str" },
       },
     });
 
@@ -150,7 +151,7 @@ test("the realtime server broadcasts each valid Foundry action with a unique eve
     assert.equal(second.eventId, secondEventId);
     assert.notEqual(first.eventId, second.eventId);
     assert.equal(first.data.sourceRollEventId, actionRequest.sourceRollEventId);
-    assert.equal(second.data.action.kind, "roll_healing");
+    assert.equal(second.data.action.kind, "saving_throw");
     assert.equal(
       realtime.broadcastFoundryAction({
         ...actionRequest,

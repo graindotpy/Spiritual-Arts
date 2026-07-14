@@ -5,6 +5,7 @@ import {
   Dice6,
   HeartPulse,
   Plus,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,14 @@ function actionError(action: FoundryAction): ActionValidationError | null {
 }
 
 function actionTitle(action: FoundryAction): string {
-  return action.kind === "roll_damage" ? "Damage roll" : "Healing roll";
+  switch (action.kind) {
+    case "roll_damage":
+      return "Damage roll";
+    case "roll_healing":
+      return "Healing roll";
+    case "saving_throw":
+      return "Saving throw";
+  }
 }
 
 function damageTypeLabel(value: DamageType): string {
@@ -93,6 +101,13 @@ function setSavingThrow(
   action: FoundryAction,
   ability: SavingThrowAbility | undefined,
 ): FoundryAction {
+  if (action.kind === "saving_throw") {
+    return {
+      ...action,
+      savingThrow: { ability: ability ?? action.savingThrow.ability },
+    };
+  }
+
   const nextAction = { ...action };
   if (ability) {
     nextAction.savingThrow = { ability };
@@ -206,15 +221,15 @@ export default function FoundryMechanicsEditor({
             Foundry mechanics
           </span>
           <span className="mt-1 block text-xs leading-5 text-[#68736d] dark:text-[#b8aa91]">
-            Runs in Foundry after a Spirit Die roll for this tier, whether it
-            succeeds or fails.
+            Runs these actions in Foundry after a Spirit Die roll for this tier,
+            whether it succeeds or fails.
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <span className="rounded-sm border border-[#b9aa8f] bg-[#eee5d2]/70 px-2 py-0.5 text-xs font-semibold text-[#526159] dark:border-[#806b48] dark:bg-[#493a25]/60 dark:text-[#cdbb99]">
             {storedMechanicsError
               ? "Needs attention"
-              : `${actions.length} ${actions.length === 1 ? "roll" : "rolls"}`}
+              : `${actions.length} ${actions.length === 1 ? "action" : "actions"}`}
           </span>
           <ChevronDown className="h-4 w-4 text-[#667069] transition-transform group-open:rotate-180 dark:text-[#c5b18d]" />
         </span>
@@ -246,7 +261,7 @@ export default function FoundryMechanicsEditor({
           </div>
         ) : actions.length === 0 ? (
           <div className="rounded-sm border border-dashed border-[#b9aa8f] bg-[#f6efdf]/45 px-3 py-4 text-center text-sm text-[#68736d] dark:border-[#806b48] dark:bg-[#3c3224]/35 dark:text-[#b8aa91]">
-            No Foundry rolls are configured for {tierLabel}.
+            No Foundry actions are configured for {tierLabel}.
           </div>
         ) : (
           actions.map((action, index) => {
@@ -273,8 +288,10 @@ export default function FoundryMechanicsEditor({
                   <div className="flex items-center gap-2 text-sm font-semibold text-[#40564c] dark:text-[#dfc99e]">
                     {action.kind === "roll_damage" ? (
                       <Dice6 className="h-4 w-4" />
-                    ) : (
+                    ) : action.kind === "roll_healing" ? (
                       <HeartPulse className="h-4 w-4" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4" />
                     )}
                     {actionTitle(action)} {index + 1}
                   </div>
@@ -315,24 +332,29 @@ export default function FoundryMechanicsEditor({
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor={formulaId} className="wuxia-dialog-label">
-                      Formula
-                    </Label>
-                    <Input
-                      id={formulaId}
-                      value={action.formula}
-                      onChange={(event) =>
-                        replaceAction(action.id, { ...action, formula: event.target.value })
-                      }
-                      placeholder="2d8 + 4"
-                      maxLength={200}
-                      aria-required="true"
-                      aria-invalid={hasErrorAt("formula") || undefined}
-                      aria-describedby={hasErrorAt("formula") ? errorId : undefined}
-                      className="wuxia-dialog-control font-mono"
-                    />
-                  </div>
+                  {action.kind !== "saving_throw" ? (
+                    <div>
+                      <Label htmlFor={formulaId} className="wuxia-dialog-label">
+                        Formula
+                      </Label>
+                      <Input
+                        id={formulaId}
+                        value={action.formula}
+                        onChange={(event) =>
+                          replaceAction(action.id, {
+                            ...action,
+                            formula: event.target.value,
+                          })
+                        }
+                        placeholder="2d8 + 4"
+                        maxLength={200}
+                        aria-required="true"
+                        aria-invalid={hasErrorAt("formula") || undefined}
+                        aria-describedby={hasErrorAt("formula") ? errorId : undefined}
+                        className="wuxia-dialog-control font-mono"
+                      />
+                    </div>
+                  ) : null}
 
                   {action.kind === "roll_damage" ? (
                     <div>
@@ -378,7 +400,9 @@ export default function FoundryMechanicsEditor({
                   <div>
                     <Label htmlFor={savingThrowId} className="wuxia-dialog-label">
                       Saving throw{" "}
-                      <span className="normal-case tracking-normal">(optional)</span>
+                      {action.kind !== "saving_throw" ? (
+                        <span className="normal-case tracking-normal">(optional)</span>
+                      ) : null}
                     </Label>
                     <Select
                       value={action.savingThrow?.ability ?? "none"}
@@ -396,6 +420,7 @@ export default function FoundryMechanicsEditor({
                     >
                       <SelectTrigger
                         id={savingThrowId}
+                        aria-required={action.kind === "saving_throw" || undefined}
                         aria-invalid={hasErrorAt("savingThrow") || undefined}
                         aria-describedby={hasErrorAt("savingThrow") ? errorId : undefined}
                         className="wuxia-dialog-control w-full"
@@ -403,7 +428,9 @@ export default function FoundryMechanicsEditor({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="wuxia-select-content">
-                        <SelectItem value="none">None</SelectItem>
+                        {action.kind !== "saving_throw" ? (
+                          <SelectItem value="none">None</SelectItem>
+                        ) : null}
                         {SAVING_THROW_ABILITIES.map((ability) => (
                           <SelectItem key={ability} value={ability}>
                             {SAVING_THROW_LABELS[ability]}
@@ -562,7 +589,7 @@ export default function FoundryMechanicsEditor({
         )}
 
         {!storedMechanicsError ? (
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             <Button
               type="button"
               variant="outline"
@@ -583,11 +610,21 @@ export default function FoundryMechanicsEditor({
               <Plus className="mr-2 h-4 w-4" />
               Add healing roll
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="wuxia-add-row h-10"
+              onClick={() => addAction("saving_throw")}
+              disabled={actions.length >= MAX_FOUNDRY_ACTIONS}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add saving throw
+            </Button>
           </div>
         ) : null}
         {!storedMechanicsError && actions.length >= MAX_FOUNDRY_ACTIONS ? (
           <p className="text-xs text-[#68736d] dark:text-[#b8aa91]">
-            This tier has reached the {MAX_FOUNDRY_ACTIONS}-roll limit.
+            This tier has reached the {MAX_FOUNDRY_ACTIONS}-action limit.
           </p>
         ) : null}
       </div>

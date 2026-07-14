@@ -312,6 +312,7 @@ test("technique mechanics round trip while mechanics-free techniques remain vali
   });
   const characterId = String(createdCharacter.body.id);
   const actionId = "523240f5-7433-4e0b-876c-c209ad3b310a";
+  const saveOnlyActionId = "19b956a4-3a17-49f2-bcdc-e156b2fe416f";
 
   const created = await jsonRequest(`/api/character/${characterId}/techniques`, {
     method: "POST",
@@ -324,7 +325,7 @@ test("technique mechanics round trip while mechanics-free techniques remain vali
           effect: "Deal damage.",
           actionType: "action",
           mechanics: {
-            version: 2,
+            version: 3,
             actions: [
               {
                 id: actionId,
@@ -334,6 +335,13 @@ test("technique mechanics round trip while mechanics-free techniques remain vali
                 label: " Devour Essence ",
                 savingThrow: { ability: "dex" },
                 template: { type: "circle", distance: 20 },
+              },
+              {
+                id: saveOnlyActionId,
+                kind: "saving_throw",
+                label: "Resist the pull",
+                savingThrow: { ability: "str" },
+                template: { type: "cone", distance: 15, angle: 53.13 },
               },
             ],
           },
@@ -347,7 +355,7 @@ test("technique mechanics round trip while mechanics-free techniques remain vali
     string,
     { mechanics?: { version: number; actions: Array<Record<string, unknown>> } }
   >;
-  assert.equal(createdEffects["2"].mechanics?.version, 2);
+  assert.equal(createdEffects["2"].mechanics?.version, 3);
   assert.deepEqual(createdEffects["2"].mechanics?.actions[0], {
     id: actionId,
     kind: "roll_damage",
@@ -356,6 +364,13 @@ test("technique mechanics round trip while mechanics-free techniques remain vali
     label: "Devour Essence",
     savingThrow: { ability: "dex" },
     template: { type: "circle", distance: 20 },
+  });
+  assert.deepEqual(createdEffects["2"].mechanics?.actions[1], {
+    id: saveOnlyActionId,
+    kind: "saving_throw",
+    label: "Resist the pull",
+    savingThrow: { ability: "str" },
+    template: { type: "cone", distance: 15, angle: 53.13 },
   });
 
   const listed = await jsonRequest(`/api/character/${characterId}/techniques`);
@@ -405,7 +420,7 @@ test("technique APIs reject malformed Foundry mechanics", async () => {
     damageType: "necrotic",
   };
   const invalidMechanics: unknown[] = [
-    { version: 3, actions: [] },
+    { version: 4, actions: [] },
     { version: 1, actions: [], future: true },
     { version: 1, actions: [{ ...validAction, kind: "run_macro" }] },
     { version: 1, actions: [{ ...validAction, script: "return 42" }] },
@@ -417,6 +432,31 @@ test("technique APIs reject malformed Foundry mechanics", async () => {
     {
       version: 2,
       actions: [{ ...validAction, template: { type: "circle", distance: 0 } }],
+    },
+    {
+      version: 2,
+      actions: [
+        {
+          id: actionId,
+          kind: "saving_throw",
+          savingThrow: { ability: "str" },
+        },
+      ],
+    },
+    {
+      version: 3,
+      actions: [{ id: actionId, kind: "saving_throw" }],
+    },
+    {
+      version: 3,
+      actions: [
+        {
+          id: actionId,
+          kind: "saving_throw",
+          savingThrow: { ability: "str" },
+          formula: "1d20",
+        },
+      ],
     },
     {
       version: 1,

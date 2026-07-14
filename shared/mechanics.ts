@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const LEGACY_FOUNDRY_MECHANICS_VERSION = 1 as const;
-export const FOUNDRY_MECHANICS_VERSION = 2 as const;
+export const PREVIOUS_FOUNDRY_MECHANICS_VERSION = 2 as const;
+export const FOUNDRY_MECHANICS_VERSION = 3 as const;
 export const MAX_FOUNDRY_ACTIONS = 10;
 export const MAX_FOUNDRY_FORMULA_LENGTH = 200;
 export const MAX_FOUNDRY_FORMULA_TERMS = 50;
@@ -173,15 +174,21 @@ const legacyActionBaseShape = {
   label: optionalActionLabelSchema,
 };
 
-const actionBaseShape = {
-  ...legacyActionBaseShape,
-  savingThrow: foundrySavingThrowSchema.optional(),
+const commonActionBaseShape = {
+  id: z.string().uuid(),
+  label: optionalActionLabelSchema,
   template: foundryMeasuredTemplateSchema.optional(),
+};
+
+const rollActionBaseShape = {
+  ...commonActionBaseShape,
+  formula: foundryFormulaSchema,
+  savingThrow: foundrySavingThrowSchema.optional(),
 };
 
 export const rollDamageActionSchema = z
   .object({
-    ...actionBaseShape,
+    ...rollActionBaseShape,
     kind: z.literal("roll_damage"),
     damageType: damageTypeSchema,
   })
@@ -189,14 +196,28 @@ export const rollDamageActionSchema = z
 
 export const rollHealingActionSchema = z
   .object({
-    ...actionBaseShape,
+    ...rollActionBaseShape,
     kind: z.literal("roll_healing"),
+  })
+  .strict();
+
+const rollFoundryActionSchema = z.discriminatedUnion("kind", [
+  rollDamageActionSchema,
+  rollHealingActionSchema,
+]);
+
+export const savingThrowActionSchema = z
+  .object({
+    ...commonActionBaseShape,
+    kind: z.literal("saving_throw"),
+    savingThrow: foundrySavingThrowSchema,
   })
   .strict();
 
 export const foundryActionSchema = z.discriminatedUnion("kind", [
   rollDamageActionSchema,
   rollHealingActionSchema,
+  savingThrowActionSchema,
 ]);
 
 const legacyFoundryActionSchema = z.discriminatedUnion("kind", [
@@ -240,6 +261,14 @@ const legacyFoundryMechanicsSchema = z
   .strict()
   .superRefine(enforceUniqueActionIds);
 
+const previousFoundryMechanicsSchema = z
+  .object({
+    version: z.literal(PREVIOUS_FOUNDRY_MECHANICS_VERSION),
+    actions: z.array(rollFoundryActionSchema).max(MAX_FOUNDRY_ACTIONS),
+  })
+  .strict()
+  .superRefine(enforceUniqueActionIds);
+
 const currentFoundryMechanicsSchema = z
   .object({
     version: z.literal(FOUNDRY_MECHANICS_VERSION),
@@ -251,7 +280,11 @@ const currentFoundryMechanicsSchema = z
 type CurrentFoundryMechanics = z.infer<typeof currentFoundryMechanicsSchema>;
 
 export const foundryMechanicsSchema = z
-  .union([currentFoundryMechanicsSchema, legacyFoundryMechanicsSchema])
+  .union([
+    currentFoundryMechanicsSchema,
+    previousFoundryMechanicsSchema,
+    legacyFoundryMechanicsSchema,
+  ])
   .transform(
     (mechanics): CurrentFoundryMechanics => ({
       version: FOUNDRY_MECHANICS_VERSION,
@@ -262,4 +295,5 @@ export const foundryMechanicsSchema = z
 export type RollDamageAction = z.infer<typeof rollDamageActionSchema>;
 export type RollHealingAction = z.infer<typeof rollHealingActionSchema>;
 export type FoundryAction = z.infer<typeof foundryActionSchema>;
+export type SavingThrowAction = z.infer<typeof savingThrowActionSchema>;
 export type FoundryMechanics = z.infer<typeof foundryMechanicsSchema>;

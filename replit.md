@@ -149,8 +149,9 @@ events. After a technique roll, whether it succeeds or fails, it also broadcasts
 server resolves the technique from storage, verifies that it belongs to the
 rolling character, and never accepts mechanics in the roll request itself.
 Ownership mismatches and tiers without mechanics produce no action requests.
-Spirit Die rolls remain authoritative on the website; the new
-damage and healing rolls are authoritative in Foundry and are not reported back.
+Spirit Die rolls remain authoritative on the website; Foundry remains
+authoritative for configured damage/healing rolls and renders save-only actions
+without making an additional dice roll.
 
 Each message has a top-level `protocolVersion`, UUID `eventId`, `type`, and
 validated `data` payload. A Foundry action request uses this version-one shape:
@@ -190,14 +191,17 @@ validated `data` payload. A Foundry action request uses this version-one shape:
 ```
 
 Mechanics remain inside the existing JSONB `spEffects` value, so this feature
-does not need a database migration. Version 2 permits at most ten strict damage
-or healing actions per tier. Damage actions require one of the allowlisted
-damage types; healing actions reject a damage type. Action IDs are UUIDs and
+does not need a database migration. Version 3 permits at most ten strict damage,
+healing, or save-only actions per tier. Damage actions require one of the allowlisted
+damage types; healing actions reject a damage type. Save-only actions require a
+saving throw and reject formula and damage-type fields. Action IDs are UUIDs and
 must be unique within the tier. Optional labels are trimmed and limited to 255
 characters. Supported damage types are acid, bludgeoning, cold, fire, force,
 lightning, necrotic, piercing, poison, psychic, radiant, slashing, and thunder.
-Legacy version 1 blocks remain readable and are normalized to version 2; only
-version 2 blocks may contain saving throws or measured templates.
+Legacy version 1 and 2 blocks remain readable and are normalized to version 3.
+Version 2 introduced saving throws and measured templates on dice rolls; version
+3 adds save-only actions. This means every action contains a dice formula, a
+saving throw, or both; a template alone is not a valid action.
 Actions may optionally name a Strength, Dexterity, Constitution, Intelligence,
 Wisdom, or Charisma saving throw and attach one measured template. The server
 derives `spiritualArtsDc` from the rolling character's level and saved highest

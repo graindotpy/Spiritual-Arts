@@ -43,6 +43,7 @@ export {
   FOUNDRY_TEMPLATE_TYPES,
   FOUNDRY_MECHANICS_VERSION,
   LEGACY_FOUNDRY_MECHANICS_VERSION,
+  PREVIOUS_FOUNDRY_MECHANICS_VERSION,
   MAX_FOUNDRY_ACTIONS,
   MAX_FOUNDRY_TEMPLATE_ANGLE,
   MAX_FOUNDRY_TEMPLATE_DISTANCE,
@@ -55,6 +56,7 @@ export {
   foundrySavingThrowSchema,
   rollDamageActionSchema,
   rollHealingActionSchema,
+  savingThrowActionSchema,
   validateFoundryFormula,
 } from "./mechanics";
 export type {
@@ -65,6 +67,7 @@ export type {
   FoundrySavingThrow,
   RollDamageAction,
   RollHealingAction,
+  SavingThrowAction,
   SavingThrowAbility,
 } from "./mechanics";
 

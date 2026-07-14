@@ -35,10 +35,14 @@ export function createFoundryAction(
   kind: FoundryAction["kind"],
   id: string = createUuid(),
 ): FoundryAction {
-  const base = { id, formula: "1d6" };
-  return kind === "roll_damage"
-    ? { ...base, kind, damageType: "force" }
-    : { ...base, kind };
+  switch (kind) {
+    case "roll_damage":
+      return { id, kind, formula: "1d6", damageType: "force" };
+    case "roll_healing":
+      return { id, kind, formula: "1d6" };
+    case "saving_throw":
+      return { id, kind, savingThrow: { ability: "dex" } };
+  }
 }
 
 function cloneFoundryTemplate(
@@ -114,10 +118,16 @@ export function normalizeFoundryMechanics(
     version: FOUNDRY_MECHANICS_VERSION,
     actions: mechanics.actions.map((action) => {
       const normalized = cloneFoundryAction(action);
+      if (normalized.kind === "saving_throw") {
+        return {
+          ...normalized,
+          label: normalized.label?.trim() || undefined,
+        };
+      }
       return {
         ...normalized,
-        formula: action.formula.trim(),
-        label: action.label?.trim() || undefined,
+        formula: normalized.formula.trim(),
+        label: normalized.label?.trim() || undefined,
       };
     }),
   };

@@ -161,6 +161,41 @@ test("actions accept bounded saving throws and measured templates", () => {
   }
 });
 
+test("save-only actions require a save and reject dice fields", () => {
+  const action = foundryActionSchema.parse({
+    id: ACTION_ID,
+    kind: "saving_throw",
+    label: "Resist the push",
+    savingThrow: { ability: "str" },
+    template: { type: "cone", distance: 15, angle: 53.13 },
+  });
+  assert.deepEqual(action, {
+    id: ACTION_ID,
+    kind: "saving_throw",
+    label: "Resist the push",
+    savingThrow: { ability: "str" },
+    template: { type: "cone", distance: 15, angle: 53.13 },
+  });
+
+  for (const invalidAction of [
+    { id: ACTION_ID, kind: "saving_throw" },
+    {
+      id: ACTION_ID,
+      kind: "saving_throw",
+      savingThrow: { ability: "dex" },
+      formula: "1d20",
+    },
+    {
+      id: ACTION_ID,
+      kind: "saving_throw",
+      savingThrow: { ability: "dex" },
+      damageType: "force",
+    },
+  ]) {
+    assert.equal(foundryActionSchema.safeParse(invalidAction).success, false);
+  }
+});
+
 test("mechanics enforce their version, action count, damage types, and string bounds", () => {
   const actions = Array.from({ length: MAX_FOUNDRY_ACTIONS }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
@@ -191,8 +226,10 @@ test("mechanics enforce their version, action count, damage types, and string bo
   );
   const migratedLegacy = foundryMechanicsSchema.parse({ version: 1, actions });
   assert.equal(migratedLegacy.version, FOUNDRY_MECHANICS_VERSION);
+  const migratedPrevious = foundryMechanicsSchema.parse({ version: 2, actions });
+  assert.equal(migratedPrevious.version, FOUNDRY_MECHANICS_VERSION);
   assert.equal(
-    foundryMechanicsSchema.safeParse({ version: 3, actions: [] }).success,
+    foundryMechanicsSchema.safeParse({ version: 4, actions: [] }).success,
     false,
   );
   assert.equal(
@@ -207,6 +244,19 @@ test("mechanics enforce their version, action count, damage types, and string bo
     foundryMechanicsSchema.safeParse({
       version: 1,
       actions: [{ ...actions[0], savingThrow: { ability: "dex" } }],
+    }).success,
+    false,
+  );
+  assert.equal(
+    foundryMechanicsSchema.safeParse({
+      version: 2,
+      actions: [
+        {
+          id: ACTION_ID,
+          kind: "saving_throw",
+          savingThrow: { ability: "dex" },
+        },
+      ],
     }).success,
     false,
   );
