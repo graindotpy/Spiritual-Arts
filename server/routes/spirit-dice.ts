@@ -11,6 +11,8 @@ import {
 } from "@shared/schema";
 import { canSpiritDieMeetInvestment } from "@shared/spirit-dice";
 import { calculateSpiritualArtsDc } from "@shared/spiritual-arts-dc";
+import { richTextContentToPlainText } from "@shared/enhanced-content";
+import { MAX_INVESTMENT_EFFECT_LENGTH } from "@shared/realtime";
 import type { IStorage } from "../storage";
 import type { SpiritRollBroadcaster } from "../websocket";
 import { asyncHandler } from "../http/async-handler";
@@ -121,14 +123,25 @@ export function createSpiritDiceRouter(
         let techniqueName: string | null = null;
         let resolvedTechniqueId: string | null = null;
         let resolvedTechnique: Technique | undefined;
+        let investmentEffect: string | undefined;
         if (techniqueId) {
           const technique = await storage.getTechnique(techniqueId);
           if (technique?.characterId === character.id) {
             resolvedTechnique = technique;
             resolvedTechniqueId = technique.id;
-            techniqueName =
-              technique.spEffects[String(spInvestment)]?.alternateName ??
-              technique.name;
+            const tier = technique.spEffects[String(spInvestment)];
+            techniqueName = tier?.alternateName ?? technique.name;
+            const effectText = tier
+              ? richTextContentToPlainText(tier.effect).trim()
+              : "";
+            if (effectText) {
+              investmentEffect =
+                effectText.length > MAX_INVESTMENT_EFFECT_LENGTH
+                  ? `${effectText
+                      .slice(0, MAX_INVESTMENT_EFFECT_LENGTH - 1)
+                      .trimEnd()}…`
+                  : effectText;
+            }
           }
         }
 
@@ -154,6 +167,7 @@ export function createSpiritDiceRouter(
             success: roll.success,
             techniqueId: resolvedTechniqueId,
             techniqueName,
+            ...(investmentEffect ? { investmentEffect } : {}),
             timestamp,
           },
         });

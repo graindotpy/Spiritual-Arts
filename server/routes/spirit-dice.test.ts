@@ -4,10 +4,15 @@ import type { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
 import { afterEach, test } from "node:test";
 import express from "express";
+import {
+  createRichTextDocument,
+  serializeRichTextContent,
+} from "@shared/enhanced-content";
 import type {
   FoundryActionRequestData,
   SpiritDieRollBroadcast,
 } from "@shared/realtime";
+import { MAX_INVESTMENT_EFFECT_LENGTH } from "@shared/realtime";
 import { apiErrorHandler } from "../http/errors";
 import { MemStorage } from "../storage/memory-storage";
 import type { SpiritRollBroadcaster } from "../websocket";
@@ -88,8 +93,14 @@ async function createCharacterWithTechnique(
     name: "Devour Essence",
     triggerDescription: "Consume a defeated foe.",
     spEffects: {
+      "1": {
+        effect: "This lower-tier effect must not be broadcast for a 2 SP cast.",
+        actionType: "bonus",
+      },
       "2": {
-        effect: "Deal damage and restore vitality.",
+        effect: serializeRichTextContent(
+          createRichTextDocument("Deal damage and restore vitality."),
+        ),
         actionType: "action",
         mechanics: {
           version: 3,
@@ -145,6 +156,10 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
   assert.equal(response.status, 200);
   assert.equal(broadcaster.spiritRolls.length, 1);
   assert.equal(broadcaster.spiritRolls[0].data.roll.success, true);
+  assert.equal(
+    broadcaster.spiritRolls[0].data.roll.investmentEffect,
+    "Deal damage and restore vitality.",
+  );
   assert.equal(broadcaster.foundryActions.length, 3);
 
   const [damage, healing, savingThrow] = broadcaster.foundryActions;
@@ -188,6 +203,10 @@ test("a failed Spirit Die roll still broadcasts each stored Foundry action", asy
   const response = await roll(baseUrl, character.id, technique.id);
   assert.equal(response.status, 200);
   assert.equal(broadcaster.spiritRolls[0].data.roll.success, false);
+  assert.equal(
+    broadcaster.spiritRolls[0].data.roll.investmentEffect,
+    "Deal damage and restore vitality.",
+  );
   assert.equal(broadcaster.foundryActions.length, 3);
   assert.equal(
     broadcaster.foundryActions[0].data.sourceRollEventId,
@@ -214,6 +233,7 @@ test("Foundry actions report an unavailable DC when the character has not config
 
 test("a roll for a mechanics-free tier broadcasts no Foundry actions", async () => {
   const storage = new MemStorage(null);
+  const longEffect = `Effect. ${"x".repeat(MAX_INVESTMENT_EFFECT_LENGTH)}`;
   const character = await storage.createCharacterWithSpiritDice({
     name: "Legacy",
     path: "Legacy Path",
@@ -224,7 +244,7 @@ test("a roll for a mechanics-free tier broadcasts no Foundry actions", async () 
     name: "Legacy Technique",
     triggerDescription: "Trigger.",
     spEffects: {
-      "2": { effect: "Effect.", actionType: "action" },
+      "2": { effect: longEffect, actionType: "action" },
     },
   });
   const broadcaster = new RecordingBroadcaster();
@@ -233,6 +253,10 @@ test("a roll for a mechanics-free tier broadcasts no Foundry actions", async () 
   const response = await roll(baseUrl, character.id, technique.id);
   assert.equal(response.status, 200);
   assert.equal(broadcaster.spiritRolls[0].data.roll.success, true);
+  assert.equal(
+    broadcaster.spiritRolls[0].data.roll.investmentEffect,
+    `${longEffect.slice(0, MAX_INVESTMENT_EFFECT_LENGTH - 1)}…`,
+  );
   assert.deepEqual(broadcaster.foundryActions, []);
 });
 
@@ -254,6 +278,10 @@ test("a technique owned by another character cannot trigger Foundry actions", as
   );
   assert.equal(response.status, 200);
   assert.equal(broadcaster.spiritRolls[0].data.roll.techniqueId, null);
+  assert.equal(
+    Object.hasOwn(broadcaster.spiritRolls[0].data.roll, "investmentEffect"),
+    false,
+  );
   assert.deepEqual(broadcaster.foundryActions, []);
 });
 

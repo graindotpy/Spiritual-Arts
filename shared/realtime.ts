@@ -3,6 +3,7 @@ import { foundryActionSchema } from "./mechanics";
 import { dieSizeSchema } from "./spirit-dice";
 
 export const REALTIME_PROTOCOL_VERSION = 1 as const;
+export const MAX_INVESTMENT_EFFECT_LENGTH = 8_000;
 
 export const spiritDieRollBroadcastSchema = z.object({
   character: z.object({
@@ -20,6 +21,13 @@ export const spiritDieRollBroadcastSchema = z.object({
     success: z.boolean(),
     techniqueId: z.string().uuid().nullable().optional(),
     techniqueName: z.string().trim().min(1).max(255).nullable().optional(),
+    investmentEffect: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_INVESTMENT_EFFECT_LENGTH)
+      .nullable()
+      .optional(),
     timestamp: z.string().datetime(),
   }),
 });

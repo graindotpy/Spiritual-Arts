@@ -152,6 +152,13 @@ Ownership mismatches and tiers without mechanics produce no action requests.
 Spirit Die rolls remain authoritative on the website; Foundry remains
 authoritative for configured damage/healing rolls and renders save-only actions
 without making an additional dice roll.
+When the roll names a valid character-owned technique, its `spirit_die_roll`
+also carries the selected tier's investment effect as bounded plain text so
+Foundry can show it once in an initially collapsed, expandable section. This
+also applies to tiers without configured Foundry actions.
+Roll out this additive field module-first: the updated Foundry parser accepts
+older website events that omit it, while a pre-update module's strict
+allowlist rejects events containing the new field.
 
 Each message has a top-level `protocolVersion`, UUID `eventId`, `type`, and
 validated `data` payload. A Foundry action request uses this version-one shape:

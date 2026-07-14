@@ -4,6 +4,7 @@ import {
   createFoundryActionRequestMessage,
   createSpiritDieRollMessage,
   foundryActionRequestMessageSchema,
+  MAX_INVESTMENT_EFFECT_LENGTH,
   realtimeMessageSchema,
   REALTIME_PROTOCOL_VERSION,
   spiritDieRollMessageSchema,
@@ -27,6 +28,7 @@ const roll: SpiritDieRollBroadcast = {
     success: true,
     techniqueId: null,
     techniqueName: "Devour Essence",
+    investmentEffect: "Deal damage and restore vitality.",
     timestamp: "2026-07-13T12:00:00.000Z",
   },
 };
@@ -63,6 +65,10 @@ test("Spirit Die broadcasts include stable bridge metadata", () => {
   assert.equal(message.type, "spirit_die_roll");
   assert.deepEqual(message.data, roll);
   assert.equal(spiritDieRollMessageSchema.safeParse(message).success, true);
+
+  const legacy = structuredClone(message);
+  delete legacy.data.roll.investmentEffect;
+  assert.equal(spiritDieRollMessageSchema.safeParse(legacy).success, true);
 });
 
 test("Spirit Die broadcasts reject invalid event identifiers and protocol versions", () => {
@@ -85,6 +91,22 @@ test("Spirit Die broadcasts reject invalid event identifiers and protocol versio
     }).success,
     false,
   );
+
+  for (const investmentEffect of ["", "x".repeat(MAX_INVESTMENT_EFFECT_LENGTH + 1)]) {
+    assert.equal(
+      spiritDieRollMessageSchema.safeParse({
+        ...createSpiritDieRollMessage(
+          "5c13c52f-f89d-41f5-8816-7d5ac0ab132f",
+          roll,
+        ),
+        data: {
+          ...roll,
+          roll: { ...roll.roll, investmentEffect },
+        },
+      }).success,
+      false,
+    );
+  }
 });
 
 test("Foundry action requests use a strict version-one envelope", () => {
