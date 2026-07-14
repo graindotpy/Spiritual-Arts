@@ -73,11 +73,15 @@ async function startRollServer(
   return `http://127.0.0.1:${address.port}`;
 }
 
-async function createCharacterWithTechnique(storage: MemStorage) {
+async function createCharacterWithTechnique(
+  storage: MemStorage,
+  highestAbilityScore: number | null = 18,
+) {
   const character = await storage.createCharacterWithSpiritDice({
     name: "Raan",
     path: "Path of Gluttony",
     level: 8,
+    highestAbilityScore,
   });
   const technique = await storage.createTechnique({
     characterId: character.id,
@@ -88,7 +92,7 @@ async function createCharacterWithTechnique(storage: MemStorage) {
         effect: "Deal damage and restore vitality.",
         actionType: "action",
         mechanics: {
-          version: 1,
+          version: 2,
           actions: [
             {
               id: "523240f5-7433-4e0b-876c-c209ad3b310a",
@@ -96,6 +100,8 @@ async function createCharacterWithTechnique(storage: MemStorage) {
               formula: "2d8 + 4",
               damageType: "necrotic",
               label: "Essence damage",
+              savingThrow: { ability: "dex" },
+              template: { type: "circle", distance: 20 },
             },
             {
               id: "af51a725-e3a2-40ea-b016-cc7040df091c",
@@ -145,6 +151,11 @@ test("a technique roll broadcasts each stored action after the Spirit Die event"
   );
   assert.equal(damage.data.technique.id, technique.id);
   assert.equal(damage.data.character.id, character.id);
+  assert.equal(damage.data.character.spiritualArtsDc, 15);
+  assert.equal(
+    Object.hasOwn(healing.data.character, "spiritualArtsDc"),
+    false,
+  );
   assert.equal(damage.data.spInvestment, 2);
   assert.deepEqual(damage.data.action, technique.spEffects["2"].mechanics?.actions[0]);
   assert.deepEqual(healing.data.action, technique.spEffects["2"].mechanics?.actions[1]);
@@ -170,6 +181,18 @@ test("a failed Spirit Die roll still broadcasts each stored Foundry action", asy
     broadcaster.foundryActions.map(({ data }) => data.action),
     technique.spEffects["2"].mechanics?.actions,
   );
+});
+
+test("Foundry actions report an unavailable DC when the character has not configured it", async () => {
+  const storage = new MemStorage(null);
+  const { character, technique } = await createCharacterWithTechnique(storage, null);
+  const broadcaster = new RecordingBroadcaster();
+  const baseUrl = await startRollServer(storage, broadcaster, () => 0.99);
+
+  const response = await roll(baseUrl, character.id, technique.id);
+  assert.equal(response.status, 200);
+  assert.equal(broadcaster.foundryActions.length, 2);
+  assert.equal(broadcaster.foundryActions[0].data.character.spiritualArtsDc, null);
 });
 
 test("a roll for a mechanics-free tier broadcasts no Foundry actions", async () => {

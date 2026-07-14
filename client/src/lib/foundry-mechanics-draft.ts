@@ -41,6 +41,39 @@ export function createFoundryAction(
     : { ...base, kind };
 }
 
+function cloneFoundryTemplate(
+  template: NonNullable<FoundryAction["template"]>,
+): NonNullable<FoundryAction["template"]> {
+  switch (template.type) {
+    case "circle":
+    case "rectangle":
+      return { type: template.type, distance: template.distance };
+    case "cone":
+      return {
+        type: template.type,
+        distance: template.distance,
+        angle: template.angle,
+      };
+    case "ray":
+      return {
+        type: template.type,
+        distance: template.distance,
+        width: template.width,
+      };
+  }
+}
+
+function cloneFoundryAction(action: FoundryAction): FoundryAction {
+  const { savingThrow, template, ...base } = action;
+  return {
+    ...base,
+    ...(savingThrow
+      ? { savingThrow: { ability: savingThrow.ability } }
+      : {}),
+    ...(template ? { template: cloneFoundryTemplate(template) } : {}),
+  } as FoundryAction;
+}
+
 export function cloneFoundryMechanicsWithNewActionIds(
   mechanics: FoundryMechanics,
   createId: () => string = createUuid,
@@ -48,7 +81,7 @@ export function cloneFoundryMechanicsWithNewActionIds(
   return {
     ...mechanics,
     actions: mechanics.actions.map((action) => ({
-      ...action,
+      ...cloneFoundryAction(action),
       id: createId(),
     })),
   };
@@ -68,7 +101,7 @@ export function parseStoredFoundryMechanics(value: unknown): StoredMechanicsDraf
   return {
     mechanics: {
       ...parsed.data,
-      actions: parsed.data.actions.map((action) => ({ ...action })),
+      actions: parsed.data.actions.map(cloneFoundryAction),
     },
   };
 }
@@ -79,11 +112,14 @@ export function normalizeFoundryMechanics(
   if (!mechanics || mechanics.actions.length === 0) return undefined;
   return {
     version: FOUNDRY_MECHANICS_VERSION,
-    actions: mechanics.actions.map((action) => ({
-      ...action,
-      formula: action.formula.trim(),
-      label: action.label?.trim() || undefined,
-    })),
+    actions: mechanics.actions.map((action) => {
+      const normalized = cloneFoundryAction(action);
+      return {
+        ...normalized,
+        formula: action.formula.trim(),
+        label: action.label?.trim() || undefined,
+      };
+    }),
   };
 }
 

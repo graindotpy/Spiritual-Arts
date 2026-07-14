@@ -34,7 +34,10 @@ const roll: SpiritDieRollBroadcast = {
 const actionRequest: FoundryActionRequestData = {
   requestedAt: "2026-07-13T12:00:01.000Z",
   sourceRollEventId: "5c13c52f-f89d-41f5-8816-7d5ac0ab132f",
-  character: roll.character,
+  character: {
+    ...roll.character,
+    spiritualArtsDc: 15,
+  },
   technique: {
     id: "6a4b7b9d-cbf7-4e41-8110-294a9036cfa0",
     name: "Devour Essence",
@@ -46,6 +49,8 @@ const actionRequest: FoundryActionRequestData = {
     formula: "2d8 + 4",
     damageType: "necrotic",
     label: "Devour Essence",
+    savingThrow: { ability: "dex" },
+    template: { type: "circle", distance: 20 },
   },
 };
 
@@ -93,6 +98,18 @@ test("Foundry action requests use a strict version-one envelope", () => {
   assert.equal(foundryActionRequestMessageSchema.safeParse(message).success, true);
   assert.equal(realtimeMessageSchema.safeParse(message).success, true);
   assert.equal(spiritDieRollMessageSchema.safeParse(message).success, false);
+
+  const legacyActionRequest = structuredClone(actionRequest);
+  delete legacyActionRequest.character.spiritualArtsDc;
+  delete legacyActionRequest.action.savingThrow;
+  delete legacyActionRequest.action.template;
+  assert.equal(
+    foundryActionRequestMessageSchema.safeParse({
+      ...message,
+      data: legacyActionRequest,
+    }).success,
+    true,
+  );
 });
 
 test("Foundry action requests reject malformed and future envelopes", () => {
@@ -117,6 +134,23 @@ test("Foundry action requests reject malformed and future envelopes", () => {
       data: {
         ...valid.data,
         action: { ...valid.data.action, formula: "@abilities.str.mod" },
+      },
+    },
+    {
+      ...valid,
+      data: {
+        ...valid.data,
+        character: { ...valid.data.character, spiritualArtsDc: 10.5 },
+      },
+    },
+    {
+      ...valid,
+      data: {
+        ...valid.data,
+        action: {
+          ...valid.data.action,
+          template: { type: "circle", distance: -20 },
+        },
       },
     },
   ];

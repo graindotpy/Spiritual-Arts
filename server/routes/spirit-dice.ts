@@ -10,6 +10,7 @@ import {
   updateSpiritDiePoolSchema,
 } from "@shared/schema";
 import { canSpiritDieMeetInvestment } from "@shared/spirit-dice";
+import { calculateSpiritualArtsDc } from "@shared/spiritual-arts-dc";
 import type { IStorage } from "../storage";
 import type { SpiritRollBroadcaster } from "../websocket";
 import { asyncHandler } from "../http/async-handler";
@@ -139,6 +140,10 @@ export function createSpiritDiceRouter(
           level: character.level,
           portraitUrl: character.portraitUrl,
         };
+        const spiritualArtsDc = calculateSpiritualArtsDc(
+          character.level,
+          character.highestAbilityScore,
+        );
         const sourceRollEventId = broadcaster.broadcastSpiritRoll({
           character: broadcastCharacter,
           roll: {
@@ -161,7 +166,10 @@ export function createSpiritDiceRouter(
               broadcaster.broadcastFoundryAction({
                 requestedAt: timestamp,
                 sourceRollEventId,
-                character: broadcastCharacter,
+                character: {
+                  ...broadcastCharacter,
+                  ...(action.savingThrow ? { spiritualArtsDc } : {}),
+                },
                 technique: {
                   id: resolvedTechnique.id,
                   name: resolvedTechnique.name,

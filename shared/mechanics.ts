@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const FOUNDRY_MECHANICS_VERSION = 1 as const;
+export const LEGACY_FOUNDRY_MECHANICS_VERSION = 1 as const;
+export const FOUNDRY_MECHANICS_VERSION = 2 as const;
 export const MAX_FOUNDRY_ACTIONS = 10;
 export const MAX_FOUNDRY_FORMULA_LENGTH = 200;
 export const MAX_FOUNDRY_FORMULA_TERMS = 50;
@@ -25,8 +26,74 @@ export const DAMAGE_TYPES = [
   "thunder",
 ] as const;
 
+export const SAVING_THROW_ABILITIES = [
+  "str",
+  "dex",
+  "con",
+  "int",
+  "wis",
+  "cha",
+] as const;
+
+export const FOUNDRY_TEMPLATE_TYPES = [
+  "circle",
+  "cone",
+  "rectangle",
+  "ray",
+] as const;
+
+export const MAX_FOUNDRY_TEMPLATE_DISTANCE = 1_000;
+export const MAX_FOUNDRY_TEMPLATE_ANGLE = 360;
+
 export const damageTypeSchema = z.enum(DAMAGE_TYPES);
 export type DamageType = z.infer<typeof damageTypeSchema>;
+export const savingThrowAbilitySchema = z.enum(SAVING_THROW_ABILITIES);
+export type SavingThrowAbility = z.infer<typeof savingThrowAbilitySchema>;
+
+export const foundrySavingThrowSchema = z
+  .object({
+    ability: savingThrowAbilitySchema,
+  })
+  .strict();
+
+const templateDistanceSchema = z
+  .number()
+  .positive()
+  .max(MAX_FOUNDRY_TEMPLATE_DISTANCE);
+
+export const foundryMeasuredTemplateSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("circle"),
+      distance: templateDistanceSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("cone"),
+      distance: templateDistanceSchema,
+      angle: z.number().positive().max(MAX_FOUNDRY_TEMPLATE_ANGLE),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("rectangle"),
+      distance: templateDistanceSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ray"),
+      distance: templateDistanceSchema,
+      width: templateDistanceSchema,
+    })
+    .strict(),
+]);
+
+export type FoundrySavingThrow = z.infer<typeof foundrySavingThrowSchema>;
+export type FoundryMeasuredTemplate = z.infer<
+  typeof foundryMeasuredTemplateSchema
+>;
 
 const FORMULA_GRAMMAR =
   /^(?:\d+[dD]\d+|\d+)(?:\s*[+-]\s*(?:\d+[dD]\d+|\d+))*$/;
@@ -100,10 +167,16 @@ const optionalActionLabelSchema = z.preprocess(
   z.string().trim().min(1).max(255).optional(),
 );
 
-const actionBaseShape = {
+const legacyActionBaseShape = {
   id: z.string().uuid(),
   formula: foundryFormulaSchema,
   label: optionalActionLabelSchema,
+};
+
+const actionBaseShape = {
+  ...legacyActionBaseShape,
+  savingThrow: foundrySavingThrowSchema.optional(),
+  template: foundryMeasuredTemplateSchema.optional(),
 };
 
 export const rollDamageActionSchema = z
@@ -126,25 +199,65 @@ export const foundryActionSchema = z.discriminatedUnion("kind", [
   rollHealingActionSchema,
 ]);
 
-export const foundryMechanicsSchema = z
+const legacyFoundryActionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...legacyActionBaseShape,
+      kind: z.literal("roll_damage"),
+      damageType: damageTypeSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...legacyActionBaseShape,
+      kind: z.literal("roll_healing"),
+    })
+    .strict(),
+]);
+
+function enforceUniqueActionIds(
+  { actions }: { actions: Array<{ id: string }> },
+  context: z.RefinementCtx,
+): void {
+  const seen = new Set<string>();
+  actions.forEach((action, index) => {
+    if (seen.has(action.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Action IDs must be unique within an SP tier",
+        path: ["actions", index, "id"],
+      });
+    }
+    seen.add(action.id);
+  });
+}
+
+const legacyFoundryMechanicsSchema = z
+  .object({
+    version: z.literal(LEGACY_FOUNDRY_MECHANICS_VERSION),
+    actions: z.array(legacyFoundryActionSchema).max(MAX_FOUNDRY_ACTIONS),
+  })
+  .strict()
+  .superRefine(enforceUniqueActionIds);
+
+const currentFoundryMechanicsSchema = z
   .object({
     version: z.literal(FOUNDRY_MECHANICS_VERSION),
     actions: z.array(foundryActionSchema).max(MAX_FOUNDRY_ACTIONS),
   })
   .strict()
-  .superRefine(({ actions }, context) => {
-    const seen = new Set<string>();
-    actions.forEach((action, index) => {
-      if (seen.has(action.id)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Action IDs must be unique within an SP tier",
-          path: ["actions", index, "id"],
-        });
-      }
-      seen.add(action.id);
-    });
-  });
+  .superRefine(enforceUniqueActionIds);
+
+type CurrentFoundryMechanics = z.infer<typeof currentFoundryMechanicsSchema>;
+
+export const foundryMechanicsSchema = z
+  .union([currentFoundryMechanicsSchema, legacyFoundryMechanicsSchema])
+  .transform(
+    (mechanics): CurrentFoundryMechanics => ({
+      version: FOUNDRY_MECHANICS_VERSION,
+      actions: mechanics.actions,
+    }),
+  );
 
 export type RollDamageAction = z.infer<typeof rollDamageActionSchema>;
 export type RollHealingAction = z.infer<typeof rollHealingActionSchema>;

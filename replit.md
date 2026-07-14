@@ -148,8 +148,8 @@ events. After a technique roll, whether it succeeds or fails, it also broadcasts
 `foundry_action_request` for each action configured on the stored SP tier. The
 server resolves the technique from storage, verifies that it belongs to the
 rolling character, and never accepts mechanics in the roll request itself.
-Failed rolls, ownership mismatches, and tiers without mechanics produce no
-action requests. Spirit Die rolls remain authoritative on the website; the new
+Ownership mismatches and tiers without mechanics produce no action requests.
+Spirit Die rolls remain authoritative on the website; the new
 damage and healing rolls are authoritative in Foundry and are not reported back.
 
 Each message has a top-level `protocolVersion`, UUID `eventId`, `type`, and
@@ -168,7 +168,8 @@ validated `data` payload. A Foundry action request uses this version-one shape:
       "name": "R'aan Fames",
       "path": "Path of Gluttony",
       "level": 9,
-      "portraitUrl": null
+      "portraitUrl": null,
+      "spiritualArtsDc": 16
     },
     "technique": {
       "id": "6a4b7b9d-cbf7-4e41-8110-294a9036cfa0",
@@ -180,19 +181,32 @@ validated `data` payload. A Foundry action request uses this version-one shape:
       "kind": "roll_damage",
       "formula": "2d8 + 4",
       "damageType": "necrotic",
-      "label": "Devour Essence"
+      "label": "Devour Essence",
+      "savingThrow": { "ability": "dex" },
+      "template": { "type": "circle", "distance": 20 }
     }
   }
 }
 ```
 
 Mechanics remain inside the existing JSONB `spEffects` value, so this feature
-does not need a database migration. Version 1 permits at most ten strict damage
+does not need a database migration. Version 2 permits at most ten strict damage
 or healing actions per tier. Damage actions require one of the allowlisted
 damage types; healing actions reject a damage type. Action IDs are UUIDs and
 must be unique within the tier. Optional labels are trimmed and limited to 255
-characters. Version 1 damage types are acid, bludgeoning, cold, fire, force,
+characters. Supported damage types are acid, bludgeoning, cold, fire, force,
 lightning, necrotic, piercing, poison, psychic, radiant, slashing, and thunder.
+Legacy version 1 blocks remain readable and are normalized to version 2; only
+version 2 blocks may contain saving throws or measured templates.
+Actions may optionally name a Strength, Dexterity, Constitution, Intelligence,
+Wisdom, or Charisma saving throw and attach one measured template. The server
+derives `spiritualArtsDc` from the rolling character's level and saved highest
+ability score whenever an action names a save; it is `null` when that score has
+not been configured and is omitted from actions without saves. Templates
+support circles, cones, rectangles, and rays with bounded distances in feet;
+cones also define an angle and rays define a width. These fields inform the
+Foundry chat card and template placement only—they do not select targets,
+resolve saves, or apply damage or healing automatically.
 
 Formulas are raw-length limited to 200 characters and use only unsigned integer
 or `NdM` terms joined by `+` or `-`; unary signs, parentheses, functions,

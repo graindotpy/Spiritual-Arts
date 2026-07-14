@@ -10,6 +10,10 @@ import {
   CampaignDialogFooter,
   CampaignDialogHeader,
 } from "@/components/campaign-dialog";
+import {
+  calculateSpiritualArtsDc,
+  getProficiencyBonusForLevel,
+} from "@shared/spiritual-arts-dc";
 
 interface SpiritualArtsDcCalculatorProps {
   level: number;
@@ -32,8 +36,8 @@ export function SpiritualArtsDcCalculator({
   }, [highestAbilityScore]);
 
   const abilityModifier = abilityScore === null ? null : Math.floor((abilityScore - 10) / 2);
-  const proficiencyBonus = 2 + Math.floor((level - 1) / 4);
-  const dc = abilityModifier === null ? null : 8 + proficiencyBonus + abilityModifier;
+  const proficiencyBonus = getProficiencyBonusForLevel(level);
+  const dc = calculateSpiritualArtsDc(level, abilityScore);
   const parsedScore = Number(scoreInput);
   const isValidScore = Number.isInteger(parsedScore) && parsedScore >= 1 && parsedScore <= 30;
 

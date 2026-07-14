@@ -19,12 +19,18 @@ import {
 } from "@/components/ui/select";
 import {
   DAMAGE_TYPES,
+  FOUNDRY_TEMPLATE_TYPES,
   FOUNDRY_MECHANICS_VERSION,
   MAX_FOUNDRY_ACTIONS,
+  MAX_FOUNDRY_TEMPLATE_ANGLE,
+  MAX_FOUNDRY_TEMPLATE_DISTANCE,
+  SAVING_THROW_ABILITIES,
   foundryActionSchema,
   type DamageType,
   type FoundryAction,
+  type FoundryMeasuredTemplate,
   type FoundryMechanics,
+  type SavingThrowAbility,
 } from "@shared/mechanics";
 import {
   createFoundryAction,
@@ -40,14 +46,23 @@ interface FoundryMechanicsEditorProps {
   onDiscardStoredMechanics: () => void;
 }
 
-function actionError(action: FoundryAction): string | null {
+interface ActionValidationError {
+  message: string;
+  path: PropertyKey[];
+}
+
+function actionError(action: FoundryAction): ActionValidationError | null {
   const normalized = normalizeFoundryMechanics({
     version: FOUNDRY_MECHANICS_VERSION,
     actions: [action],
   });
   const parsed = foundryActionSchema.safeParse(normalized?.actions[0]);
   if (parsed.success) return null;
-  return parsed.error.issues[0]?.message ?? "Check this Foundry action";
+  const issue = parsed.error.issues[0];
+  return {
+    message: issue?.message ?? "Check this Foundry action",
+    path: issue?.path ?? [],
+  };
 }
 
 function actionTitle(action: FoundryAction): string {
@@ -56,6 +71,95 @@ function actionTitle(action: FoundryAction): string {
 
 function damageTypeLabel(value: DamageType): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+const SAVING_THROW_LABELS: Record<SavingThrowAbility, string> = {
+  str: "Strength",
+  dex: "Dexterity",
+  con: "Constitution",
+  int: "Intelligence",
+  wis: "Wisdom",
+  cha: "Charisma",
+};
+
+const TEMPLATE_TYPE_LABELS: Record<FoundryMeasuredTemplate["type"], string> = {
+  circle: "Circle",
+  cone: "Cone",
+  rectangle: "Rectangle",
+  ray: "Ray",
+};
+
+function setSavingThrow(
+  action: FoundryAction,
+  ability: SavingThrowAbility | undefined,
+): FoundryAction {
+  const nextAction = { ...action };
+  if (ability) {
+    nextAction.savingThrow = { ability };
+  } else {
+    delete nextAction.savingThrow;
+  }
+  return nextAction;
+}
+
+function createMeasuredTemplate(
+  type: FoundryMeasuredTemplate["type"],
+): FoundryMeasuredTemplate {
+  switch (type) {
+    case "circle":
+    case "rectangle":
+      return { type, distance: 5 };
+    case "cone":
+      return { type, distance: 5, angle: 53 };
+    case "ray":
+      return { type, distance: 5, width: 5 };
+  }
+}
+
+function setMeasuredTemplate(
+  action: FoundryAction,
+  type: FoundryMeasuredTemplate["type"] | undefined,
+): FoundryAction {
+  const nextAction = { ...action };
+  if (type) {
+    nextAction.template = createMeasuredTemplate(type);
+  } else {
+    delete nextAction.template;
+  }
+  return nextAction;
+}
+
+function setTemplateDistance(
+  action: FoundryAction,
+  distance: number,
+): FoundryAction {
+  if (!action.template) return action;
+  return {
+    ...action,
+    template: { ...action.template, distance },
+  };
+}
+
+function setConeAngle(action: FoundryAction, angle: number): FoundryAction {
+  if (action.template?.type !== "cone") return action;
+  return {
+    ...action,
+    template: { ...action.template, angle },
+  };
+}
+
+function setRayWidth(action: FoundryAction, width: number): FoundryAction {
+  if (action.template?.type !== "ray") return action;
+  return {
+    ...action,
+    template: { ...action.template, width },
+  };
+}
+
+function templateDistanceLabel(type: FoundryMeasuredTemplate["type"]): string {
+  if (type === "circle") return "Radius (feet)";
+  if (type === "rectangle") return "Size (feet)";
+  return "Length (feet)";
 }
 
 export default function FoundryMechanicsEditor({
@@ -149,7 +253,16 @@ export default function FoundryMechanicsEditor({
             const formulaId = `foundry-formula-${action.id}`;
             const damageTypeId = `foundry-damage-type-${action.id}`;
             const labelId = `foundry-label-${action.id}`;
+            const savingThrowId = `foundry-saving-throw-${action.id}`;
+            const templateTypeId = `foundry-template-type-${action.id}`;
+            const templateDistanceId = `foundry-template-distance-${action.id}`;
+            const templateAngleId = `foundry-template-angle-${action.id}`;
+            const templateWidthId = `foundry-template-width-${action.id}`;
             const error = actionError(action);
+            const errorId = `foundry-action-error-${action.id}`;
+            const hasErrorAt = (field: string, nestedField?: string) =>
+              error?.path[0] === field &&
+              (nestedField === undefined || error.path[1] === nestedField);
 
             return (
               <div
@@ -215,8 +328,8 @@ export default function FoundryMechanicsEditor({
                       placeholder="2d8 + 4"
                       maxLength={200}
                       aria-required="true"
-                      aria-invalid={error ? true : undefined}
-                      aria-describedby={error ? `${formulaId}-error` : undefined}
+                      aria-invalid={hasErrorAt("formula") || undefined}
+                      aria-describedby={hasErrorAt("formula") ? errorId : undefined}
                       className="wuxia-dialog-control font-mono"
                     />
                   </div>
@@ -261,15 +374,186 @@ export default function FoundryMechanicsEditor({
                       className="wuxia-dialog-control"
                     />
                   </div>
+
+                  <div>
+                    <Label htmlFor={savingThrowId} className="wuxia-dialog-label">
+                      Saving throw{" "}
+                      <span className="normal-case tracking-normal">(optional)</span>
+                    </Label>
+                    <Select
+                      value={action.savingThrow?.ability ?? "none"}
+                      onValueChange={(value) =>
+                        replaceAction(
+                          action.id,
+                          setSavingThrow(
+                            action,
+                            value === "none"
+                              ? undefined
+                              : (value as SavingThrowAbility),
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger
+                        id={savingThrowId}
+                        aria-invalid={hasErrorAt("savingThrow") || undefined}
+                        aria-describedby={hasErrorAt("savingThrow") ? errorId : undefined}
+                        className="wuxia-dialog-control w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="wuxia-select-content">
+                        <SelectItem value="none">None</SelectItem>
+                        {SAVING_THROW_ABILITIES.map((ability) => (
+                          <SelectItem key={ability} value={ability}>
+                            {SAVING_THROW_LABELS[ability]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs leading-5 text-[#68736d] dark:text-[#b8aa91]">
+                      Uses the character&apos;s Spiritual Arts DC in Foundry.
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor={templateTypeId} className="wuxia-dialog-label">
+                      Measured template{" "}
+                      <span className="normal-case tracking-normal">(optional)</span>
+                    </Label>
+                    <Select
+                      value={action.template?.type ?? "none"}
+                      onValueChange={(value) =>
+                        replaceAction(
+                          action.id,
+                          setMeasuredTemplate(
+                            action,
+                            value === "none"
+                              ? undefined
+                              : (value as FoundryMeasuredTemplate["type"]),
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger
+                        id={templateTypeId}
+                        aria-invalid={hasErrorAt("template", "type") || undefined}
+                        aria-describedby={hasErrorAt("template", "type") ? errorId : undefined}
+                        className="wuxia-dialog-control w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="wuxia-select-content">
+                        <SelectItem value="none">None</SelectItem>
+                        {FOUNDRY_TEMPLATE_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {TEMPLATE_TYPE_LABELS[type]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {action.template ? (
+                    <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+                      <div>
+                        <Label
+                          htmlFor={templateDistanceId}
+                          className="wuxia-dialog-label"
+                        >
+                          {templateDistanceLabel(action.template.type)}
+                        </Label>
+                        <Input
+                          id={templateDistanceId}
+                          type="number"
+                          min={1}
+                          max={MAX_FOUNDRY_TEMPLATE_DISTANCE}
+                          step="any"
+                          value={action.template.distance || ""}
+                          aria-invalid={hasErrorAt("template", "distance") || undefined}
+                          aria-describedby={
+                            hasErrorAt("template", "distance") ? errorId : undefined
+                          }
+                          onChange={(event) =>
+                            replaceAction(
+                              action.id,
+                              setTemplateDistance(action, Number(event.target.value)),
+                            )
+                          }
+                          className="wuxia-dialog-control"
+                        />
+                      </div>
+
+                      {action.template.type === "cone" ? (
+                        <div>
+                          <Label
+                            htmlFor={templateAngleId}
+                            className="wuxia-dialog-label"
+                          >
+                            Angle (degrees)
+                          </Label>
+                          <Input
+                            id={templateAngleId}
+                            type="number"
+                            min={1}
+                            max={MAX_FOUNDRY_TEMPLATE_ANGLE}
+                            step="any"
+                            value={action.template.angle || ""}
+                            aria-invalid={hasErrorAt("template", "angle") || undefined}
+                            aria-describedby={
+                              hasErrorAt("template", "angle") ? errorId : undefined
+                            }
+                            onChange={(event) =>
+                              replaceAction(
+                                action.id,
+                                setConeAngle(action, Number(event.target.value)),
+                              )
+                            }
+                            className="wuxia-dialog-control"
+                          />
+                        </div>
+                      ) : null}
+
+                      {action.template.type === "ray" ? (
+                        <div>
+                          <Label
+                            htmlFor={templateWidthId}
+                            className="wuxia-dialog-label"
+                          >
+                            Width (feet)
+                          </Label>
+                          <Input
+                            id={templateWidthId}
+                            type="number"
+                            min={1}
+                            max={MAX_FOUNDRY_TEMPLATE_DISTANCE}
+                            step="any"
+                            value={action.template.width || ""}
+                            aria-invalid={hasErrorAt("template", "width") || undefined}
+                            aria-describedby={
+                              hasErrorAt("template", "width") ? errorId : undefined
+                            }
+                            onChange={(event) =>
+                              replaceAction(
+                                action.id,
+                                setRayWidth(action, Number(event.target.value)),
+                              )
+                            }
+                            className="wuxia-dialog-control"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
                 {error ? (
                   <p
-                    id={`${formulaId}-error`}
+                    id={errorId}
                     className="mt-2 text-xs font-medium text-destructive"
                     role="alert"
                   >
-                    {error}
+                    {error.message}
                   </p>
                 ) : null}
               </div>

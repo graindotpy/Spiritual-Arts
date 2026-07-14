@@ -42,6 +42,7 @@ export const foundryActionRequestDataSchema = z
         path: z.string().trim().min(1).max(255),
         level: z.number().int().min(1).max(20),
         portraitUrl: z.string().min(1).max(2_048).nullable(),
+        spiritualArtsDc: z.number().int().min(1).max(100).nullable().optional(),
       })
       .strict(),
     technique: z

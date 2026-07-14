@@ -37,7 +37,10 @@ const roll: SpiritDieRollBroadcast = {
 const actionRequest: FoundryActionRequestData = {
   requestedAt: "2026-07-13T12:00:01.000Z",
   sourceRollEventId: "5c13c52f-f89d-41f5-8816-7d5ac0ab132f",
-  character: roll.character,
+  character: {
+    ...roll.character,
+    spiritualArtsDc: 15,
+  },
   technique: {
     id: "6a4b7b9d-cbf7-4e41-8110-294a9036cfa0",
     name: "Devour Essence",
@@ -48,6 +51,8 @@ const actionRequest: FoundryActionRequestData = {
     kind: "roll_damage",
     formula: "2d8 + 4",
     damageType: "necrotic",
+    savingThrow: { ability: "dex" },
+    template: { type: "circle", distance: 20 },
   },
 };
 

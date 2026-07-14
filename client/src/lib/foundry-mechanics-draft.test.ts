@@ -14,7 +14,7 @@ const HEALING_ID = "af51a725-e3a2-40ea-b016-cc7040df091c";
 
 test("mechanics drafts preserve stable IDs and normalize submission strings", () => {
   const stored = {
-    version: 1 as const,
+    version: 2 as const,
     actions: [
       {
         id: DAMAGE_ID,
@@ -22,6 +22,8 @@ test("mechanics drafts preserve stable IDs and normalize submission strings", ()
         formula: " 2d8 + 4 ",
         damageType: "necrotic" as const,
         label: " Essence damage ",
+        savingThrow: { ability: "dex" as const },
+        template: { type: "cone" as const, distance: 20, angle: 53 },
       },
       {
         id: HEALING_ID,
@@ -36,12 +38,17 @@ test("mechanics drafts preserve stable IDs and normalize submission strings", ()
   assert.equal(parsed.error, undefined);
   assert.notEqual(parsed.mechanics, stored);
   assert.notEqual(parsed.mechanics?.actions, stored.actions);
+  assert.notEqual(
+    parsed.mechanics?.actions[0].savingThrow,
+    stored.actions[0].savingThrow,
+  );
+  assert.notEqual(parsed.mechanics?.actions[0].template, stored.actions[0].template);
   assert.deepEqual(
     parsed.mechanics?.actions.map((action) => action.id),
     [DAMAGE_ID, HEALING_ID],
   );
   assert.deepEqual(normalizeFoundryMechanics(parsed.mechanics), {
-    version: 1,
+    version: 2,
     actions: [
       {
         id: DAMAGE_ID,
@@ -49,6 +56,8 @@ test("mechanics drafts preserve stable IDs and normalize submission strings", ()
         formula: "2d8 + 4",
         damageType: "necrotic",
         label: "Essence damage",
+        savingThrow: { ability: "dex" },
+        template: { type: "cone", distance: 20, angle: 53 },
       },
       {
         id: HEALING_ID,
@@ -61,17 +70,30 @@ test("mechanics drafts preserve stable IDs and normalize submission strings", ()
 });
 
 test("empty drafts are omitted and unsupported stored mechanics are surfaced", () => {
-  assert.equal(normalizeFoundryMechanics({ version: 1, actions: [] }), undefined);
+  assert.equal(normalizeFoundryMechanics({ version: 2, actions: [] }), undefined);
   assert.deepEqual(parseStoredFoundryMechanics(undefined), {});
   assert.equal(
-    typeof parseStoredFoundryMechanics({ version: 2, actions: [] }).error,
+    typeof parseStoredFoundryMechanics({ version: 3, actions: [] }).error,
     "string",
+  );
+  assert.equal(
+    parseStoredFoundryMechanics({
+      version: 1,
+      actions: [
+        {
+          id: HEALING_ID,
+          kind: "roll_healing",
+          formula: "1d6",
+        },
+      ],
+    }).mechanics?.version,
+    2,
   );
 });
 
 test("configured actions require the SP tier to have an effect", () => {
   const mechanics = {
-    version: 1 as const,
+    version: 2 as const,
     actions: [createFoundryAction("roll_healing", HEALING_ID)],
   };
   assert.equal(hasFoundryActionsWithoutEffect("", mechanics), true);
@@ -105,7 +127,7 @@ test("new action shapes and reordering retain their supplied UUIDs", () => {
 
   const replacementIds = [HEALING_ID, DAMAGE_ID][Symbol.iterator]();
   const cloned = cloneFoundryMechanicsWithNewActionIds(
-    { version: 1, actions: [damage, healing] },
+    { version: 2, actions: [damage, healing] },
     () => replacementIds.next().value ?? DAMAGE_ID,
   );
   assert.deepEqual(

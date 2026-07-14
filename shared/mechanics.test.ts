@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   DAMAGE_TYPES,
+  FOUNDRY_MECHANICS_VERSION,
   foundryActionSchema,
   foundryFormulaSchema,
   foundryMechanicsSchema,
@@ -118,6 +119,48 @@ test("damage and healing actions are strict discriminated records", () => {
   );
 });
 
+test("actions accept bounded saving throws and measured templates", () => {
+  const templates = [
+    { type: "circle", distance: 20 },
+    { type: "cone", distance: 30, angle: 53.13 },
+    { type: "rectangle", distance: 10 },
+    { type: "ray", distance: 60, width: 5 },
+  ] as const;
+
+  for (const template of templates) {
+    const parsed = foundryActionSchema.parse({
+      id: ACTION_ID,
+      kind: "roll_damage",
+      formula: "8d6",
+      damageType: "fire",
+      savingThrow: { ability: "dex" },
+      template,
+    });
+    assert.deepEqual(parsed.savingThrow, { ability: "dex" });
+    assert.deepEqual(parsed.template, template);
+  }
+
+  for (const extras of [
+    { savingThrow: { ability: "luck" } },
+    { template: { type: "circle", distance: 0 } },
+    { template: { type: "cone", distance: 30 } },
+    { template: { type: "cone", distance: 30, angle: 361 } },
+    { template: { type: "rectangle", distance: 10, width: 5 } },
+    { template: { type: "ray", distance: 60 } },
+    { template: { type: "ray", distance: 60, width: 1_001 } },
+  ]) {
+    assert.equal(
+      foundryActionSchema.safeParse({
+        id: ACTION_ID,
+        kind: "roll_healing",
+        formula: "1d8",
+        ...extras,
+      }).success,
+      false,
+    );
+  }
+});
+
 test("mechanics enforce their version, action count, damage types, and string bounds", () => {
   const actions = Array.from({ length: MAX_FOUNDRY_ACTIONS }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
@@ -126,26 +169,45 @@ test("mechanics enforce their version, action count, damage types, and string bo
     damageType: DAMAGE_TYPES[index % DAMAGE_TYPES.length],
   }));
   assert.equal(
-    foundryMechanicsSchema.safeParse({ version: 1, actions }).success,
+    foundryMechanicsSchema.safeParse({
+      version: FOUNDRY_MECHANICS_VERSION,
+      actions,
+    }).success,
     true,
   );
   assert.equal(
-    foundryMechanicsSchema.safeParse({ version: 1, actions: [...actions, actions[0]] })
-      .success,
+    foundryMechanicsSchema.safeParse({
+      version: FOUNDRY_MECHANICS_VERSION,
+      actions: [...actions, actions[0]],
+    }).success,
     false,
   );
   assert.equal(
-    foundryMechanicsSchema.safeParse({ version: 1, actions: [actions[0], actions[0]] })
-      .success,
+    foundryMechanicsSchema.safeParse({
+      version: FOUNDRY_MECHANICS_VERSION,
+      actions: [actions[0], actions[0]],
+    }).success,
+    false,
+  );
+  const migratedLegacy = foundryMechanicsSchema.parse({ version: 1, actions });
+  assert.equal(migratedLegacy.version, FOUNDRY_MECHANICS_VERSION);
+  assert.equal(
+    foundryMechanicsSchema.safeParse({ version: 3, actions: [] }).success,
     false,
   );
   assert.equal(
-    foundryMechanicsSchema.safeParse({ version: 2, actions: [] }).success,
+    foundryMechanicsSchema.safeParse({
+      version: FOUNDRY_MECHANICS_VERSION,
+      actions: [],
+      future: true,
+    }).success,
     false,
   );
   assert.equal(
-    foundryMechanicsSchema.safeParse({ version: 1, actions: [], future: true })
-      .success,
+    foundryMechanicsSchema.safeParse({
+      version: 1,
+      actions: [{ ...actions[0], savingThrow: { ability: "dex" } }],
+    }).success,
     false,
   );
   assert.equal(

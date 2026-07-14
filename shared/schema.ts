@@ -40,12 +40,19 @@ export {
 export type { DieSize, SpiritDieSlot, SpiritDieRoll } from "./spirit-dice";
 export {
   DAMAGE_TYPES,
+  FOUNDRY_TEMPLATE_TYPES,
   FOUNDRY_MECHANICS_VERSION,
+  LEGACY_FOUNDRY_MECHANICS_VERSION,
   MAX_FOUNDRY_ACTIONS,
+  MAX_FOUNDRY_TEMPLATE_ANGLE,
+  MAX_FOUNDRY_TEMPLATE_DISTANCE,
+  SAVING_THROW_ABILITIES,
   damageTypeSchema,
   foundryActionSchema,
   foundryFormulaSchema,
+  foundryMeasuredTemplateSchema,
   foundryMechanicsSchema,
+  foundrySavingThrowSchema,
   rollDamageActionSchema,
   rollHealingActionSchema,
   validateFoundryFormula,
@@ -53,9 +60,12 @@ export {
 export type {
   DamageType,
   FoundryAction,
+  FoundryMeasuredTemplate,
   FoundryMechanics,
+  FoundrySavingThrow,
   RollDamageAction,
   RollHealingAction,
+  SavingThrowAbility,
 } from "./mechanics";
 
 export const characterLevelSchema = z.number().int().min(1).max(20);

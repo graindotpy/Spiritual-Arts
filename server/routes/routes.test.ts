@@ -324,7 +324,7 @@ test("technique mechanics round trip while mechanics-free techniques remain vali
           effect: "Deal damage.",
           actionType: "action",
           mechanics: {
-            version: 1,
+            version: 2,
             actions: [
               {
                 id: actionId,
@@ -332,6 +332,8 @@ test("technique mechanics round trip while mechanics-free techniques remain vali
                 formula: " 2d8 + 4 ",
                 damageType: "necrotic",
                 label: " Devour Essence ",
+                savingThrow: { ability: "dex" },
+                template: { type: "circle", distance: 20 },
               },
             ],
           },
@@ -343,14 +345,17 @@ test("technique mechanics round trip while mechanics-free techniques remain vali
   assert.equal(created.body.name, "Devour Essence");
   const createdEffects = created.body.spEffects as Record<
     string,
-    { mechanics?: { actions: Array<Record<string, unknown>> } }
+    { mechanics?: { version: number; actions: Array<Record<string, unknown>> } }
   >;
+  assert.equal(createdEffects["2"].mechanics?.version, 2);
   assert.deepEqual(createdEffects["2"].mechanics?.actions[0], {
     id: actionId,
     kind: "roll_damage",
     formula: "2d8 + 4",
     damageType: "necrotic",
     label: "Devour Essence",
+    savingThrow: { ability: "dex" },
+    template: { type: "circle", distance: 20 },
   });
 
   const listed = await jsonRequest(`/api/character/${characterId}/techniques`);
@@ -400,11 +405,19 @@ test("technique APIs reject malformed Foundry mechanics", async () => {
     damageType: "necrotic",
   };
   const invalidMechanics: unknown[] = [
-    { version: 2, actions: [] },
+    { version: 3, actions: [] },
     { version: 1, actions: [], future: true },
     { version: 1, actions: [{ ...validAction, kind: "run_macro" }] },
     { version: 1, actions: [{ ...validAction, script: "return 42" }] },
     { version: 1, actions: [{ ...validAction, formula: "@mod + 1d6" }] },
+    {
+      version: 2,
+      actions: [{ ...validAction, savingThrow: { ability: "luck" } }],
+    },
+    {
+      version: 2,
+      actions: [{ ...validAction, template: { type: "circle", distance: 0 } }],
+    },
     {
       version: 1,
       actions: [{ id: actionId, kind: "roll_damage", formula: "1d6" }],
