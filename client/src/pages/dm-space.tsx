@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CharactersPanel } from "@/features/dm/characters-panel";
+import { FoundrySessionPanel } from "@/features/dm/foundry-session-panel";
 import { GlossaryPanel } from "@/features/dm/glossary-panel";
 import { StacksPanel } from "@/features/dm/stacks-panel";
 import { getOrCreateUserId } from "@/lib/user-id";
@@ -52,6 +53,7 @@ export default function DmSpace() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <FoundrySessionPanel />
         <Tabs defaultValue="stacks" className="w-full">
           <TabsList className="mx-auto mb-8 grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="stacks" data-testid="tab-stacks">

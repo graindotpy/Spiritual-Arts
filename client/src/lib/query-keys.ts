@@ -24,6 +24,10 @@ export const dmKeys = {
   characters: (userId: string) => ["/api/dm", userId, "characters"] as const,
 };
 
+export const foundrySessionKeys = {
+  status: ["/api/foundry-session"] as const,
+};
+
 export const instrumentKeys = {
   all: (includeHidden = false) => ["/api/instruments", { includeHidden }] as const,
 };

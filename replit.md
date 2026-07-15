@@ -31,6 +31,7 @@ client/src/
   pages/                    Route-level composition components
 
 server/
+  foundry/                  Bounded Playwright login and session lifecycle
   http/                     Async route and normalized error helpers
   routes/                   Domain-specific Express routers
   storage/                  Contract plus PostgreSQL and memory adapters
@@ -41,6 +42,7 @@ server/
   index.ts                  Process startup and client serving
 
 shared/
+  foundry-session.ts        Secret-free Foundry control/status contract
   schema.ts                 Drizzle tables, request schemas, shared DTO types
   spirit-dice.ts            Pure Spirit Die domain rules
   mechanics.ts              Safe Foundry action model and dice grammar
@@ -246,6 +248,72 @@ not guaranteed. Consumers should reject unknown versions and use `eventId` for
 duplicate suppression. Website browser clients continue to parse only
 `spirit_die_roll` and silently ignore action events.
 
+## Session-bound Foundry browser
+
+The DM page can start one Playwright Chromium session which opens a running
+Foundry world, selects a dedicated user by its exact displayed name, supplies
+that user's access key, and clicks Join Game. A connection is reported ready
+only after Foundry has loaded the expected user and confirmed that the
+`spiritual-arts-foundry` module is active and designates the same user as its
+bridge user. This verifies the browser session, not delivery of an individual
+WebSocket event; the current realtime protocol has no bridge acknowledgement.
+
+Connect is idempotent: repeated requests cannot create additional browsers.
+Disconnect cancels an in-progress login or closes the active browser. The
+server also closes it on process shutdown, on a browser/page failure, and after
+`FOUNDRY_SESSION_MAX_MINUTES` (eight hours by default). It does not automatically
+restart a failed or expired session, so compute cannot resume unexpectedly.
+
+The start/stop API is separate from the client-side DM convenience code. It
+requires `FOUNDRY_CONTROL_PASSWORD` and exchanges it for a process-local,
+short-lived HttpOnly/SameSite cookie. Mutations also require a same-origin
+control header and failed logins are throttled. Status returned before
+authorization is redacted; the Foundry URL and both passwords remain server
+only. A deploy invalidates existing control cookies.
+
+### Foundry setup
+
+1. Create a dedicated Foundry user with a unique name and access key. Give it
+   only the role and permissions the roll bridge needs.
+2. Enable the Spiritual Arts module in the world.
+3. In the module settings, choose that dedicated user as **Bridge User**, then
+   reload the world when Foundry requests it.
+4. Keep the world launched on the cloud Foundry host. The configured URL must
+   lead to its Join Game page.
+
+Configure these server environment variables (never client/Vite variables):
+
+```dotenv
+FOUNDRY_WORLD_URL=https://your-foundry-host.example/join
+FOUNDRY_BRIDGE_USER=Website Bridge
+FOUNDRY_BRIDGE_ACCESS_KEY=a-foundry-user-access-key
+FOUNDRY_CONTROL_PASSWORD=a-separate-long-random-password
+FOUNDRY_SESSION_MAX_MINUTES=480
+FOUNDRY_HEADLESS=true
+```
+
+The world URL, bridge user, and bridge access key are required together.
+Production URLs must use HTTPS and cannot contain embedded URL credentials.
+Use the final hosted Join Game URL: redirects may change paths, but a redirect
+to another origin is rejected before the access key is entered. Session limits
+are bounded to 15-1440 minutes. Set `FOUNDRY_HEADLESS=false` only for a local
+headed smoke test, and install the local browser once with:
+
+```bash
+npx playwright install chromium
+```
+
+The checked-in Dockerfile uses the matching Playwright Chromium image and is
+the production deployment path. On Render, configure the service to build from
+that Dockerfile, leave its Docker Command unset so the checked-in command runs,
+and add the six variables in the service's Environment page.
+The browser runs inside the same web-service instance only while requested, so
+it does not create a second set of instance-hours. Chromium and Foundry can,
+however, put substantial pressure on a free instance's memory. Test one real
+session while watching Render's memory/restart metrics; if it is killed for
+memory, the `FoundryConnector` boundary is the intended seam for a later remote
+worker implementation. This process-local version assumes one web instance.
+
 ## Commands
 
 ```bash
@@ -275,6 +343,12 @@ R2_BUCKET=
 R2_PUBLIC_BASE_URL=
 DISCORD_WEBHOOK_URL=
 APP_PUBLIC_BASE_URL=
+FOUNDRY_WORLD_URL=
+FOUNDRY_BRIDGE_USER=
+FOUNDRY_BRIDGE_ACCESS_KEY=
+FOUNDRY_CONTROL_PASSWORD=
+FOUNDRY_SESSION_MAX_MINUTES=480
+FOUNDRY_HEADLESS=true
 ```
 
 `R2_OLD_BASE_URL` is needed only while running `npm run rewire:r2`. The R2
@@ -307,13 +381,17 @@ The Node test suite covers:
   action broadcasting, failure gating, ownership checks, and distinct event IDs.
 - Upload signature detection, path-traversal prevention, and partial-R2-config
   rejection.
+- Foundry configuration bounds, control-password sessions/throttling, protected
+  API routes, Playwright login verification, cancellation cleanup, idempotent
+  lifecycle control, expiry, crashes, and shutdown.
 
 ## Current limitations
 
-- There is no real authentication layer. The DM identity and technique preference
-  identity are local browser IDs, not security boundaries. Do not expose private
-  campaign data publicly without adding server-side authentication and ownership
-  checks.
+- There is no general application authentication layer. The DM identity and
+  technique preference identity are local browser IDs, not security boundaries.
+  The Foundry start/stop controls have their own narrow server-side password,
+  but it does not protect the rest of the DM workspace. Do not expose private
+  campaign data publicly without adding full authentication and ownership checks.
 - The WebSocket is a public server-to-client stream. Do not add automatic HP
   changes or other state-changing Foundry actions until strong authentication
   and authorization protect both the website commands and their recipients.

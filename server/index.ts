@@ -5,6 +5,11 @@ import { registerRoutes } from "./routes";
 import { log, serveStatic, setupVite } from "./vite";
 
 const app = express();
+if (process.env.NODE_ENV === "production") {
+  // Render terminates HTTPS at its proxy. Trust exactly that first hop so
+  // privileged-control login throttling keys requests by the real client IP.
+  app.set("trust proxy", 1);
+}
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
@@ -73,6 +78,9 @@ async function start(): Promise<void> {
     console.error("HTTP server error:", error);
     process.exitCode = 1;
     server.closeRealtime();
+    void server.closeFoundrySession().catch((closeError: unknown) => {
+      console.error("Failed to close the Foundry browser session:", closeError);
+    });
     void closeDatabase();
   });
   server.listen(listenOptions, () => {
@@ -92,13 +100,23 @@ async function start(): Promise<void> {
     forceExit.unref();
 
     server.closeRealtime();
+    const foundryClosed = server.closeFoundrySession();
     server.close((error) => {
-      clearTimeout(forceExit);
-      if (error) {
-        console.error("Failed to close server cleanly:", error);
-        process.exitCode = 1;
-      }
-      void closeDatabase();
+      void (async () => {
+        try {
+          if (error) {
+            console.error("Failed to close server cleanly:", error);
+            process.exitCode = 1;
+          }
+          await foundryClosed;
+          await closeDatabase();
+        } catch (closeError: unknown) {
+          console.error("Failed to close server services:", closeError);
+          process.exitCode = 1;
+        } finally {
+          clearTimeout(forceExit);
+        }
+      })();
     });
   };
 
