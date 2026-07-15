@@ -104,6 +104,7 @@ export interface IStorage {
   deleteTracker(id: string): Promise<boolean>;
 
   getSpiritualInstruments(includeHidden?: boolean): Promise<SpiritualInstrumentWithAssignments[]>;
+  getSpiritualInstrument(id: string): Promise<SpiritualInstrumentWithAssignments | undefined>;
   createSpiritualInstrument(instrument: InsertSpiritualInstrument): Promise<SpiritualInstrumentWithAssignments>;
   updateSpiritualInstrument(id: string, instrument: SpiritualInstrumentUpdate): Promise<SpiritualInstrumentWithAssignments | undefined>;
   setSpiritualInstrumentAssignments(id: string, characterIds: string[]): Promise<SpiritualInstrumentWithAssignments | undefined>;

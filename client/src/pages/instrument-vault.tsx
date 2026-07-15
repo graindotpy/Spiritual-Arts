@@ -15,6 +15,7 @@ import {
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { CampaignMark } from "@/components/campaign-mark";
+import FoundryMechanicsEditor from "@/components/foundry-mechanics-editor";
 import {
   EnhancedContentDialog,
   type EnhancedContentSaveData,
@@ -42,8 +43,40 @@ import {
 } from "@/components/campaign-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { requestJson } from "@/lib/api";
+import {
+  normalizeFoundryMechanics,
+  parseStoredFoundryMechanics,
+} from "@/lib/foundry-mechanics-draft";
 import { characterKeys, instrumentKeys } from "@/lib/query-keys";
-import type { Character, SpiritualInstrumentWithAssignments } from "@shared/schema";
+import { createUuid } from "@/lib/uuid";
+import {
+  RichTextEditor,
+  RichTextErrorBoundary,
+} from "@/features/enhanced-content/rich-text";
+import {
+  richTextContentToPlainText,
+  serializeRichTextContent,
+} from "@shared/enhanced-content";
+import {
+  foundryMechanicsSchema,
+  type FoundryMechanics,
+} from "@shared/mechanics";
+import {
+  MAX_INSTRUMENT_ACTIONS,
+  instrumentActionsSchema,
+  type Character,
+  type SpiritualInstrumentWithAssignments,
+  type TriggerType,
+} from "@shared/schema";
+
+type InstrumentActionDraft = {
+  id: string;
+  name: string;
+  description: string;
+  actionType: TriggerType;
+  mechanics?: FoundryMechanics;
+  storedMechanicsError?: string;
+};
 
 type InstrumentDraft = {
   name: string;
@@ -51,6 +84,7 @@ type InstrumentDraft = {
   imageUrl: string | null;
   isRevealed: boolean;
   characterIds: string[];
+  actions: InstrumentActionDraft[];
 };
 
 const emptyDraft: InstrumentDraft = {
@@ -59,7 +93,30 @@ const emptyDraft: InstrumentDraft = {
   imageUrl: null,
   isRevealed: true,
   characterIds: [],
+  actions: [],
 };
+
+function createInstrumentActionDraft(): InstrumentActionDraft {
+  return {
+    id: createUuid(),
+    name: "",
+    description: "",
+    actionType: "action",
+  };
+}
+
+function prepareInstrumentActions(actions: InstrumentActionDraft[]) {
+  return actions.map((action) => {
+    const mechanics = normalizeFoundryMechanics(action.mechanics);
+    return {
+      id: action.id,
+      name: action.name.trim(),
+      description: action.description,
+      actionType: action.actionType,
+      ...(mechanics ? { mechanics } : {}),
+    };
+  });
+}
 
 const toolbarButtonClass =
   "campaign-toolbar-button border-[#b8aa90]/70 bg-[#fffaf0]/65 text-[#27352f] shadow-sm backdrop-blur transition-colors hover:border-[#557d6f] hover:bg-[#fffaf0] hover:text-[#204e42] dark:border-white/15 dark:bg-white/[0.06] dark:text-[#e9e2d3] dark:hover:border-[#82a99a]/60 dark:hover:bg-white/[0.1] dark:hover:text-white";
@@ -135,6 +192,7 @@ export default function InstrumentVault() {
         description: draft.description.trim(),
         imageUrl: draft.imageUrl,
         isRevealed: draft.isRevealed,
+        actions: prepareInstrumentActions(draft.actions),
       };
       const instrument = editing
         ? await requestJson<SpiritualInstrumentWithAssignments>(
@@ -216,7 +274,7 @@ export default function InstrumentVault() {
 
   const openCreate = () => {
     setEditing(null);
-    setDraft(emptyDraft);
+    setDraft({ ...emptyDraft, characterIds: [], actions: [] });
     setDialogOpen(true);
   };
 
@@ -228,6 +286,14 @@ export default function InstrumentVault() {
       imageUrl: instrument.imageUrl,
       isRevealed: instrument.isRevealed,
       characterIds: instrument.characterIds,
+      actions: instrument.actions.map((action) => {
+        const storedMechanics = parseStoredFoundryMechanics(action.mechanics);
+        return {
+          ...action,
+          mechanics: storedMechanics.mechanics,
+          storedMechanicsError: storedMechanics.error,
+        };
+      }),
     });
     setDialogOpen(true);
   };
@@ -235,6 +301,26 @@ export default function InstrumentVault() {
   const openAssignments = (instrument: SpiritualInstrumentWithAssignments) => {
     setAssigning(instrument);
     setAssignmentCharacterIds(instrument.characterIds);
+  };
+
+  const updateInstrumentAction = <K extends keyof InstrumentActionDraft>(
+    actionId: string,
+    field: K,
+    value: InstrumentActionDraft[K],
+  ) => {
+    setDraft((current) => ({
+      ...current,
+      actions: current.actions.map((action) =>
+        action.id === actionId ? { ...action, [field]: value } : action,
+      ),
+    }));
+  };
+
+  const removeInstrumentAction = (actionId: string) => {
+    setDraft((current) => ({
+      ...current,
+      actions: current.actions.filter((action) => action.id !== actionId),
+    }));
   };
 
   const uploadImage = async (file: File) => {
@@ -254,6 +340,64 @@ export default function InstrumentVault() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!draft.name.trim() || !draft.description.trim()) return;
+
+    const unsupportedMechanics = draft.actions.find(
+      (action) => action.storedMechanicsError,
+    );
+    if (unsupportedMechanics) {
+      toast({
+        title: `Stored Foundry mechanics need attention for ${unsupportedMechanics.name || "this action"}`,
+        description:
+          "Open its Foundry mechanics and explicitly discard the unsupported block before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const incompleteAction = draft.actions.find(
+      (action) =>
+        !action.name.trim() ||
+        !richTextContentToPlainText(action.description).trim(),
+    );
+    if (incompleteAction) {
+      toast({
+        title: "Complete each instrument action",
+        description: "Every action needs a name and description.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    for (const action of draft.actions) {
+      const mechanics = normalizeFoundryMechanics(action.mechanics);
+      if (!mechanics) continue;
+      const parsedMechanics = foundryMechanicsSchema.safeParse(mechanics);
+      if (!parsedMechanics.success) {
+        toast({
+          title: `Check Foundry mechanics for ${action.name}`,
+          description:
+            parsedMechanics.error.issues[0]?.message ??
+            "One of the configured Foundry actions is invalid.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    const parsedActions = instrumentActionsSchema.safeParse(
+      prepareInstrumentActions(draft.actions),
+    );
+    if (!parsedActions.success) {
+      toast({
+        title: "Instrument actions could not be saved",
+        description:
+          parsedActions.error.issues[0]?.message ??
+          "Check the configured instrument actions.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     saveInstrument.mutate();
   };
 
@@ -422,7 +566,7 @@ export default function InstrumentVault() {
       </main>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <CampaignDialogContent className="max-w-2xl">
+        <CampaignDialogContent className="max-w-5xl">
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <CampaignDialogHeader
               icon={Sparkles}
@@ -455,6 +599,183 @@ export default function InstrumentVault() {
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })}
               />
             </div>
+            <section aria-labelledby="instrument-actions-heading">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="wuxia-dialog-kicker">Character sheet</p>
+                  <h3
+                    id="instrument-actions-heading"
+                    className="font-display text-xl text-[#2b4138] dark:text-[#eadcc2]"
+                  >
+                    Instrument actions
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-[var(--wuxia-dialog-muted)]">
+                    Add each action granted by this instrument, then optionally configure the Foundry sequence attached to it.
+                  </p>
+                </div>
+                <span className="rounded-sm border border-[#b9aa8f] bg-[#fffaf0]/45 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.1em] text-[#667069] dark:border-[#806b48] dark:bg-[#4d3e29]/25 dark:text-[#c5b18d]">
+                  {draft.actions.length} of {MAX_INSTRUMENT_ACTIONS}
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                {draft.actions.map((action, index) => {
+                  const nameId = `instrument-action-name-${action.id}`;
+                  const typeId = `instrument-action-type-${action.id}`;
+                  return (
+                    <div
+                      key={action.id}
+                      className="wuxia-dialog-section space-y-4 p-4 sm:p-5"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="wuxia-dialog-kicker">Instrument action {index + 1}</p>
+                          <h4 className="font-display text-lg text-[#2b4138] dark:text-[#eadcc2]">
+                            {action.name.trim() || "Untitled action"}
+                          </h4>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="wuxia-icon-action wuxia-icon-danger h-9 w-9"
+                          onClick={() => removeInstrumentAction(action.id)}
+                          aria-label={`Remove ${action.name || `instrument action ${index + 1}`}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <Label htmlFor={nameId} className="wuxia-dialog-label">
+                            Action name
+                          </Label>
+                          <Input
+                            id={nameId}
+                            value={action.name}
+                            maxLength={255}
+                            required
+                            placeholder="e.g. Release the Lantern Flame"
+                            className="wuxia-dialog-control"
+                            onChange={(event) =>
+                              updateInstrumentAction(
+                                action.id,
+                                "name",
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={typeId} className="wuxia-dialog-label">
+                            Action type
+                          </Label>
+                          <Select
+                            value={action.actionType}
+                            onValueChange={(value: TriggerType) =>
+                              updateInstrumentAction(action.id, "actionType", value)
+                            }
+                          >
+                            <SelectTrigger id={typeId} className="wuxia-dialog-control w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="wuxia-select-content">
+                              <SelectItem value="action">Action</SelectItem>
+                              <SelectItem value="bonus">Bonus Action</SelectItem>
+                              <SelectItem value="reaction">Reaction</SelectItem>
+                              <SelectItem value="passive">Passive</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <RichTextErrorBoundary
+                            resetKey={`instrument-action:${action.id}`}
+                            fallback={
+                              <Textarea
+                                value={richTextContentToPlainText(action.description)}
+                                onChange={(event) =>
+                                  updateInstrumentAction(
+                                    action.id,
+                                    "description",
+                                    event.target.value,
+                                  )
+                                }
+                                aria-label={`Description for ${action.name || `instrument action ${index + 1}`} (plain-text fallback)`}
+                                placeholder="Describe how this action is used and what it does"
+                                rows={6}
+                                className="wuxia-dialog-control min-h-32"
+                              />
+                            }
+                          >
+                            <RichTextEditor
+                              value={action.description}
+                              onChange={(document) =>
+                                updateInstrumentAction(
+                                  action.id,
+                                  "description",
+                                  serializeRichTextContent(document),
+                                )
+                              }
+                              label={`Description for ${action.name || `instrument action ${index + 1}`}`}
+                              placeholder="Describe how this action is used and what it does"
+                            />
+                          </RichTextErrorBoundary>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FoundryMechanicsEditor
+                            mechanics={action.mechanics}
+                            onChange={(mechanics) =>
+                              updateInstrumentAction(action.id, "mechanics", mechanics)
+                            }
+                            tierLabel={action.name.trim() || `Instrument action ${index + 1}`}
+                            headerEyebrow="Spiritual Instrument action"
+                            headerDescription="Configure the Foundry actions stored with this instrument action."
+                            storedMechanicsError={action.storedMechanicsError}
+                            onDiscardStoredMechanics={() =>
+                              setDraft((current) => ({
+                                ...current,
+                                actions: current.actions.map((candidate) =>
+                                  candidate.id === action.id
+                                    ? {
+                                        ...candidate,
+                                        mechanics: undefined,
+                                        storedMechanicsError: undefined,
+                                      }
+                                    : candidate,
+                                ),
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {draft.actions.length === 0 ? (
+                  <p className="wuxia-dialog-section px-4 py-5 text-sm leading-6 text-[var(--wuxia-dialog-muted)] sm:px-5">
+                    This instrument has no character actions yet.
+                  </p>
+                ) : null}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="wuxia-add-row h-11 w-full"
+                  disabled={draft.actions.length >= MAX_INSTRUMENT_ACTIONS}
+                  onClick={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      actions: [...current.actions, createInstrumentActionDraft()],
+                    }))
+                  }
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add instrument action
+                </Button>
+              </div>
+            </section>
             <div className="wuxia-dialog-section p-4">
               <Label className="wuxia-dialog-label">Instrument image <span className="normal-case tracking-normal opacity-70">(optional)</span></Label>
               {draft.imageUrl && <img src={draft.imageUrl} alt="Instrument preview" className="mb-3 h-40 w-full rounded-[0.35rem] border border-[var(--wuxia-dialog-line)] object-cover" />}

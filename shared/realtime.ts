@@ -41,27 +41,55 @@ export const spiritDieRollMessageSchema = z.object({
   data: spiritDieRollBroadcastSchema,
 });
 
+const foundryActionCharacterSchema = z
+  .object({
+    id: z.string().min(1).max(255),
+    name: z.string().trim().min(1).max(255),
+    path: z.string().trim().min(1).max(255),
+    level: z.number().int().min(1).max(20),
+    portraitUrl: z.string().min(1).max(2_048).nullable(),
+    spiritualArtsDc: z.number().int().min(1).max(100).nullable().optional(),
+    spiritualArtsAttackModifier: z
+      .number()
+      .int()
+      .min(MIN_SPIRITUAL_ARTS_ATTACK_MODIFIER)
+      .max(MAX_SPIRITUAL_ARTS_ATTACK_MODIFIER)
+      .nullable()
+      .optional(),
+  })
+  .strict();
+
+function validateFoundryActionDerivedValues(
+  data: {
+    character: z.infer<typeof foundryActionCharacterSchema>;
+    action: z.infer<typeof foundryActionSchema>;
+  },
+  context: z.RefinementCtx,
+): void {
+  const attackModifier = data.character.spiritualArtsAttackModifier;
+  if (data.action.kind === "roll_attack" && attackModifier === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Attack actions require the derived Spiritual Arts attack modifier",
+      path: ["character", "spiritualArtsAttackModifier"],
+    });
+  } else if (
+    data.action.kind !== "roll_attack" &&
+    attackModifier !== undefined
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Only attack actions may include a Spiritual Arts attack modifier",
+      path: ["character", "spiritualArtsAttackModifier"],
+    });
+  }
+}
+
 export const foundryActionRequestDataSchema = z
   .object({
     requestedAt: z.string().datetime(),
     sourceRollEventId: z.string().uuid(),
-    character: z
-      .object({
-        id: z.string().min(1).max(255),
-        name: z.string().trim().min(1).max(255),
-        path: z.string().trim().min(1).max(255),
-        level: z.number().int().min(1).max(20),
-        portraitUrl: z.string().min(1).max(2_048).nullable(),
-        spiritualArtsDc: z.number().int().min(1).max(100).nullable().optional(),
-        spiritualArtsAttackModifier: z
-          .number()
-          .int()
-          .min(MIN_SPIRITUAL_ARTS_ATTACK_MODIFIER)
-          .max(MAX_SPIRITUAL_ARTS_ATTACK_MODIFIER)
-          .nullable()
-          .optional(),
-      })
-      .strict(),
+    character: foundryActionCharacterSchema,
     technique: z
       .object({
         id: z.string().uuid(),
@@ -72,25 +100,29 @@ export const foundryActionRequestDataSchema = z
     action: foundryActionSchema,
   })
   .strict()
-  .superRefine((data, context) => {
-    const attackModifier = data.character.spiritualArtsAttackModifier;
-    if (data.action.kind === "roll_attack" && attackModifier === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Attack actions require the derived Spiritual Arts attack modifier",
-        path: ["character", "spiritualArtsAttackModifier"],
-      });
-    } else if (
-      data.action.kind !== "roll_attack" &&
-      attackModifier !== undefined
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only attack actions may include a Spiritual Arts attack modifier",
-        path: ["character", "spiritualArtsAttackModifier"],
-      });
-    }
-  });
+  .superRefine(validateFoundryActionDerivedValues);
+
+export const instrumentFoundryActionRequestDataSchema = z
+  .object({
+    requestedAt: z.string().datetime(),
+    sourceUseId: z.string().uuid(),
+    character: foundryActionCharacterSchema,
+    instrument: z
+      .object({
+        id: z.string().uuid(),
+        name: z.string().trim().min(1).max(255),
+      })
+      .strict(),
+    instrumentAction: z
+      .object({
+        id: z.string().uuid(),
+        name: z.string().trim().min(1).max(255),
+      })
+      .strict(),
+    action: foundryActionSchema,
+  })
+  .strict()
+  .superRefine(validateFoundryActionDerivedValues);
 
 export const foundryActionRequestMessageSchema = z
   .object({
@@ -101,9 +133,19 @@ export const foundryActionRequestMessageSchema = z
   })
   .strict();
 
-export const realtimeMessageSchema = z.discriminatedUnion("type", [
+export const instrumentFoundryActionRequestMessageSchema = z
+  .object({
+    protocolVersion: z.literal(REALTIME_PROTOCOL_VERSION),
+    eventId: z.string().uuid(),
+    type: z.literal("foundry_action_request"),
+    data: instrumentFoundryActionRequestDataSchema,
+  })
+  .strict();
+
+export const realtimeMessageSchema = z.union([
   spiritDieRollMessageSchema,
   foundryActionRequestMessageSchema,
+  instrumentFoundryActionRequestMessageSchema,
 ]);
 
 export type SpiritDieRollBroadcast = z.infer<typeof spiritDieRollBroadcastSchema>;
@@ -113,6 +155,12 @@ export type FoundryActionRequestData = z.infer<
 >;
 export type FoundryActionRequestMessage = z.infer<
   typeof foundryActionRequestMessageSchema
+>;
+export type InstrumentFoundryActionRequestData = z.infer<
+  typeof instrumentFoundryActionRequestDataSchema
+>;
+export type InstrumentFoundryActionRequestMessage = z.infer<
+  typeof instrumentFoundryActionRequestMessageSchema
 >;
 export type RealtimeMessage = z.infer<typeof realtimeMessageSchema>;
 
@@ -133,6 +181,18 @@ export function createFoundryActionRequestMessage(
   data: FoundryActionRequestData,
 ): FoundryActionRequestMessage {
   return foundryActionRequestMessageSchema.parse({
+    protocolVersion: REALTIME_PROTOCOL_VERSION,
+    eventId,
+    type: "foundry_action_request",
+    data,
+  });
+}
+
+export function createInstrumentFoundryActionRequestMessage(
+  eventId: string,
+  data: InstrumentFoundryActionRequestData,
+): InstrumentFoundryActionRequestMessage {
+  return instrumentFoundryActionRequestMessageSchema.parse({
     protocolVersion: REALTIME_PROTOCOL_VERSION,
     eventId,
     type: "foundry_action_request",

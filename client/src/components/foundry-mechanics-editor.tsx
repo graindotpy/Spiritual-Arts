@@ -57,6 +57,8 @@ interface FoundryMechanicsEditorProps {
   mechanics?: FoundryMechanics;
   onChange: (mechanics: FoundryMechanics | undefined) => void;
   tierLabel: string;
+  headerEyebrow?: string;
+  headerDescription?: string;
   storedMechanicsError?: string;
   onDiscardStoredMechanics: () => void;
 }
@@ -233,6 +235,8 @@ export default function FoundryMechanicsEditor({
   mechanics,
   onChange,
   tierLabel,
+  headerEyebrow = `${tierLabel} investment`,
+  headerDescription = "Build the actions Foundry runs after this tier's Spirit Die roll, whether the roll succeeds or fails.",
   storedMechanicsError,
   onDiscardStoredMechanics,
 }: FoundryMechanicsEditorProps) {
@@ -389,9 +393,9 @@ export default function FoundryMechanicsEditor({
       <CampaignDialogContent className="h-[min(92dvh,52rem)] max-w-5xl">
         <CampaignDialogHeader
           icon={Settings2}
-          eyebrow={`${tierLabel} investment`}
+          eyebrow={headerEyebrow}
           title="Foundry mechanics"
-          description="Build the actions Foundry runs after this tier's Spirit Die roll, whether the roll succeeds or fails."
+          description={headerDescription}
           actions={
             <span
               className={cn(
@@ -548,7 +552,7 @@ export default function FoundryMechanicsEditor({
                   </Select>
                   {actions.length >= MAX_FOUNDRY_ACTIONS ? (
                     <p className="mt-2 text-xs leading-5 text-[var(--wuxia-dialog-muted)]">
-                      This tier has reached the {MAX_FOUNDRY_ACTIONS}-action
+                      This sequence has reached the {MAX_FOUNDRY_ACTIONS}-action
                       limit.
                     </p>
                   ) : null}

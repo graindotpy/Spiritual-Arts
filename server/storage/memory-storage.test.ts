@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { MemStorage } from "./memory-storage";
 import type { DefaultSeedData } from "./seed";
+import type { InstrumentAction } from "@shared/schema";
 
 async function createCharacter(storage: MemStorage, name = "Character") {
   return storage.createCharacter({ name, path: "Test Path", level: 3 });
@@ -234,6 +235,38 @@ test("card game state writes reject stale clients and return defensive copies", 
   assert.deepEqual((await storage.getCardGameState())?.state.cards, [
     { id: "new" },
   ]);
+});
+
+test("instrument actions are defensively copied on create and read", async () => {
+  const storage = new MemStorage(null);
+  const actions: InstrumentAction[] = [{
+    id: "4b0b2ba0-e165-4d58-9b61-e97e425dff3f",
+    name: "Original action",
+    description: "Original description",
+    actionType: "action",
+  }];
+  const created = await storage.createSpiritualInstrument({
+    name: "Instrument",
+    description: "Description",
+    actions,
+  });
+
+  actions[0].name = "Caller mutation";
+  created.actions[0].description = "Response mutation";
+
+  const stored = (await storage.getSpiritualInstruments(true))[0];
+  assert.equal(stored.actions[0].name, "Original action");
+  assert.equal(stored.actions[0].description, "Original description");
+
+  const byId = await storage.getSpiritualInstrument(created.id);
+  assert.ok(byId);
+  assert.equal(byId.actions[0].name, "Original action");
+  byId.actions[0].name = "Direct lookup mutation";
+  assert.equal(
+    (await storage.getSpiritualInstrument(created.id))?.actions[0].name,
+    "Original action",
+  );
+  assert.equal(await storage.getSpiritualInstrument("missing"), undefined);
 });
 
 test("lists are deterministic and returned JSON data is defensively copied", async () => {

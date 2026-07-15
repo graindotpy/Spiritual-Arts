@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createFoundryActionRequestMessage,
+  createInstrumentFoundryActionRequestMessage,
   createSpiritDieRollMessage,
   foundryActionRequestDataSchema,
   foundryActionRequestMessageSchema,
+  instrumentFoundryActionRequestDataSchema,
+  instrumentFoundryActionRequestMessageSchema,
   MAX_INVESTMENT_EFFECT_LENGTH,
   realtimeMessageSchema,
   REALTIME_PROTOCOL_VERSION,
   spiritDieRollMessageSchema,
   type FoundryActionRequestData,
+  type InstrumentFoundryActionRequestData,
   type SpiritDieRollBroadcast,
 } from "./realtime";
 
@@ -54,6 +58,30 @@ const actionRequest: FoundryActionRequestData = {
     label: "Devour Essence",
     savingThrow: { ability: "dex" },
     template: { type: "circle", distance: 20 },
+  },
+};
+
+const instrumentActionRequest: InstrumentFoundryActionRequestData = {
+  requestedAt: "2026-07-15T12:00:01.000Z",
+  sourceUseId: "15f60104-1654-4b6e-9c1b-d62e5a0b5199",
+  character: {
+    ...roll.character,
+    spiritualArtsDc: 15,
+  },
+  instrument: {
+    id: "cc9fd3c7-fccc-4f44-967f-bb5780fc1037",
+    name: "Ghost Lantern",
+  },
+  instrumentAction: {
+    id: "c11af797-bad8-4566-a5f8-455420f70db4",
+    name: "Lantern Burst",
+  },
+  action: {
+    id: "523240f5-7433-4e0b-876c-c209ad3b310a",
+    kind: "roll_damage",
+    formula: "2d8 + 4",
+    damageType: "radiant",
+    savingThrow: { ability: "dex" },
   },
 };
 
@@ -132,6 +160,87 @@ test("Foundry action requests use a strict version-one envelope", () => {
       data: legacyActionRequest,
     }).success,
     true,
+  );
+});
+
+test("instrument Foundry action requests use a strict same-envelope variant", () => {
+  const eventId = "35006819-9883-4256-ae6b-4bc58e5610ab";
+  const message = createInstrumentFoundryActionRequestMessage(
+    eventId,
+    instrumentActionRequest,
+  );
+
+  assert.equal(message.protocolVersion, REALTIME_PROTOCOL_VERSION);
+  assert.equal(message.eventId, eventId);
+  assert.equal(message.type, "foundry_action_request");
+  assert.deepEqual(message.data, instrumentActionRequest);
+  assert.equal(
+    instrumentFoundryActionRequestMessageSchema.safeParse(message).success,
+    true,
+  );
+  assert.equal(foundryActionRequestMessageSchema.safeParse(message).success, false);
+  assert.equal(realtimeMessageSchema.safeParse(message).success, true);
+
+  const invalidRequests = [
+    { ...instrumentActionRequest, sourceUseId: "not-a-uuid" },
+    { ...instrumentActionRequest, sourceRollEventId: actionRequest.sourceRollEventId },
+    { ...instrumentActionRequest, spInvestment: 2 },
+    { ...instrumentActionRequest, technique: actionRequest.technique },
+    {
+      ...instrumentActionRequest,
+      instrument: { ...instrumentActionRequest.instrument, future: true },
+    },
+    {
+      ...instrumentActionRequest,
+      instrument: { ...instrumentActionRequest.instrument, id: "not-a-uuid" },
+    },
+    {
+      ...instrumentActionRequest,
+      instrumentAction: {
+        ...instrumentActionRequest.instrumentAction,
+        id: "not-a-uuid",
+      },
+    },
+  ];
+
+  for (const request of invalidRequests) {
+    assert.equal(
+      instrumentFoundryActionRequestDataSchema.safeParse(request).success,
+      false,
+    );
+  }
+});
+
+test("instrument Foundry action requests enforce action-specific derived values", () => {
+  const attack = {
+    ...instrumentActionRequest,
+    character: {
+      ...roll.character,
+      spiritualArtsAttackModifier: 7,
+    },
+    action: {
+      id: "34109839-d482-4ef7-bde4-98ce40d330f2",
+      kind: "roll_attack" as const,
+      label: "Lantern ray",
+    },
+  };
+  assert.equal(instrumentFoundryActionRequestDataSchema.safeParse(attack).success, true);
+
+  const missingModifier = structuredClone(attack);
+  delete missingModifier.character.spiritualArtsAttackModifier;
+  assert.equal(
+    instrumentFoundryActionRequestDataSchema.safeParse(missingModifier).success,
+    false,
+  );
+  assert.equal(
+    instrumentFoundryActionRequestDataSchema.safeParse({
+      ...instrumentActionRequest,
+      character: {
+        ...instrumentActionRequest.character,
+        spiritualArtsAttackModifier: 7,
+      },
+    }).success,
+    false,
   );
 });
 

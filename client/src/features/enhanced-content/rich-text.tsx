@@ -5,6 +5,7 @@ import {
   type ReactNode,
 } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { Extensions, JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import {
   Bold,
@@ -43,7 +44,7 @@ function createExtensions(openOnClick: boolean) {
 }
 
 const editorExtensions = createExtensions(false);
-const viewerExtensions = createExtensions(true);
+export const richTextViewerExtensions = createExtensions(true);
 
 interface RichTextErrorBoundaryProps {
   children: ReactNode;
@@ -270,25 +271,45 @@ function ToolbarButton({
 export function RichTextContent({
   content,
   className,
+  extensions = richTextViewerExtensions,
 }: {
-  content: string | RichTextDocument;
+  content: string | JSONContent;
   className?: string;
+  extensions?: Extensions;
 }) {
+  const normalizeViewerContent = (value: string | JSONContent): JSONContent =>
+    typeof value === "string" ? normalizeRichTextContent(value) : value;
+
   const editor = useEditor({
-    extensions: viewerExtensions,
-    content: normalizeRichTextContent(content),
+    extensions,
+    content: normalizeViewerContent(content),
     editable: false,
     immediatelyRender: false,
     editorProps: {
       attributes: { class: cn("wuxia-rich-text", className) },
     },
-  });
+  }, [extensions]);
 
-  const normalized = normalizeRichTextContent(content);
+  const normalized = normalizeViewerContent(content);
   const serializedContent = JSON.stringify(normalized);
   useEffect(() => {
     if (!editor || JSON.stringify(editor.getJSON()) === serializedContent) return;
-    editor.commands.setContent(normalized, { emitUpdate: false });
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (
+        cancelled ||
+        editor.isDestroyed ||
+        JSON.stringify(editor.getJSON()) === serializedContent
+      ) {
+        return;
+      }
+      editor.commands.setContent(normalized, { emitUpdate: false });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [editor, serializedContent]);
 
   return editor ? <EditorContent editor={editor} /> : null;

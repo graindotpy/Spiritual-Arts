@@ -281,7 +281,7 @@ function enforceUniqueActionIds(
     if (seen.has(action.id)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Action IDs must be unique within an SP tier",
+        message: "Action IDs must be unique within a Foundry mechanics sequence",
         path: ["actions", index, "id"],
       });
     }

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Gem, LoaderCircle, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Gem, LoaderCircle, X } from "lucide-react";
 import {
   EnhancedContentDialog,
   type EnhancedContentSaveData,
@@ -8,19 +8,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { requestJson } from "@/lib/api";
-import { instrumentKeys } from "@/lib/query-keys";
 import type { Character, SpiritualInstrumentWithAssignments } from "@shared/schema";
 
-export function InstrumentsPanel({ character }: { character: Character }) {
+interface InstrumentsPanelProps {
+  character: Character;
+  instruments: SpiritualInstrumentWithAssignments[];
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+}
+
+export function InstrumentsPanel({
+  character,
+  instruments,
+  isLoading,
+  isError,
+  onRetry,
+}: InstrumentsPanelProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const isDmMode = localStorage.getItem("dmMode") === "true";
   const [expandedInstrument, setExpandedInstrument] =
     useState<SpiritualInstrumentWithAssignments | null>(null);
-  const query = useQuery<SpiritualInstrumentWithAssignments[]>({
-    queryKey: instrumentKeys.all(isDmMode),
-    queryFn: () => requestJson("GET", `/api/instruments${isDmMode ? "?includeHidden=true" : ""}`),
-  });
 
   const assignment = useMutation({
     mutationFn: ({ instrument, assigned }: { instrument: SpiritualInstrumentWithAssignments; assigned: boolean }) =>
@@ -38,10 +47,6 @@ export function InstrumentsPanel({ character }: { character: Character }) {
     },
     onError: () => toast({ title: "Instrument assignment failed", variant: "destructive" }),
   });
-
-  const instruments = (query.data ?? []).filter((instrument) =>
-    instrument.characterIds.includes(character.id),
-  );
 
   const saveEnhancedContent = useMutation({
     mutationFn: ({
@@ -79,8 +84,23 @@ export function InstrumentsPanel({ character }: { character: Character }) {
           <h2 className="font-display text-xl text-[#283f37] dark:text-[#eee3ce]">Assigned to {character.name}</h2>
         </div>
       </div>
-      {query.isLoading ? (
+      {isLoading ? (
         <LoaderCircle className="mx-auto my-5 h-5 w-5 animate-spin text-muted-foreground" />
+      ) : isError ? (
+        <div className="py-2" role="alert">
+          <p className="text-sm leading-6 text-muted-foreground">
+            Spiritual Instruments could not be loaded.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="wuxia-secondary-action mt-2"
+            onClick={onRetry}
+          >
+            Try again
+          </Button>
+        </div>
       ) : instruments.length === 0 ? (
         <p className="text-sm leading-6 text-muted-foreground">No spiritual instruments are assigned to this character.</p>
       ) : (
@@ -90,36 +110,27 @@ export function InstrumentsPanel({ character }: { character: Character }) {
             return (
               <div
                 key={instrument.id}
-                className="flex cursor-pointer items-start gap-3 rounded-md border border-[#cdbfa7]/70 bg-white/35 p-3 text-sm dark:border-[#806b48]/55 dark:bg-white/[0.03]"
+                className="flex items-center gap-2 rounded-md border border-[#cdbfa7]/70 bg-white/35 p-1.5 text-sm dark:border-[#806b48]/55 dark:bg-white/[0.03]"
               >
-                <div className="flex min-w-0 flex-1 items-start gap-3">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="wuxia-icon-action mt-0.5 h-7 w-7 shrink-0"
-                    disabled={pending}
-                    onClick={() => assignment.mutate({ instrument, assigned: false })}
-                    aria-label={`Unassign ${instrument.name} from ${character.name}`}
-                    title={`Unassign ${instrument.name}`}
-                  >
-                    {pending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                  </Button>
-                  <span className="min-w-0">
-                    <span className="block font-semibold text-[#314a41] dark:text-[#e4d6bc]">{instrument.name}</span>
-                    <span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-muted-foreground">{instrument.description}</span>
-                    {!instrument.isRevealed && <span className="mt-1 block text-xs font-semibold text-amber-700 dark:text-amber-300">DM draft</span>}
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 rounded-sm px-2 py-2 text-left font-semibold text-[#314a41] transition-colors hover:bg-white/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#668678] dark:text-[#e4d6bc] dark:hover:bg-white/[0.06]"
+                  onClick={() => setExpandedInstrument(instrument)}
+                  aria-label={`Open details for ${instrument.name}`}
+                >
+                  <span className="block truncate">{instrument.name}</span>
+                </button>
                 <Button
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="wuxia-icon-action h-8 w-8 shrink-0"
-                  onClick={() => setExpandedInstrument(instrument)}
-                  aria-label={`Open details for ${instrument.name}`}
+                  className="wuxia-icon-action h-10 w-10 shrink-0"
+                  disabled={pending}
+                  onClick={() => assignment.mutate({ instrument, assigned: false })}
+                  aria-label={`Unassign ${instrument.name} from ${character.name}`}
+                  title={`Unassign ${instrument.name}`}
                 >
-                  <BookOpen className="h-4 w-4" />
+                  {pending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                 </Button>
               </div>
             );

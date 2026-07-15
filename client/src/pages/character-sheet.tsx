@@ -13,10 +13,13 @@ import { useCharacterState } from "@/hooks/use-character-state";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useToast } from "@/hooks/use-toast";
 import { requestJson } from "@/lib/api";
-import { characterKeys } from "@/lib/query-keys";
+import { characterKeys, instrumentKeys } from "@/lib/query-keys";
 import { CharacterSheetHeader } from "@/features/character-sheet/character-sheet-header";
 import { CharacterSheetHero } from "@/features/character-sheet/character-sheet-hero";
-import { TechniquesPanel } from "@/features/character-sheet/techniques-panel";
+import {
+  TechniquesPanel,
+  type ActionListView,
+} from "@/features/character-sheet/techniques-panel";
 import { TrackersPanel } from "@/features/character-sheet/trackers-panel";
 import { InstrumentsPanel } from "@/features/character-sheet/instruments-panel";
 import { useRollController } from "@/features/character-sheet/use-roll-controller";
@@ -29,12 +32,23 @@ import {
   type DieSize,
   type SpiritDieSlot,
 } from "@shared/spirit-dice";
-import type { Character, SpiritDiePool, Technique, Tracker } from "@shared/schema";
+import type {
+  Character,
+  SpiritDiePool,
+  SpiritualInstrumentWithAssignments,
+  Technique,
+  Tracker,
+} from "@shared/schema";
 import { groupTechniqueFamilies } from "@shared/technique-variants";
 
 interface CharacterSheetProps {
   character: Character;
   onReturnToMenu: () => void;
+}
+
+interface InstrumentActionUseResponse {
+  invocationId: string;
+  actionCount: number;
 }
 
 export default function CharacterSheet({ character, onReturnToMenu }: CharacterSheetProps) {
@@ -48,6 +62,8 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   const [isGlossaryOpen, setGlossaryOpen] = useState(false);
   const [isTrackerDialogOpen, setTrackerDialogOpen] = useState(false);
   const [isManualTracking, setManualTracking] = useState(false);
+  const [actionListView, setActionListView] = useState<ActionListView>("techniques");
+  const isDmMode = localStorage.getItem("dmMode") === "true";
   const { lastRollBroadcast } = useWebSocket();
 
   const spiritDiceQuery = useQuery<SpiritDiePool>({
@@ -59,6 +75,14 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   const trackersQuery = useQuery<Tracker[]>({
     queryKey: characterKeys.trackers(character.id),
   });
+  const instrumentsQuery = useQuery<SpiritualInstrumentWithAssignments[]>({
+    queryKey: instrumentKeys.all(isDmMode),
+    queryFn: () =>
+      requestJson(
+        "GET",
+        `/api/instruments${isDmMode ? "?includeHidden=true" : ""}`,
+      ),
+  });
 
   const { updateCharacter, updateSpiritDiePool, deleteTechnique } = useCharacterState(character.id);
   const rollController = useRollController(character.id);
@@ -66,6 +90,44 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
   const techniques = techniquesQuery.data ?? [];
   const techniqueCount = useMemo(() => groupTechniqueFamilies(techniques).length, [techniques]);
   const trackers = trackersQuery.data ?? [];
+  const instruments = useMemo(
+    () =>
+      (instrumentsQuery.data ?? []).filter((instrument) =>
+        instrument.characterIds.includes(character.id),
+      ),
+    [character.id, instrumentsQuery.data],
+  );
+  const useInstrumentAction = useMutation({
+    mutationFn: ({
+      instrumentId,
+      actionId,
+    }: {
+      instrumentId: string;
+      actionId: string;
+    }) =>
+      requestJson<InstrumentActionUseResponse>(
+        "POST",
+        `/api/character/${character.id}/instruments/${instrumentId}/actions/${actionId}/use`,
+        {},
+      ),
+    onSuccess: ({ actionCount }, variables) => {
+      const instrument = instruments.find(({ id }) => id === variables.instrumentId);
+      const action = instrument?.actions.find(({ id }) => id === variables.actionId);
+      toast({
+        title: action ? `${action.name} sent to Foundry` : "Instrument action sent to Foundry",
+        description:
+          actionCount === 0
+            ? "This action has no configured Foundry actions."
+            : `${actionCount} Foundry ${actionCount === 1 ? "action was" : "actions were"} sent.`,
+      });
+    },
+    onError: (error) =>
+      toast({
+        title: "Instrument action could not be used",
+        description: error instanceof Error ? error.message : "The request failed.",
+        variant: "destructive",
+      }),
+  });
   const selectedTechnique = techniques.find(
     (technique) => technique.id === rollController.selectedTechniqueId,
   );
@@ -221,12 +283,33 @@ export default function CharacterSheet({ character, onReturnToMenu }: CharacterS
                 onAdd={() => setTrackerDialogOpen(true)}
                 onDelete={(trackerId) => deleteTracker.mutate(trackerId)}
               />
-              <InstrumentsPanel character={character} />
+              <InstrumentsPanel
+                character={character}
+                instruments={instruments}
+                isLoading={instrumentsQuery.isLoading}
+                isError={instrumentsQuery.isError}
+                onRetry={() => void instrumentsQuery.refetch()}
+              />
             </aside>
 
             <TechniquesPanel
+              view={actionListView}
+              onViewChange={setActionListView}
+              characterId={character.id}
               techniques={techniques}
               isLoading={techniquesQuery.isLoading}
+              instruments={instruments}
+              instrumentsLoading={instrumentsQuery.isLoading}
+              instrumentsError={instrumentsQuery.isError}
+              onRetryInstruments={() => void instrumentsQuery.refetch()}
+              onUseInstrumentAction={(instrumentId, actionId) =>
+                useInstrumentAction.mutate({ instrumentId, actionId })
+              }
+              usingInstrumentAction={
+                useInstrumentAction.isPending
+                  ? (useInstrumentAction.variables ?? null)
+                  : null
+              }
               selectedTechniqueId={rollController.selectedTechniqueId}
               selectedSp={rollController.selectedSp}
               selectedDie={selectedDie}

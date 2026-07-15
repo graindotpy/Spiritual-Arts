@@ -8,7 +8,7 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "test": "tsx --test shared/spirit-dice.test.ts shared/spiritual-arts-dc.test.ts shared/enhanced-content.test.ts shared/mechanics.test.ts shared/technique-variants.test.ts shared/realtime.test.ts client/src/lib/foundry-mechanics-draft.test.ts server/websocket.test.ts server/foundry/config.test.ts server/foundry/control-auth.test.ts server/foundry/playwright-runner.test.ts server/foundry/session-manager.test.ts server/storage/memory-storage.test.ts server/routes/foundry-session.test.ts server/routes/routes.test.ts server/routes/spirit-dice.test.ts server/uploads/image-store.test.ts",
+    "test": "tsx --test shared/spirit-dice.test.ts shared/spiritual-arts-dc.test.ts shared/enhanced-content.test.ts shared/mechanics.test.ts shared/schema.test.ts shared/technique-variants.test.ts shared/realtime.test.ts client/src/lib/foundry-mechanics-draft.test.ts client/src/lib/glossary-linking.test.ts server/websocket.test.ts server/foundry/config.test.ts server/foundry/control-auth.test.ts server/foundry/playwright-runner.test.ts server/foundry/session-manager.test.ts server/storage/memory-storage.test.ts server/routes/foundry-session.test.ts server/routes/routes.test.ts server/routes/spirit-dice.test.ts server/routes/instrument-actions.test.ts server/uploads/image-store.test.ts",
     "verify": "npm run check && npm test && npm run build",
     "db:push": "drizzle-kit push",
     "db:push:local": "cross-env DOTENV_CONFIG_PATH=.env.local drizzle-kit push",

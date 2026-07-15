@@ -88,6 +88,48 @@ export const shortTextSchema = z.string().trim().min(1).max(255);
 export const triggerTypeSchema = z.enum(["action", "bonus", "reaction", "passive"]);
 export type TriggerType = z.infer<typeof triggerTypeSchema>;
 
+export const MAX_INSTRUMENT_ACTIONS = 50;
+export const MAX_INSTRUMENT_ACTIONS_JSON_BYTES = 750_000;
+
+export const instrumentActionSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: shortTextSchema,
+    description: techniqueRichTextSchema,
+    actionType: triggerTypeSchema,
+    mechanics: foundryMechanicsSchema.optional(),
+  })
+  .strict();
+
+export const instrumentActionsSchema = z
+  .array(instrumentActionSchema)
+  .max(MAX_INSTRUMENT_ACTIONS)
+  .superRefine((actions, context) => {
+    const seen = new Set<string>();
+    actions.forEach((action, index) => {
+      if (seen.has(action.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Instrument action IDs must be unique within an instrument",
+          path: [index, "id"],
+        });
+      }
+      seen.add(action.id);
+    });
+    if (
+      new TextEncoder().encode(JSON.stringify(actions)).byteLength >
+      MAX_INSTRUMENT_ACTIONS_JSON_BYTES
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Instrument actions are too large to save",
+        path: [],
+      });
+    }
+  });
+
+export type InstrumentAction = z.infer<typeof instrumentActionSchema>;
+
 export const spEffectValueSchema = z
   .object({
     effect: techniqueRichTextSchema,
@@ -119,6 +161,10 @@ export const spiritualInstruments = pgTable("spiritual_instruments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description").notNull(),
+  actions: jsonb("actions")
+    .$type<InstrumentAction[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   imageUrl: text("image_url"),
   expandedContent: text("expanded_content"),
   hasExpandedContent: boolean("has_expanded_content").notNull().default(false),
@@ -257,6 +303,7 @@ export const updateActiveEffectSchema = insertActiveEffectSchema
 export const insertSpiritualInstrumentSchema = createInsertSchema(spiritualInstruments, {
   name: shortTextSchema,
   description: nonEmptyTextSchema,
+  actions: instrumentActionsSchema.optional(),
   imageUrl: z.string().trim().max(2_048).nullable().optional(),
   expandedContent: enhancedContentJsonSchema.nullable().optional(),
   hasExpandedContent: z.boolean().optional(),

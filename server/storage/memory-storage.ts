@@ -557,12 +557,20 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getSpiritualInstrument(
+    id: string,
+  ): Promise<SpiritualInstrumentWithAssignments | undefined> {
+    const instrument = this.spiritualInstruments.get(id);
+    return instrument ? clone(instrument) : undefined;
+  }
+
   async createSpiritualInstrument(
     instrument: InsertSpiritualInstrument,
   ): Promise<SpiritualInstrumentWithAssignments> {
     const created: SpiritualInstrumentWithAssignments = {
       ...clone(instrument),
       id: randomUUID(),
+      actions: clone(instrument.actions ?? []),
       imageUrl: instrument.imageUrl ?? null,
       expandedContent: instrument.expandedContent ?? null,
       hasExpandedContent: instrument.hasExpandedContent ?? false,

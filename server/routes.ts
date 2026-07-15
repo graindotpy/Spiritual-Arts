@@ -83,7 +83,7 @@ export async function registerRoutes(
   app.use(createGlossaryRouter(routeStorage));
   app.use(createPreferenceRouter(routeStorage));
   app.use(createTrackerRouter(routeStorage));
-  app.use(createInstrumentRouter(routeStorage));
+  app.use(createInstrumentRouter(routeStorage, spiritRolls));
   app.use(createCardGameRouter(routeStorage, images));
   app.use(createDmRouter(routeStorage));
   app.use(createFoundrySessionRouter(foundrySessions, foundryAuth));

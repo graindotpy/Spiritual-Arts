@@ -492,6 +492,26 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getSpiritualInstrument(
+    id: string,
+  ): Promise<SpiritualInstrumentWithAssignments | undefined> {
+    const [instrument] = await this.database
+      .select()
+      .from(spiritualInstruments)
+      .where(eq(spiritualInstruments.id, id))
+      .limit(1);
+    if (!instrument) return undefined;
+
+    const assignments = await this.database
+      .select({ characterId: spiritualInstrumentAssignments.characterId })
+      .from(spiritualInstrumentAssignments)
+      .where(eq(spiritualInstrumentAssignments.instrumentId, id));
+    return {
+      ...instrument,
+      characterIds: assignments.map(({ characterId }) => characterId),
+    };
+  }
+
   async createSpiritualInstrument(
     instrument: InsertSpiritualInstrument,
   ): Promise<SpiritualInstrumentWithAssignments> {

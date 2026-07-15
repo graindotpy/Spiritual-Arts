@@ -20,9 +20,9 @@ import {
   richTextContentToPlainText,
 } from "@shared/enhanced-content";
 import {
-  RichTextContent,
   RichTextErrorBoundary,
 } from "@/features/enhanced-content/rich-text";
+import { GlossaryRichTextContent } from "@/features/glossary/rich-text";
 
 interface TechniqueCardProps {
   technique: Technique;
@@ -75,7 +75,12 @@ function TechniqueText({
           />
         }
       >
-        <RichTextContent content={text} className={className} />
+        <GlossaryRichTextContent
+          content={text}
+          entityId={entityId}
+          scope={characterGlossaryScope}
+          className={className}
+        />
       </RichTextErrorBoundary>
     );
   }

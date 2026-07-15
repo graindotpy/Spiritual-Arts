@@ -243,6 +243,7 @@ test("instrument vault hides drafts and supports many-character assignments", as
     }),
   });
   assert.equal(created.response.status, 201);
+  assert.deepEqual(created.body.actions, []);
   assert.equal(created.body.expandedContent, null);
   assert.equal(created.body.hasExpandedContent, false);
 
@@ -302,6 +303,131 @@ test("instrument vault hides drafts and supports many-character assignments", as
     (revealedList.body as unknown as Array<{ expandedContent: string }>)[0]?.expandedContent,
     richContent,
   );
+});
+
+test("instrument actions round trip and reject invalid nested data", async () => {
+  const instrumentActionId = "9896ef77-4c9a-42c7-bd2d-9599c3906aad";
+  const foundryActionId = "8af9492a-fbbc-489e-9b8d-2fc07868e01c";
+  const passiveActionId = "d3750fb1-2485-4882-b7df-9361038fa0eb";
+  const richDescription = JSON.stringify({
+    type: "doc",
+    content: [{
+      type: "paragraph",
+      content: [
+        { type: "text", text: "Release the light stored inside the lantern." },
+      ],
+    }],
+  });
+  const actions = [
+    {
+      id: instrumentActionId,
+      name: "Lantern Burst",
+      description: richDescription,
+      actionType: "action",
+      mechanics: {
+        version: 5,
+        actions: [{
+          id: foundryActionId,
+          kind: "roll_damage",
+          formula: "2d6 + 3",
+          damageType: "radiant",
+        }],
+      },
+    },
+    {
+      id: passiveActionId,
+      name: "Spirit Sight",
+      description: "You can see nearby spiritual traces.",
+      actionType: "passive",
+    },
+  ];
+
+  const created = await jsonRequest("/api/instruments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Action Lantern",
+      description: "A lantern with a will of its own.",
+      actions,
+    }),
+  });
+  assert.equal(created.response.status, 201);
+  assert.deepEqual(created.body.actions, actions);
+
+  const replacementActions = [{
+    ...actions[1],
+    actionType: "reaction",
+  }];
+  const updated = await jsonRequest(`/api/instruments/${String(created.body.id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ actions: replacementActions }),
+  });
+  assert.equal(updated.response.status, 200);
+  assert.deepEqual(updated.body.actions, replacementActions);
+
+  const listed = await jsonRequest("/api/instruments?includeHidden=true");
+  const persisted = (listed.body as unknown as Array<{ id: string; actions: unknown }>).find(
+    (instrument) => instrument.id === created.body.id,
+  );
+  assert.deepEqual(persisted?.actions, replacementActions);
+
+  const duplicateIds = await jsonRequest(`/api/instruments/${String(created.body.id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ actions: [actions[1], actions[1]] }),
+  });
+  assert.equal(duplicateIds.response.status, 400);
+
+  const unknownActionField = await jsonRequest(
+    `/api/instruments/${String(created.body.id)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actions: [{ ...actions[1], unsupported: true }],
+      }),
+    },
+  );
+  assert.equal(unknownActionField.response.status, 400);
+
+  const invalidFoundryMechanics = await jsonRequest(
+    `/api/instruments/${String(created.body.id)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actions: [{
+          ...actions[0],
+          mechanics: {
+            version: 5,
+            actions: [{
+              id: foundryActionId,
+              kind: "roll_damage",
+              formula: "game.macros.getName('unsafe').execute()",
+              damageType: "radiant",
+            }],
+          },
+        }],
+      }),
+    },
+  );
+  assert.equal(invalidFoundryMechanics.response.status, 400);
+
+  const emptyRichText = await jsonRequest(`/api/instruments/${String(created.body.id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      actions: [{
+        ...actions[1],
+        description: JSON.stringify({
+          type: "doc",
+          content: [{ type: "paragraph", content: [] }],
+        }),
+      }],
+    }),
+  });
+  assert.equal(emptyRichText.response.status, 400);
 });
 
 test("technique mechanics round trip while mechanics-free techniques remain valid", async () => {

@@ -3,8 +3,10 @@ import { randomUUID } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   createFoundryActionRequestMessage,
+  createInstrumentFoundryActionRequestMessage,
   createSpiritDieRollMessage,
   type FoundryActionRequestData,
+  type InstrumentFoundryActionRequestData,
   type RealtimeMessage,
   type SpiritDieRollBroadcast,
 } from "@shared/realtime";
@@ -14,7 +16,15 @@ export interface SpiritRollBroadcaster {
   broadcastFoundryAction(data: FoundryActionRequestData): string | null;
 }
 
-export class SpiritRollWebSocket implements SpiritRollBroadcaster {
+export interface InstrumentActionBroadcaster {
+  broadcastInstrumentFoundryAction(
+    data: InstrumentFoundryActionRequestData,
+  ): string | null;
+}
+
+export class SpiritRollWebSocket
+  implements SpiritRollBroadcaster, InstrumentActionBroadcaster
+{
   private readonly clients = new Set<WebSocket>();
   private readonly responsive = new WeakMap<WebSocket, boolean>();
   private readonly server: WebSocketServer;
@@ -56,6 +66,21 @@ export class SpiritRollWebSocket implements SpiritRollBroadcaster {
       event = createFoundryActionRequestMessage(eventId, data);
     } catch (error) {
       console.error("Skipped invalid Foundry action request:", error);
+      return null;
+    }
+    this.broadcast(event);
+    return eventId;
+  }
+
+  broadcastInstrumentFoundryAction(
+    data: InstrumentFoundryActionRequestData,
+  ): string | null {
+    const eventId = randomUUID();
+    let event: RealtimeMessage;
+    try {
+      event = createInstrumentFoundryActionRequestMessage(eventId, data);
+    } catch (error) {
+      console.error("Skipped invalid instrument Foundry action request:", error);
       return null;
     }
     this.broadcast(event);
