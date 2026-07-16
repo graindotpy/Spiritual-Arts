@@ -12,6 +12,10 @@ export const foundrySessionStateSchema = z.enum([
 
 export type FoundrySessionState = z.infer<typeof foundrySessionStateSchema>;
 
+export const foundrySessionModeSchema = z.enum(["local", "agent"]);
+
+export type FoundrySessionMode = z.infer<typeof foundrySessionModeSchema>;
+
 export const foundryStopReasonSchema = z.enum([
   "requested",
   "ttl_expired",
@@ -19,6 +23,8 @@ export const foundryStopReasonSchema = z.enum([
   "browser_closed",
   "page_closed",
   "page_crashed",
+  "agent_disconnected",
+  "agent_stopped",
 ]);
 
 export type FoundryStopReason = z.infer<typeof foundryStopReasonSchema>;
@@ -37,6 +43,12 @@ export const foundrySessionFailureCodeSchema = z.enum([
   "browser_closed",
   "page_closed",
   "page_crashed",
+  "agent_unavailable",
+  "agent_disconnected",
+  "agent_protocol_error",
+  "agent_session_stopped",
+  "command_expired",
+  "session_busy",
   "startup_failed",
 ]);
 
@@ -65,6 +77,8 @@ export type FoundrySessionFailure = z.infer<
 export const foundrySessionStatusSchema = z
   .object({
     configured: z.boolean(),
+    mode: foundrySessionModeSchema.nullable(),
+    agentAvailable: z.boolean().nullable(),
     state: foundrySessionStateSchema,
     startedAt: nullableTimestampSchema,
     readyAt: nullableTimestampSchema,

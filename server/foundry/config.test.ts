@@ -20,12 +20,79 @@ test("Foundry browser configuration applies bounded safe defaults", () => {
   const result = readFoundrySessionConfig(complete);
   assert.equal(result.warning, null);
   assert.deepEqual(result.config, {
+    mode: "local",
     worldUrl: "https://foundry.example/game",
     userName: "Website Bridge",
     accessKey: "do-not-expose",
     maxSessionMs: 480 * 60_000,
     headless: true,
+    disableCanvas: true,
   });
+});
+
+test("remote agent mode needs only its identity, strong token, and bridge user", () => {
+  const result = readFoundrySessionConfig({
+    FOUNDRY_SESSION_MODE: "agent",
+    FOUNDRY_AGENT_ID: "zima-home",
+    FOUNDRY_AGENT_TOKEN: "a".repeat(64),
+    FOUNDRY_BRIDGE_USER: "Website Bridge",
+  });
+  assert.equal(result.warning, null);
+  assert.deepEqual(result.config, {
+    mode: "agent",
+    agentId: "zima-home",
+    agentToken: "a".repeat(64),
+    userName: "Website Bridge",
+    maxSessionMs: 480 * 60_000,
+  });
+  assert.equal("worldUrl" in (result.config ?? {}), false);
+  assert.equal("accessKey" in (result.config ?? {}), false);
+});
+
+test("agent variables autodetect mode and invalid agent config is secret-free", () => {
+  const autodetected = readFoundrySessionConfig({
+    FOUNDRY_AGENT_ID: "zima-home",
+    FOUNDRY_AGENT_TOKEN: "b".repeat(64),
+    FOUNDRY_BRIDGE_USER: "Website Bridge",
+  });
+  assert.equal(autodetected.config?.mode, "agent");
+
+  const weakToken = "do-not-print-this-token";
+  const invalid = readFoundrySessionConfig({
+    FOUNDRY_SESSION_MODE: "agent",
+    FOUNDRY_AGENT_ID: "zima-home",
+    FOUNDRY_AGENT_TOKEN: weakToken,
+    FOUNDRY_BRIDGE_USER: "Website Bridge",
+  });
+  assert.equal(invalid.config, null);
+  assert.match(invalid.warning ?? "", /64-character hexadecimal/);
+  assert.equal(invalid.warning?.includes(weakToken), false);
+
+  const controlCharacterUser = readFoundrySessionConfig({
+    FOUNDRY_SESSION_MODE: "agent",
+    FOUNDRY_AGENT_ID: "zima-home",
+    FOUNDRY_AGENT_TOKEN: "b".repeat(64),
+    FOUNDRY_BRIDGE_USER: "Website\nBridge",
+  });
+  assert.equal(controlCharacterUser.config, null);
+  assert.match(controlCharacterUser.warning ?? "", /printable characters/);
+});
+
+test("explicit modes reject missing variables and invalid mode names", () => {
+  const missingAgent = readFoundrySessionConfig({
+    FOUNDRY_SESSION_MODE: "agent",
+    FOUNDRY_BRIDGE_USER: "Website Bridge",
+  });
+  assert.equal(missingAgent.config, null);
+  assert.match(missingAgent.warning ?? "", /FOUNDRY_AGENT_ID/);
+  assert.match(missingAgent.warning ?? "", /FOUNDRY_AGENT_TOKEN/);
+
+  const invalidMode = readFoundrySessionConfig({
+    ...complete,
+    FOUNDRY_SESSION_MODE: "remote",
+  });
+  assert.equal(invalidMode.config, null);
+  assert.match(invalidMode.warning ?? "", /local or agent/);
 });
 
 test("partial and unsafe Foundry browser configuration is disabled safely", () => {
@@ -76,6 +143,24 @@ test("session duration and headed mode are explicitly bounded", () => {
   });
   assert.equal(productionHeaded.config, null);
   assert.match(productionHeaded.warning ?? "", /true in production/);
+
+  const canvasEnabled = readFoundrySessionConfig({
+    ...complete,
+    FOUNDRY_DISABLE_CANVAS: "false",
+  });
+  assert.equal(
+    canvasEnabled.config?.mode === "local"
+      ? canvasEnabled.config.disableCanvas
+      : undefined,
+    false,
+  );
+  assert.equal(
+    readFoundrySessionConfig({
+      ...complete,
+      FOUNDRY_DISABLE_CANVAS: "sometimes",
+    }).config,
+    null,
+  );
 });
 
 test("development permits HTTP only for a loopback Foundry server", () => {

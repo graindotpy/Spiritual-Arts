@@ -1,9 +1,11 @@
 import express, { type Express } from "express";
 import { createServer, type Server } from "node:http";
 import { readFoundrySessionConfig } from "./foundry/config";
+import { FoundryAgentHub } from "./foundry/agent-hub";
 import { FoundryControlAuth } from "./foundry/control-auth";
-import { PlaywrightFoundryConnector } from "./foundry/playwright-runner";
+import { RemoteFoundryConnector } from "./foundry/remote-connector";
 import { FoundrySessionManager } from "./foundry/session-manager";
+import type { FoundryConnector } from "./foundry/types";
 import { apiNotFound } from "./http/errors";
 import { createCardGameRouter } from "./routes/card-game";
 import { createCharacterRouter } from "./routes/characters";
@@ -39,23 +41,54 @@ export async function registerRoutes(
   const spiritRolls = new SpiritRollWebSocket(httpServer);
   const foundryConfig = readFoundrySessionConfig();
   if (foundryConfig.warning) console.warn(foundryConfig.warning);
+  const foundryAgent =
+    foundryConfig.config?.mode === "agent"
+      ? new FoundryAgentHub(httpServer, {
+          agentId: foundryConfig.config.agentId,
+          token: foundryConfig.config.agentToken,
+          bridgeUser: foundryConfig.config.userName,
+        })
+      : null;
+  let foundryConnector: FoundryConnector;
+  if (foundryAgent) {
+    foundryConnector = new RemoteFoundryConnector(foundryAgent);
+  } else if (foundryConfig.config) {
+    const { PlaywrightFoundryConnector } = await import(
+      "./foundry/playwright-runner"
+    );
+    foundryConnector = new PlaywrightFoundryConnector();
+  } else {
+    // An unconfigured session manager never invokes its connector. Avoid even
+    // loading the local Playwright runner in that common disabled state.
+    foundryConnector = {
+      connect: async () => {
+        throw new Error("Foundry session control is not configured");
+      },
+    };
+  }
   const foundrySessions = new FoundrySessionManager(
     foundryConfig.config,
-    new PlaywrightFoundryConnector(),
+    foundryConnector,
   );
   const foundryAuth = new FoundryControlAuth({
     password: process.env.FOUNDRY_CONTROL_PASSWORD,
   });
   if (foundryConfig.config && !foundryAuth.configured) {
     console.warn(
-      "Foundry browser controls disabled; FOUNDRY_CONTROL_PASSWORD is missing",
+      "Foundry session controls disabled; FOUNDRY_CONTROL_PASSWORD is missing",
     );
   }
   httpServer.closeRealtime = () => spiritRolls.close();
-  httpServer.closeFoundrySession = () => foundrySessions.dispose();
+  let closeFoundryTask: Promise<void> | null = null;
+  httpServer.closeFoundrySession = () => {
+    closeFoundryTask ??= foundrySessions.dispose().finally(() => {
+      foundryAgent?.close();
+    });
+    return closeFoundryTask;
+  };
   httpServer.once("close", () => {
-    void foundrySessions.dispose().catch((error: unknown) => {
-      console.error("Failed to close the Foundry browser session:", error);
+    void httpServer.closeFoundrySession().catch((error: unknown) => {
+      console.error("Failed to close the Foundry session:", error);
     });
   });
 

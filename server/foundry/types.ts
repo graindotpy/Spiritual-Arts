@@ -3,6 +3,7 @@ import type { FoundrySessionFailureCode } from "@shared/foundry-session";
 export type {
   FoundrySessionFailure,
   FoundrySessionFailureCode,
+  FoundrySessionMode,
   FoundrySessionState,
   FoundrySessionStatus,
   FoundryStopReason,
@@ -11,16 +12,32 @@ export type {
 /** Internal compatibility alias; the public source of truth is shared. */
 export type FoundryFailureCode = FoundrySessionFailureCode;
 
-export interface FoundrySessionConfig {
-  worldUrl: string;
+interface FoundryBaseSessionConfig {
   userName: string;
-  accessKey: string;
   maxSessionMs: number;
+}
+
+export interface LocalFoundrySessionConfig extends FoundryBaseSessionConfig {
+  /** Omitted by older callers and tests; local remains the compatibility mode. */
+  mode?: "local";
+  worldUrl: string;
+  accessKey: string;
   headless: boolean;
+  disableCanvas?: boolean;
   navigationTimeoutMs?: number;
   loginTimeoutMs?: number;
   actionTimeoutMs?: number;
 }
+
+export interface AgentFoundrySessionConfig extends FoundryBaseSessionConfig {
+  mode: "agent";
+  agentId: string;
+  agentToken: string;
+}
+
+export type FoundrySessionConfig =
+  | LocalFoundrySessionConfig
+  | AgentFoundrySessionConfig;
 
 export type FoundryConnectionStage =
   | "launching"
@@ -29,7 +46,12 @@ export type FoundryConnectionStage =
   | "verifying";
 
 export type FoundryConnectionTermination = {
-  kind: "browser_closed" | "page_closed" | "page_crashed";
+  kind:
+    | "browser_closed"
+    | "page_closed"
+    | "page_crashed"
+    | "agent_disconnected"
+    | "agent_stopped";
 };
 
 export interface FoundryConnection {
@@ -39,6 +61,8 @@ export interface FoundryConnection {
 }
 
 export interface FoundryConnector {
+  /** Null for an in-process connector; boolean for a remote agent connector. */
+  available?(): boolean | null;
   connect(
     config: Readonly<FoundrySessionConfig>,
     signal: AbortSignal,

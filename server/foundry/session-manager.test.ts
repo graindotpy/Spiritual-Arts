@@ -300,6 +300,8 @@ test("an unconfigured manager remains a secret-free no-op", async () => {
 
   assert.deepEqual(manager.start(), {
     configured: false,
+    mode: null,
+    agentAvailable: null,
     state: "unconfigured",
     startedAt: null,
     readyAt: null,
@@ -311,4 +313,32 @@ test("an unconfigured manager remains a secret-free no-op", async () => {
   });
   await manager.stop();
   assert.equal(connectCalls, 0);
+});
+
+test("agent availability is live status and never exposes agent secrets", () => {
+  let available = false;
+  const connector: FoundryConnector = {
+    available: () => available,
+    connect: async () => new FakeConnection(),
+  };
+  const agentToken = "0123456789abcdef".repeat(4);
+  const manager = new FoundrySessionManager(
+    {
+      mode: "agent",
+      agentId: "zima-home",
+      agentToken,
+      userName: "Spiritual Arts Bridge",
+      maxSessionMs: 60_000,
+    },
+    connector,
+    { logger: quietLogger },
+  );
+
+  assert.equal(manager.status().mode, "agent");
+  assert.equal(manager.status().agentAvailable, false);
+  available = true;
+  const online = manager.status();
+  assert.equal(online.agentAvailable, true);
+  assert.equal(JSON.stringify(online).includes(agentToken), false);
+  assert.equal(JSON.stringify(online).includes("zima-home"), false);
 });

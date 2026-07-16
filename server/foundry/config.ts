@@ -1,4 +1,8 @@
-import type { FoundrySessionConfig } from "./types";
+import type {
+  AgentFoundrySessionConfig,
+  FoundrySessionConfig,
+  LocalFoundrySessionConfig,
+} from "./types";
 
 const DEFAULT_MAX_SESSION_MINUTES = 8 * 60;
 const MIN_SESSION_MINUTES = 15;
@@ -25,16 +29,14 @@ function parseMaxSessionMinutes(raw: string): number | null {
     : null;
 }
 
-function parseHeadless(raw: string): boolean | null {
-  if (!raw || raw === "true") return true;
+function parseBoolean(raw: string, defaultValue: boolean): boolean | null {
+  if (!raw) return defaultValue;
+  if (raw === "true") return true;
   if (raw === "false") return false;
   return null;
 }
 
-function parseWorldUrl(
-  raw: string,
-  production: boolean,
-): URL | null {
+function parseWorldUrl(raw: string, production: boolean): URL | null {
   try {
     const url = new URL(raw);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
@@ -50,59 +52,17 @@ function parseWorldUrl(
   }
 }
 
-/**
- * Invalid optional configuration disables only the Foundry browser rather than
- * taking down the character-sheet website. Warnings contain variable names,
- * never their values.
- */
-export function readFoundrySessionConfig(
-  environment: NodeJS.ProcessEnv = process.env,
-): FoundryConfigResult {
-  const worldUrl = value(environment, "FOUNDRY_WORLD_URL");
+function commonConfig(
+  environment: NodeJS.ProcessEnv,
+): { userName: string; maxSessionMs: number } | { warning: string } {
   const userName = value(environment, "FOUNDRY_BRIDGE_USER");
-  const accessKey = value(environment, "FOUNDRY_BRIDGE_ACCESS_KEY");
-  const production = value(environment, "NODE_ENV") === "production";
-  const supplied = [worldUrl, userName, accessKey].filter(Boolean).length;
-
-  if (supplied === 0) return { config: null, warning: null };
-  if (supplied !== 3) {
-    const missing = [
-      ["FOUNDRY_WORLD_URL", worldUrl],
-      ["FOUNDRY_BRIDGE_USER", userName],
-      ["FOUNDRY_BRIDGE_ACCESS_KEY", accessKey],
-    ]
-      .filter(([, configuredValue]) => !configuredValue)
-      .map(([name]) => name)
-      .join(", ");
-    return {
-      config: null,
-      warning: `Foundry browser disabled; missing ${missing}`,
-    };
+  if (!userName) {
+    return { warning: "Foundry session disabled; missing FOUNDRY_BRIDGE_USER" };
   }
-
-  const parsedUrl = parseWorldUrl(
-    worldUrl,
-    production,
-  );
-  if (!parsedUrl) {
+  if (userName.length > 200 || /[\u0000-\u001f\u007f]/.test(userName)) {
     return {
-      config: null,
       warning:
-        "Foundry browser disabled; FOUNDRY_WORLD_URL must be HTTPS (or loopback HTTP in development) without embedded credentials",
-    };
-  }
-  if (userName.length > 200) {
-    return {
-      config: null,
-      warning:
-        "Foundry browser disabled; FOUNDRY_BRIDGE_USER exceeds 200 characters",
-    };
-  }
-  if (accessKey.length > 1_024) {
-    return {
-      config: null,
-      warning:
-        "Foundry browser disabled; FOUNDRY_BRIDGE_ACCESS_KEY exceeds 1024 characters",
+        "Foundry session disabled; FOUNDRY_BRIDGE_USER must contain at most 200 printable characters",
     };
   }
 
@@ -111,36 +71,174 @@ export function readFoundrySessionConfig(
   );
   if (maxMinutes === null) {
     return {
-      config: null,
       warning:
-        "Foundry browser disabled; FOUNDRY_SESSION_MAX_MINUTES must be an integer from 15 to 1440",
+        "Foundry session disabled; FOUNDRY_SESSION_MAX_MINUTES must be an integer from 15 to 1440",
     };
   }
 
-  const headless = parseHeadless(value(environment, "FOUNDRY_HEADLESS"));
-  if (headless === null) {
+  return { userName, maxSessionMs: maxMinutes * 60_000 };
+}
+
+function readLocalConfig(
+  environment: NodeJS.ProcessEnv,
+): FoundryConfigResult {
+  const worldUrl = value(environment, "FOUNDRY_WORLD_URL");
+  const accessKey = value(environment, "FOUNDRY_BRIDGE_ACCESS_KEY");
+  const common = commonConfig(environment);
+  const missing = [
+    ["FOUNDRY_WORLD_URL", worldUrl],
+    ["FOUNDRY_BRIDGE_ACCESS_KEY", accessKey],
+  ]
+    .filter(([, configuredValue]) => !configuredValue)
+    .map(([name]) => name);
+  if ("warning" in common && !value(environment, "FOUNDRY_BRIDGE_USER")) {
+    missing.splice(1, 0, "FOUNDRY_BRIDGE_USER");
+  }
+  if (missing.length > 0) {
+    return {
+      config: null,
+      warning: `Foundry local browser disabled; missing ${missing.join(", ")}`,
+    };
+  }
+  if ("warning" in common) return { config: null, warning: common.warning };
+
+  const production = value(environment, "NODE_ENV") === "production";
+  const parsedUrl = parseWorldUrl(worldUrl, production);
+  if (!parsedUrl) {
     return {
       config: null,
       warning:
-        "Foundry browser disabled; FOUNDRY_HEADLESS must be true or false",
+        "Foundry local browser disabled; FOUNDRY_WORLD_URL must be HTTPS (or loopback HTTP in development) without embedded credentials",
+    };
+  }
+  if (accessKey.length > 1_024) {
+    return {
+      config: null,
+      warning:
+        "Foundry local browser disabled; FOUNDRY_BRIDGE_ACCESS_KEY exceeds 1024 characters",
+    };
+  }
+
+  const headless = parseBoolean(value(environment, "FOUNDRY_HEADLESS"), true);
+  if (headless === null) {
+    return {
+      config: null,
+      warning: "Foundry local browser disabled; FOUNDRY_HEADLESS must be true or false",
     };
   }
   if (production && !headless) {
     return {
       config: null,
       warning:
-        "Foundry browser disabled; FOUNDRY_HEADLESS must be true in production",
+        "Foundry local browser disabled; FOUNDRY_HEADLESS must be true in production",
     };
   }
 
-  return {
-    config: {
-      worldUrl: parsedUrl.toString(),
-      userName,
-      accessKey,
-      maxSessionMs: maxMinutes * 60_000,
-      headless,
-    },
-    warning: null,
+  const disableCanvas = parseBoolean(
+    value(environment, "FOUNDRY_DISABLE_CANVAS"),
+    true,
+  );
+  if (disableCanvas === null) {
+    return {
+      config: null,
+      warning:
+        "Foundry local browser disabled; FOUNDRY_DISABLE_CANVAS must be true or false",
+    };
+  }
+
+  const config: LocalFoundrySessionConfig = {
+    mode: "local",
+    worldUrl: parsedUrl.toString(),
+    userName: common.userName,
+    accessKey,
+    maxSessionMs: common.maxSessionMs,
+    headless,
+    disableCanvas,
   };
+  return { config, warning: null };
+}
+
+function readAgentConfig(
+  environment: NodeJS.ProcessEnv,
+): FoundryConfigResult {
+  const agentId = value(environment, "FOUNDRY_AGENT_ID");
+  const agentToken = value(environment, "FOUNDRY_AGENT_TOKEN");
+  const common = commonConfig(environment);
+  const missing = [
+    ["FOUNDRY_AGENT_ID", agentId],
+    ["FOUNDRY_AGENT_TOKEN", agentToken],
+    ["FOUNDRY_BRIDGE_USER", value(environment, "FOUNDRY_BRIDGE_USER")],
+  ]
+    .filter(([, configuredValue]) => !configuredValue)
+    .map(([name]) => name);
+  if (missing.length > 0) {
+    return {
+      config: null,
+      warning: `Foundry agent mode disabled; missing ${missing.join(", ")}`,
+    };
+  }
+  if ("warning" in common) return { config: null, warning: common.warning };
+  if (agentId.length > 128 || /[\u0000-\u001f\u007f]/.test(agentId)) {
+    return {
+      config: null,
+      warning:
+        "Foundry agent mode disabled; FOUNDRY_AGENT_ID must be at most 128 printable characters",
+    };
+  }
+  if (!/^[a-fA-F0-9]{64}$/.test(agentToken)) {
+    return {
+      config: null,
+      warning:
+        "Foundry agent mode disabled; FOUNDRY_AGENT_TOKEN must be a 64-character hexadecimal secret",
+    };
+  }
+
+  const config: AgentFoundrySessionConfig = {
+    mode: "agent",
+    agentId,
+    agentToken,
+    userName: common.userName,
+    maxSessionMs: common.maxSessionMs,
+  };
+  return { config, warning: null };
+}
+
+/**
+ * Invalid optional configuration disables only Foundry session control rather
+ * than taking down the website. Warnings name variables but never their values.
+ * Without an explicit mode, agent-specific variables select agent mode and the
+ * legacy world URL/access-key variables continue to select local mode.
+ */
+export function readFoundrySessionConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): FoundryConfigResult {
+  const explicitMode = value(environment, "FOUNDRY_SESSION_MODE");
+  if (explicitMode && explicitMode !== "local" && explicitMode !== "agent") {
+    return {
+      config: null,
+      warning:
+        "Foundry session disabled; FOUNDRY_SESSION_MODE must be local or agent",
+    };
+  }
+
+  const hasAgentValues = Boolean(
+    value(environment, "FOUNDRY_AGENT_ID") ||
+      value(environment, "FOUNDRY_AGENT_TOKEN"),
+  );
+  const hasLocalValues = Boolean(
+    value(environment, "FOUNDRY_WORLD_URL") ||
+      value(environment, "FOUNDRY_BRIDGE_ACCESS_KEY"),
+  );
+  const hasSharedValues = Boolean(
+    value(environment, "FOUNDRY_BRIDGE_USER"),
+  );
+
+  if (!explicitMode && !hasAgentValues && !hasLocalValues && !hasSharedValues) {
+    return { config: null, warning: null };
+  }
+
+  const mode = explicitMode || (hasAgentValues ? "agent" : "local");
+  return mode === "agent"
+    ? readAgentConfig(environment)
+    : readLocalConfig(environment);
 }

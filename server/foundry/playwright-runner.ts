@@ -4,6 +4,7 @@ import {
   type FoundryConnectionTermination,
   type FoundryConnector,
   type FoundrySessionConfig,
+  type LocalFoundrySessionConfig,
 } from "./types";
 
 export const FOUNDRY_JOIN_SELECTORS = Object.freeze({
@@ -71,6 +72,7 @@ export interface PlaywrightPagePort {
 }
 
 export interface PlaywrightContextPort {
+  addInitScript(script: () => void): Promise<void>;
   newPage(): Promise<PlaywrightPagePort>;
   close(options?: { reason?: string }): Promise<void>;
   on(event: "close", listener: () => void): void;
@@ -252,6 +254,17 @@ function normalizeUnexpectedError(
   return new FoundryRunnerError(code, publicMessage, { cause: error });
 }
 
+function requireLocalConfig(
+  config: Readonly<FoundrySessionConfig>,
+): asserts config is Readonly<LocalFoundrySessionConfig> {
+  if (config.mode === "agent") {
+    throw new FoundryRunnerError(
+      "startup_failed",
+      "The local Foundry browser received remote-agent configuration.",
+    );
+  }
+}
+
 export class PlaywrightFoundryConnector implements FoundryConnector {
   constructor(
     private readonly launchBrowser: FoundryBrowserLauncher =
@@ -263,6 +276,7 @@ export class PlaywrightFoundryConnector implements FoundryConnector {
     signal: AbortSignal,
     onStage: (stage: "launching" | "opening" | "authenticating" | "verifying") => void,
   ): Promise<FoundryConnection> {
+    requireLocalConfig(config);
     let browser: PlaywrightBrowserPort | null = null;
     let context: PlaywrightContextPort | null = null;
     let closing = false;
@@ -299,10 +313,22 @@ export class PlaywrightFoundryConnector implements FoundryConnector {
         browser.newContext({
           acceptDownloads: false,
           reducedMotion: "reduce",
-          viewport: { width: 1280, height: 720 },
+          viewport: { width: 1366, height: 768 },
         }),
       );
       context.on("close", () => terminate("browser_closed"));
+      if (config.disableCanvas ?? true) {
+        await gate.run(
+          context.addInitScript(() => {
+            try {
+              localStorage.setItem("core.noCanvas", JSON.stringify(true));
+            } catch {
+              // Storage can be unavailable in sandboxed frames; the script is
+              // installed on the top-level Foundry document as well.
+            }
+          }),
+        );
+      }
       const page = await gate.run(context.newPage());
       page.on("close", () => terminate("page_closed"));
       page.on("crash", () => terminate("page_crashed"));

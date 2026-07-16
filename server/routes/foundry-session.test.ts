@@ -16,6 +16,8 @@ import {
 
 const readyStatus: FoundrySessionStatus = {
   configured: true,
+  mode: "local",
+  agentAvailable: null,
   state: "ready",
   startedAt: "2026-07-15T12:00:00.000Z",
   readyAt: "2026-07-15T12:00:03.000Z",
@@ -104,6 +106,8 @@ test("Foundry controls redact status and require server-side authorization", asy
       authenticated: false,
       session: {
         configured: true,
+        mode: null,
+        agentAvailable: null,
         state: "stopped",
         startedAt: null,
         readyAt: null,
@@ -236,6 +240,41 @@ test("Foundry control login reports missing server configuration", async () => {
       },
     );
     assert.equal(result.response.status, 503);
+  } finally {
+    await server.close();
+  }
+});
+
+test("an authenticated connect fails synchronously while the agent is offline", async () => {
+  const controller = new FakeFoundryController();
+  controller.current = {
+    ...readyStatus,
+    mode: "agent",
+    agentAvailable: false,
+    state: "stopped",
+    startedAt: null,
+    readyAt: null,
+    expiresAt: null,
+  };
+  const auth = new FoundryControlAuth({ password: "control secret" });
+  const authorization = auth.login("control secret", "test-client");
+  const server = await startServer(controller, auth);
+
+  try {
+    const result = await json(
+      server.baseUrl,
+      "/api/foundry-session/connect",
+      {
+        method: "POST",
+        headers: {
+          Cookie: `spiritual_arts_foundry_control=${authorization.token}`,
+          "X-Spiritual-Arts-Control": "1",
+        },
+      },
+    );
+    assert.equal(result.response.status, 503);
+    assert.equal(result.body.message, "The remote Foundry agent is offline");
+    assert.equal(controller.starts, 0);
   } finally {
     await server.close();
   }

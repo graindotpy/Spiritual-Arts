@@ -22,6 +22,7 @@ const config: FoundrySessionConfig = {
   accessKey: "bridge-access-key",
   maxSessionMs: 60_000,
   headless: true,
+  disableCanvas: true,
   actionTimeoutMs: 25,
   navigationTimeoutMs: 50,
   loginTimeoutMs: 75,
@@ -164,11 +165,16 @@ class FakePage implements PlaywrightPagePort {
 
 class FakeContext implements PlaywrightContextPort {
   private closeListener: (() => void) | undefined;
+  readonly initScripts: Array<() => void> = [];
 
   constructor(
     private readonly page: FakePage,
     private readonly closeOrder: string[],
   ) {}
+
+  async addInitScript(script: () => void): Promise<void> {
+    this.initScripts.push(script);
+  }
 
   async newPage(): Promise<PlaywrightPagePort> {
     return this.page;
@@ -296,6 +302,28 @@ test("selects the exact user, logs in, verifies Foundry, and closes in order", a
     "verifying",
   ]);
   assert.deepEqual(fixture.launchOptions, { headless: true });
+  assert.deepEqual(fixture.browser.launchContextOptions, {
+    acceptDownloads: false,
+    reducedMotion: "reduce",
+    viewport: { width: 1366, height: 768 },
+  });
+  assert.equal(fixture.browser.context.initScripts.length, 1);
+  const stored = new Map<string, string>();
+  const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { setItem: (key: string, value: string) => stored.set(key, value) },
+  });
+  try {
+    fixture.browser.context.initScripts[0]?.();
+  } finally {
+    if (originalStorage) {
+      Object.defineProperty(globalThis, "localStorage", originalStorage);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  }
+  assert.equal(stored.get("core.noCanvas"), "true");
   assert.equal(fixture.page.gotoUrl, config.worldUrl);
   assert.equal(fixture.page.actionTimeout, config.actionTimeoutMs);
   assert.equal(fixture.page.navigationTimeout, config.navigationTimeoutMs);

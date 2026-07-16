@@ -250,69 +250,87 @@ duplicate suppression. Website browser clients continue to parse only
 
 ## Session-bound Foundry browser
 
-The DM page can start one Playwright Chromium session which opens a running
-Foundry world, selects a dedicated user by its exact displayed name, supplies
-that user's access key, and clicks Join Game. A connection is reported ready
-only after Foundry has loaded the expected user and confirmed that the
-`spiritual-arts-foundry` module is active and designates the same user as its
-bridge user. This verifies the browser session, not delivery of an individual
-WebSocket event; the current realtime protocol has no bridge acknowledgement.
+The DM page controls one Foundry browser session in either `agent` (recommended)
+or `local` mode. Both paths report ready only after Foundry loads the exact
+dedicated user, reaches `game.ready`, and verifies the active
+`spiritual-arts-foundry` module and its configured bridge-user setting. This
+does not prove that the module's separate public `/ws` roll socket connected:
+that realtime protocol still has no application-level acknowledgement or replay
+queue, so diagnose roll delivery separately after the session reports ready.
 
-Connect is idempotent: repeated requests cannot create additional browsers.
-Disconnect cancels an in-progress login or closes the active browser. The
-server also closes it on process shutdown, on a browser/page failure, and after
-`FOUNDRY_SESSION_MAX_MINUTES` (eight hours by default). It does not automatically
-restart a failed or expired session, so compute cannot resume unexpectedly.
+Connect is idempotent. Disconnect cancels startup or closes the browser, and a
+hard `FOUNDRY_SESSION_MAX_MINUTES` lease (eight hours by default) applies at the
+website and remote agent. A failure, expiry, or restart never starts Chromium
+again automatically.
 
-The start/stop API is separate from the client-side DM convenience code. It
-requires `FOUNDRY_CONTROL_PASSWORD` and exchanges it for a process-local,
-short-lived HttpOnly/SameSite cookie. Mutations also require a same-origin
-control header and failed logins are throttled. Status returned before
-authorization is redacted; the Foundry URL and both passwords remain server
-only. A deploy invalidates existing control cookies.
+The start/stop API requires `FOUNDRY_CONTROL_PASSWORD`, exchanged for a
+process-local short-lived HttpOnly/SameSite cookie. Mutations also need a
+same-origin control header and failed logins are throttled. Infrastructure mode
+and agent availability remain redacted until that control authorization succeeds;
+agent identity, token, Foundry URL, and access key are never returned. A deploy
+invalidates existing control cookies.
 
-### Foundry setup
+### Foundry world setup
 
 1. Create a dedicated Foundry user with a unique name and access key. Give it
    only the role and permissions the roll bridge needs.
 2. Enable the Spiritual Arts module in the world.
-3. In the module settings, choose that dedicated user as **Bridge User**, then
-   reload the world when Foundry requests it.
-4. Keep the world launched on the cloud Foundry host. The configured URL must
-   lead to its Join Game page.
+3. In module settings, select that user as **Bridge User**, then reload the world.
+4. Keep the Foundry world launched so its Join Game page remains reachable.
 
-Configure these server environment variables (never client/Vite variables):
+### Remote Zima agent mode (recommended)
+
+The lightweight agent keeps one outbound authenticated WebSocket open to
+`/ws/foundry-agent`. It consumes negligible idle CPU and does not launch
+Chromium until the DM clicks Connect. The website sends a bounded start command,
+receives progress/readiness, and sends a stop command on Disconnect, expiry, or
+shutdown. No home-network port forwarding is needed.
+
+Configure these server-only variables on Render:
 
 ```dotenv
+FOUNDRY_SESSION_MODE=agent
+FOUNDRY_AGENT_ID=zima-home
+FOUNDRY_AGENT_TOKEN=a-unique-64-character-hexadecimal-random-secret
+FOUNDRY_BRIDGE_USER=Website Bridge
+FOUNDRY_CONTROL_PASSWORD=a-separate-long-random-password
+FOUNDRY_SESSION_MAX_MINUTES=480
+```
+
+Use the exact same agent ID, agent token, and bridge-user spelling in the Zima
+agent. Generate the required 64-character hexadecimal token with
+`openssl rand -hex 32` rather than reusing either password. Agent mode does not require
+`FOUNDRY_WORLD_URL` or `FOUNDRY_BRIDGE_ACCESS_KEY` on Render; the Foundry
+credentials remain on Zima.
+
+The agent control hub and roll clients are process-local, so production must run
+exactly one website instance. Adding replicas would require shared routing/state
+before a control command and roll request could safely land on different nodes.
+
+### Local browser mode (compatibility fallback)
+
+```dotenv
+FOUNDRY_SESSION_MODE=local
 FOUNDRY_WORLD_URL=https://your-foundry-host.example/join
 FOUNDRY_BRIDGE_USER=Website Bridge
 FOUNDRY_BRIDGE_ACCESS_KEY=a-foundry-user-access-key
 FOUNDRY_CONTROL_PASSWORD=a-separate-long-random-password
 FOUNDRY_SESSION_MAX_MINUTES=480
 FOUNDRY_HEADLESS=true
+FOUNDRY_DISABLE_CANVAS=true
 ```
 
-The world URL, bridge user, and bridge access key are required together.
-Production URLs must use HTTPS and cannot contain embedded URL credentials.
-Use the final hosted Join Game URL: redirects may change paths, but a redirect
-to another origin is rejected before the access key is entered. Session limits
-are bounded to 15-1440 minutes. Set `FOUNDRY_HEADLESS=false` only for a local
-headed smoke test, and install the local browser once with:
+The URL, bridge user, and access key are required together. Production URLs must
+use HTTPS without embedded credentials; a cross-origin redirect is rejected
+before the key is entered. Session limits are bounded to 15-1440 minutes.
+Canvas is disabled by default through Foundry's `core.noCanvas` preference and
+Chromium uses a 1366x768 viewport. Set `FOUNDRY_DISABLE_CANVAS=false` or
+`FOUNDRY_HEADLESS=false` only for local diagnosis; headed mode is rejected in
+production. Install the local browser once with `npx playwright install chromium`.
 
-```bash
-npx playwright install chromium
-```
-
-The checked-in Dockerfile uses the matching Playwright Chromium image and is
-the production deployment path. On Render, configure the service to build from
-that Dockerfile, leave its Docker Command unset so the checked-in command runs,
-and add the six variables in the service's Environment page.
-The browser runs inside the same web-service instance only while requested, so
-it does not create a second set of instance-hours. Chromium and Foundry can,
-however, put substantial pressure on a free instance's memory. Test one real
-session while watching Render's memory/restart metrics; if it is killed for
-memory, the `FoundryConnector` boundary is the intended seam for a later remote
-worker implementation. This process-local version assumes one web instance.
+When `FOUNDRY_SESSION_MODE` is omitted, agent ID/token values select agent mode;
+otherwise the legacy world URL/access-key pair selects local mode. Leaving all
+Foundry values blank disables the feature.
 
 ## Commands
 

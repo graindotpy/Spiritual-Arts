@@ -39,6 +39,12 @@ export function authenticateFoundrySession(
 }
 
 function pollInterval(response: FoundrySessionResponse | undefined) {
+  if (
+    response?.session.mode === "agent" &&
+    response.session.agentAvailable === false
+  ) {
+    return 5_000;
+  }
   switch (response?.session.state) {
     case "starting":
     case "authenticating":

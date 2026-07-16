@@ -93,7 +93,13 @@ function describeSession(
     return "Checking the Foundry system user…";
   }
   if (!response.session.configured) {
-    return "The Foundry browser controls are not fully configured on the server.";
+    return "The Foundry session controls are not fully configured on the server.";
+  }
+  if (
+    response.session.mode === "agent" &&
+    response.session.agentAvailable === false
+  ) {
+    return "The lightweight Zima agent is offline. Start its container and it will appear here automatically.";
   }
   if (!response.authenticated) {
     return "Authorization is required before connecting or disconnecting the system user.";
@@ -102,11 +108,16 @@ function describeSession(
   const session = response.session;
   switch (session.state) {
     case "unconfigured":
-      return "The Foundry browser controls are not fully configured on the server.";
+      return "The Foundry session controls are not fully configured on the server.";
     case "stopped":
+      if (session.mode === "agent") {
+        return "The Zima agent is online and waiting without a running browser.";
+      }
       return describeStopReason(session.stopReason);
     case "starting":
-      return "Starting the headless browser…";
+      return session.mode === "agent"
+        ? "Asking the Zima agent to start the browser…"
+        : "Starting the headless browser…";
     case "authenticating":
       return "Selecting the system user and joining the Foundry world…";
     case "ready":
@@ -222,6 +233,20 @@ export function FoundrySessionPanel() {
         });
         return;
       }
+      if (
+        action === "connect" &&
+        authenticatedResponse.session.mode === "agent" &&
+        authenticatedResponse.session.agentAvailable === false
+      ) {
+        setPendingAuthorization(null);
+        toast({
+          title: "Agent offline",
+          description:
+            "Start the lightweight Zima agent container before connecting the Foundry user.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       form.reset();
       password = "";
@@ -245,9 +270,12 @@ export function FoundrySessionPanel() {
 
   const state = session?.state ?? "unconfigured";
   const isConfigured = session?.configured === true;
+  const agentOffline =
+    session?.mode === "agent" && session.agentAvailable === false;
   const canConnect =
     !isPending &&
     isConfigured &&
+    !agentOffline &&
     (!isAuthenticated || ["stopped", "failed"].includes(state));
   const canDisconnect =
     !isPending &&
@@ -260,6 +288,8 @@ export function FoundrySessionPanel() {
       ? "Status unavailable"
       : !isConfigured
         ? "Not configured"
+        : agentOffline
+          ? "Agent offline"
         : !isAuthenticated
           ? "Authorization required"
           : stateLabels[state];
@@ -335,6 +365,8 @@ export function FoundrySessionPanel() {
               className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
                 sessionQuery.isError
                   ? stateClasses.failed
+                  : agentOffline
+                    ? stateClasses.starting
                   : !isConfigured || !isAuthenticated
                     ? stateClasses.unconfigured
                     : stateClasses[state]
@@ -348,7 +380,7 @@ export function FoundrySessionPanel() {
                   className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none"
                   aria-hidden="true"
                 />
-              ) : sessionQuery.isError || state === "failed" ? (
+              ) : sessionQuery.isError || state === "failed" || agentOffline ? (
                 <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
               ) : state === "ready" ? (
                 <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />

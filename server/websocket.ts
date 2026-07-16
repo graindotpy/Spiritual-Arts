@@ -10,6 +10,7 @@ import {
   type RealtimeMessage,
   type SpiritDieRollBroadcast,
 } from "@shared/realtime";
+import { getWebSocketUpgradeRouter } from "./websocket-upgrade";
 
 export interface SpiritRollBroadcaster {
   broadcastSpiritRoll(data: SpiritDieRollBroadcast): string;
@@ -28,17 +29,30 @@ export class SpiritRollWebSocket
   private readonly clients = new Set<WebSocket>();
   private readonly responsive = new WeakMap<WebSocket, boolean>();
   private readonly server: WebSocketServer;
+  private readonly unregisterUpgrade: () => void;
   private readonly heartbeat: NodeJS.Timeout;
   private closed = false;
 
   constructor(httpServer: Server) {
-    this.server = new WebSocketServer({ server: httpServer, path: "/ws" });
+    this.server = new WebSocketServer({
+      noServer: true,
+      maxPayload: 64 * 1_024,
+      perMessageDeflate: false,
+    });
     this.server.on("connection", (client) => this.track(client));
     this.server.on("error", (error) => {
       console.error("WebSocket server error:", error);
     });
     this.heartbeat = setInterval(() => this.removeUnresponsiveClients(), 30_000);
     this.heartbeat.unref();
+    this.unregisterUpgrade = getWebSocketUpgradeRouter(httpServer).register(
+      "/ws",
+      (request, socket, head) => {
+        this.server.handleUpgrade(request, socket, head, (client) => {
+          this.server.emit("connection", client, request);
+        });
+      },
+    );
     httpServer.once("close", () => this.close());
   }
 
@@ -46,6 +60,7 @@ export class SpiritRollWebSocket
     if (this.closed) return;
     this.closed = true;
     clearInterval(this.heartbeat);
+    this.unregisterUpgrade();
     this.clients.forEach((client) => client.terminate());
     this.clients.clear();
     this.server.close((error) => {

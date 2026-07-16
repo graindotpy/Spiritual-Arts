@@ -52,9 +52,12 @@ function redactedStatus(
   controller: FoundrySessionController,
   auth: FoundryControlAuth,
 ): FoundrySessionStatus {
-  const configured = controller.status().configured && auth.configured;
+  const current = controller.status();
+  const configured = current.configured && auth.configured;
   return {
     configured,
+    mode: null,
+    agentAvailable: null,
     state: configured ? "stopped" : "unconfigured",
     startedAt: null,
     readyAt: null,
@@ -164,8 +167,12 @@ export function createFoundrySessionRouter(
     `${CONTROL_PATH}/connect`,
     asyncHandler("Failed to start the Foundry session", async (request, response) => {
       requireAuthorization(request, auth);
-      if (!controller.status().configured) {
+      const current = controller.status();
+      if (!current.configured) {
         throw new ApiError(503, "The Foundry system user is not configured");
+      }
+      if (current.mode === "agent" && current.agentAvailable !== true) {
+        throw new ApiError(503, "The remote Foundry agent is offline");
       }
       const session = controller.start();
       response.status(202).json({

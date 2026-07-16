@@ -43,7 +43,14 @@ function redactText(
   config: Readonly<FoundrySessionConfig> | null,
 ): string {
   let redacted = text;
-  for (const secret of [config?.accessKey, config?.worldUrl]) {
+  const secrets = config
+    ? [
+        "accessKey" in config ? config.accessKey : undefined,
+        "worldUrl" in config ? config.worldUrl : undefined,
+        "agentToken" in config ? config.agentToken : undefined,
+      ]
+    : [];
+  for (const secret of secrets) {
     if (secret) redacted = redacted.split(secret).join("[redacted]");
   }
   return redacted;
@@ -85,6 +92,18 @@ function failureFor(error: unknown): FoundrySessionFailure {
 function failureForTermination(
   termination: FoundryConnectionTermination,
 ): FoundrySessionFailure {
+  if (termination.kind === "agent_disconnected") {
+    return {
+      code: "agent_disconnected",
+      message: "The remote Foundry agent disconnected unexpectedly.",
+    };
+  }
+  if (termination.kind === "agent_stopped") {
+    return {
+      code: "agent_session_stopped",
+      message: "The remote Foundry agent stopped the browser session unexpectedly.",
+    };
+  }
   if (termination.kind === "page_crashed") {
     return {
       code: "page_crashed",
@@ -155,6 +174,9 @@ export class FoundrySessionManager {
     this.logger = options.logger ?? defaultLogger;
     this.currentStatus = {
       configured: config !== null,
+      mode: config === null ? null : config.mode === "agent" ? "agent" : "local",
+      agentAvailable:
+        config?.mode === "agent" ? connector.available?.() ?? false : null,
       state: config === null ? "unconfigured" : "stopped",
       startedAt: null,
       readyAt: null,
@@ -169,6 +191,10 @@ export class FoundrySessionManager {
   status(): FoundrySessionStatus {
     return {
       ...this.currentStatus,
+      agentAvailable:
+        this.config?.mode === "agent"
+          ? this.connector.available?.() ?? false
+          : null,
       failure: this.currentStatus.failure
         ? { ...this.currentStatus.failure }
         : null,
@@ -196,6 +222,11 @@ export class FoundrySessionManager {
     this.abortController = abortController;
     this.currentStatus = {
       configured: true,
+      mode: this.config.mode === "agent" ? "agent" : "local",
+      agentAvailable:
+        this.config.mode === "agent"
+          ? this.connector.available?.() ?? false
+          : null,
       state: "starting",
       startedAt: iso(startedAt),
       readyAt: null,
